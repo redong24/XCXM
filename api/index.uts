@@ -21,7 +21,7 @@
 //   构造真正的具名 type 对象。
 //   全程没有跨类型强转，从原理上不可能再出 ClassCastException，
 //      并且后端多字段/少字段/字段为 null 都不会崩。
-import { post, get, asObject, asObjectArray } from '../common/request.uts'
+import { post, get, put, del, asObject, asObjectArray } from '../common/request.uts'
 
 // ---------- 类型定义（统一用 type，UTS 对象字面量需 as type 而非 interface） ----------
 
@@ -87,22 +87,41 @@ export type FeedbackResp = {
   feedback_level: number
   saba_usage: number | null
   remark: string | null
+  /** 关联的预警 id（后端 B4）；手动记录时为 null */
+  alert_id: number | null
   timestamp: string
+}
+
+/** 看护对象（后端 B1 `GET /api/users/my-children` 的元素）。
+ *  只承载事实字段；颜色与中文文案由 store/页面用 styles/tokens.uts 算出，
+ *  最终组装成 types/display.uts 的 ChildDisplay 再交给模板。 */
+export type ChildResp = {
+  id: number
+  name: string
+  age: number | null
+  gender: number
+  is_self: boolean
+  has_ring: boolean
+  device_id: number | null
 }
 
 // ---------- 请求体类型（用 type，UTS 对象字面量需 as type 而非 interface） ----------
 
 // 注册载荷
-// role 说明：后端 /api/alerts 要求 admin/doctor/guardian 角色，
-// 而注册接口若不传 role 会默认给 'user'，导致注册后首页/历史页查预警必 403。
-// 移动端注册的是家长/监护人账号，故默认 'guardian'。
+//
+// 历史说明（C3 已修正）：这里原先硬塞 ``role: 'guardian'``，因为旧的
+// ``GET /api/alerts`` 用**角色**做门禁，不传就 403。那个做法把角色变成了
+// 越权的载体：客户端既然能自报角色，就能自报 ``admin``（已实测：
+// 公开注册带 role=admin 返回 200，登录后可读全库用户）。
+//
+// 后端已改为按**数据归属**鉴权（自己 + 名下孩子），并且 register 端点
+// 不再接受 role，因此客户端**不需要也不应该**再传角色。
 export type RegisterPayload = {
   phone: string
   name: string
   password: string
   age: number | null
   gender: number | null
-  role: string
 }
 
 export type HardwareResultPayload = {
@@ -121,11 +140,26 @@ export type RawPPGPayload = {
   captured_at?: string
 }
 
+/** 新建 / 修改看护对象档案（C-2 纯档案：无手机号、无密码）。
+ *
+ *  刻意不含 guardian_id 与 role：这两个字段由服务端强制写死，
+ *  客户端连传的机会都不该有（详见后端 schemas.ChildCreate 的注释）。 */
+export type ChildCreatePayload = {
+  name: string
+  age: number | null
+  gender: number | null
+}
+
+/** 提交一次发作记录（预警详情页的 D 段）。
+ *
+ *  ``user_id`` 为 null 时后端视为「我自己」；给了值也会过归属校验。
+ *  ``alert_id`` 把这次发作挂回触发它的那条预警（B4）。 */
 export type FeedbackPayload = {
-  user_id: number
+  user_id: number | null
   feedback_level: number
-  saba_usage?: number
-  remark?: string
+  saba_usage: number | null
+  remark: string | null
+  alert_id: number | null
 }
 
 // ---------- 页面显示层类型 ----------
@@ -271,8 +305,21 @@ function toFeedbackResp(o: UTSJSONObject): FeedbackResp {
     feedback_level: o.getNumber('feedback_level') ?? 0,
     saba_usage: o.getNumber('saba_usage'),
     remark: o.getString('remark'),
+    alert_id: o.getNumber('alert_id'),
     timestamp: o.getString('timestamp') ?? ''
   } as FeedbackResp
+}
+
+function toChildResp(o: UTSJSONObject): ChildResp {
+  return {
+    id: o.getNumber('id') ?? 0,
+    name: o.getString('name') ?? '',
+    age: o.getNumber('age'),
+    gender: o.getNumber('gender') ?? 0,
+    is_self: o.getBoolean('is_self') ?? false,
+    has_ring: o.getBoolean('has_ring') ?? false,
+    device_id: o.getNumber('device_id')
+  } as ChildResp
 }
 
 // ============================================================
@@ -376,8 +423,12 @@ async function doUploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
   return toRawPPGResp(mustObject(raw, '上报波形'))
 }
 
-async function doAlertList(): Promise<AlertInfo[]> {
-  const raw = await get('/api/alerts')
+/** 预警列表。userId 为 null 时后端返回「自己 + 名下孩子」的全部预警。 */
+async function doAlertList(userId: number | null): Promise<AlertInfo[]> {
+  // 不用模板字符串拼接参数：UTS 不支持 String(number)，而 ${} 内插在数字上
+  // 是安全的，但仍然把分支写成两条路径，便于阅读也避开空参拼出 `?user_id=null`。
+  const path = userId == null ? '/api/alerts' : `/api/alerts?user_id=${userId}`
+  const raw = await get(path)
   const arr = asObjectArray(raw)
   const out: AlertInfo[] = []
   for (let i = 0; i < arr.length; i++) {
@@ -386,19 +437,87 @@ async function doAlertList(): Promise<AlertInfo[]> {
   return out
 }
 
+/** 单条预警（预警详情页按 alert_id 直取）。 */
+async function doAlertDetail(alertId: number): Promise<AlertInfo> {
+  const raw = await get(`/api/alerts/${alertId}`)
+  return toAlertInfo(mustObject(raw, '预警详情'))
+}
+
+/** 「已处理」的 URL 编码形式（UTF-8 百分号编码，常量固化）。 */
+const STATUS_RESOLVED = '已处理'
+const STATUS_RESOLVED_ENC = '%E5%B7%B2%E5%A4%84%E7%90%86'
+/** 「已忽略」的 URL 编码形式。 */
+const STATUS_IGNORED = '已忽略'
+const STATUS_IGNORED_ENC = '%E5%B7%B2%E5%BF%BD%E7%95%A5'
+
+/**
+ * 处理预警。后端把 status 放在 query 而非 body（既有接口形状，不改），
+ * 中文必须 URL 编码，否则拼出的 URL 会带非 ASCII 字符。
+ *
+ * 这里刻意**不调用 `encodeURIComponent`**，有两个理由：
+ *   1. UTS 的 `encodeURIComponent` 返回 `string | null`，直接内插进模板字符串
+ *      就是「Any? 传给 Any」，本项目栽过一次的那类 Kotlin 严格空安全编译错误。
+ *   2. 后端 `handle_alert` 的取值是白名单（只有 已处理 / 已忽略），
+ *      既然是闭集，编码结果就是常量，没有任何运行时计算的必要。
+ *
+ * 分支同时充当客户端侧的白名单镜像：传入白名单外的值直接抛错，
+ * 而不是拼出一个后端必然 400 的请求再等网络往返。
+ */
+async function doAlertHandle(alertId: number, status: string): Promise<boolean> {
+  let encoded = ''
+  if (status == STATUS_RESOLVED) {
+    encoded = STATUS_RESOLVED_ENC
+  } else if (status == STATUS_IGNORED) {
+    encoded = STATUS_IGNORED_ENC
+  } else {
+    throw new Error(`预警状态只能为 ${STATUS_RESOLVED} 或 ${STATUS_IGNORED}`)
+  }
+  await put(`/api/alerts/${alertId}/handle?status=${encoded}`, null)
+  return true
+}
+
 async function doFeedbackSubmit(payload: FeedbackPayload): Promise<FeedbackResp> {
   const raw = await post('/api/feedbacks/', payload)
   return toFeedbackResp(mustObject(raw, '提交反馈'))
 }
 
-async function doFeedbackList(): Promise<FeedbackResp[]> {
-  const raw = await get('/api/feedbacks/')
+/** 反馈列表。userId 为 null 时返回「自己 + 名下孩子」。 */
+async function doFeedbackList(userId: number | null): Promise<FeedbackResp[]> {
+  const path = userId == null ? '/api/feedbacks/' : `/api/feedbacks/?user_id=${userId}`
+  const raw = await get(path)
   const arr = asObjectArray(raw)
   const out: FeedbackResp[] = []
   for (let i = 0; i < arr.length; i++) {
     out.push(toFeedbackResp(arr[i]))
   }
   return out
+}
+
+// ---------- 看护对象（B1 / B2） ----------
+
+async function doMyChildren(): Promise<ChildResp[]> {
+  const raw = await get('/api/users/my-children')
+  const arr = asObjectArray(raw)
+  const out: ChildResp[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toChildResp(arr[i]))
+  }
+  return out
+}
+
+async function doChildCreate(payload: ChildCreatePayload): Promise<ChildResp> {
+  const raw = await post('/api/users/children', payload)
+  return toChildResp(mustObject(raw, '新建档案'))
+}
+
+async function doChildUpdate(childId: number, payload: ChildCreatePayload): Promise<ChildResp> {
+  const raw = await put(`/api/users/children/${childId}`, payload)
+  return toChildResp(mustObject(raw, '修改档案'))
+}
+
+async function doChildDelete(childId: number): Promise<boolean> {
+  await del(`/api/users/children/${childId}`)
+  return true
 }
 
 // ---------- 认证 ----------
@@ -421,6 +540,32 @@ export class AuthApi {
 }
 
 export const authApi = new AuthApi()
+
+// ---------- 看护对象（B1 / B2） ----------
+
+export class ChildApi {
+  /** 看护对象列表：「我自己」恒为第一项，其后是名下孩子 */
+  mine(): Promise<ChildResp[]> {
+    return doMyChildren()
+  }
+
+  /** 新建孩子档案 */
+  create(payload: ChildCreatePayload): Promise<ChildResp> {
+    return doChildCreate(payload)
+  }
+
+  /** 修改孩子档案 */
+  update(childId: number, payload: ChildCreatePayload): Promise<ChildResp> {
+    return doChildUpdate(childId, payload)
+  }
+
+  /** 删除孩子档案（同时解绑其戒指；历史健康记录不删） */
+  remove(childId: number): Promise<boolean> {
+    return doChildDelete(childId)
+  }
+}
+
+export const childApi = new ChildApi()
 
 // ---------- 设备 ----------
 
@@ -472,9 +617,29 @@ export const dataApi = new DataApi()
 // ---------- 预警 ----------
 
 export class AlertApi {
-  /** 拉取当前用户预警列表 */
+  /** 拉取预警列表（自己 + 名下孩子） */
   list(): Promise<AlertInfo[]> {
-    return doAlertList()
+    return doAlertList(null)
+  }
+
+  /** 拉取单个看护对象的预警 */
+  listOf(userId: number): Promise<AlertInfo[]> {
+    return doAlertList(userId)
+  }
+
+  /** 单条预警详情 */
+  detail(alertId: number): Promise<AlertInfo> {
+    return doAlertDetail(alertId)
+  }
+
+  /** 消除预警（「我知道了，消除警报」） */
+  resolve(alertId: number): Promise<boolean> {
+    return doAlertHandle(alertId, STATUS_RESOLVED)
+  }
+
+  /** 忽略预警 */
+  ignore(alertId: number): Promise<boolean> {
+    return doAlertHandle(alertId, STATUS_IGNORED)
   }
 }
 
@@ -488,9 +653,14 @@ export class FeedbackApi {
     return doFeedbackSubmit(payload)
   }
 
-  /** 拉取当前用户反馈列表 */
+  /** 拉取反馈列表（自己 + 名下孩子） */
   list(): Promise<FeedbackResp[]> {
-    return doFeedbackList()
+    return doFeedbackList(null)
+  }
+
+  /** 拉取单个看护对象的反馈 */
+  listOf(userId: number): Promise<FeedbackResp[]> {
+    return doFeedbackList(userId)
   }
 }
 

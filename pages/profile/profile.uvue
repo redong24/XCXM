@@ -30,7 +30,7 @@
 
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（computed/onMounted 等），无需 import
-import { userState, userId, logout, restore } from '../../store/user.uts'
+import { userState, logout, restore } from '../../store/user.uts'
 import { feedbackApi, type FeedbackPayload } from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 
@@ -44,9 +44,15 @@ const initial = computed(() => {
 async function submitFeedback(level: number) {
   clearApiError()
   try {
+    // user_id 传 null = 记到「我自己」名下，由后端按 token 判定（C3）。
+    // 旧版从本地取 userId() 再传给后端，而后端当时不做归属校验，
+    // 等于把「这条记录属于谁」交给客户端决定。
     await feedbackApi.submit({
-      user_id: userId() ?? 0,
-      feedback_level: level
+      user_id: null,
+      feedback_level: level,
+      saba_usage: null,
+      remark: null,
+      alert_id: null
     } as FeedbackPayload)
     uni.showToast({ title: '反馈已提交', icon: 'success' })
   } catch (e) {

@@ -140,15 +140,15 @@ async function doRegister(): Promise<boolean> {
     return false
   }
   clearApiError()
-  // role 必须显式传 guardian：后端注册默认给 'user'，
-  // 而 /api/alerts 要求 admin/doctor/guardian，否则查预警必 403
+  // 不再传 role（C3）：旧版这里硬塞 'guardian' 是为了绕开旧 /api/alerts 的
+  // 角色门禁。该门禁已改为按数据归属鉴权（自己 + 名下孩子），且后端 register
+  // 端点不再接受 role。客户端能自报角色本身就是那个提权漏洞的成因。
   await register({
     phone: phone.value,
     name: name.value,
     password: password.value,
     age: age.value != '' ? parseInt(age.value) : null,
-    gender: null,
-    role: 'guardian'
+    gender: null
   } as RegisterPayload)
   // 注册成功后自动登录
   clearApiError()

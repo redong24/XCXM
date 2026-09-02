@@ -1,9 +1,8 @@
 <template>
   <view class="children-page">
-    <!-- 骨架说明（C4 实现时删除）：
-         这一页的数据依赖后端 B1（GET /api/users/my-children），
-         该接口 C3 才落地。所以现在渲染的是「结构 + 空态」，
-         不是假数据。技能禁止用编造的数据冒充可用界面。 -->
+    <!-- 数据来自后端 B1（GET /api/users/my-children），
+         读取路径已接后端 B1。新建/编辑表单属 C4：
+         后端 POST/PUT /api/users/children 已就绪，只差表单。 -->
 
     <view class="intro">
       <text class="intro-title">看护对象</text>
@@ -21,8 +20,11 @@
       <text class="state-action" @click="reload">重试</text>
     </view>
 
+    <!-- 理论上不应出现：后端总把「我自己」作为第一项返回。
+         保留它是因为空白屏幕比一句话更难排查。 -->
     <view v-if="!loading && errText == '' && rows.length == 0" class="state">
-      <text class="state-text">还没有档案。先把自己加进来，再添加需要看护的孩子。</text>
+      <text class="state-text">没有读到任何档案。可能需要重新登录。</text>
+      <text class="state-action" @click="reload">重试</text>
     </view>
 
     <view v-for="r in rows" :key="r.id" class="row" @click="openChild(r.id)">
@@ -35,6 +37,7 @@
         <text class="row-ring" :style="'color:' + r.zoneColor">
           {{ r.hasRing ? r.zoneText : '未绑戒指' }}
         </text>
+        <text class="row-time">{{ r.ageText }}</text>
         <text v-if="r.lastUploadText != ''" class="row-time">{{ r.lastUploadText }}</text>
       </view>
     </view>
@@ -49,28 +52,83 @@
 
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
-import { DISCLAIMER_SHORT } from '../../styles/tokens.uts'
+import { childApi, alertApi, type ChildResp, type AlertInfo } from '../../api/index.uts'
+import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+import { DISCLAIMER_SHORT, zoneColor, zoneLabel, zoneFromLevel, type Zone } from '../../styles/tokens.uts'
 import type { ChildDisplay } from '../../types/display.uts'
 
 const loading = ref<boolean>(false)
 const errText = ref<string>('')
 const rows = ref<ChildDisplay[]>([])
 
-// TODO(C3 + C4): 接后端 B1 GET /api/users/my-children。
-// 在该接口存在之前保持空数组：宁可空态，也不编数据。
-function reload() {
-  loading.value = false
+/** 把「未处理预警的最高级别」折算成分区。
+ *
+ *  没有未处理预警时刻意显示「无预警」而不是「安全区」：
+ *  我们只知道「没有触发阈值」，不知道这个人此刻是否安全，
+ *  两者不是一回事，界面不该替医生下结论（§11.1 责任口径）。 */
+function zoneTextOf(hasPending: boolean, z: Zone): string {
+  if (!hasPending) { return '无预警' }
+  return zoneLabel(z)
+}
+
+async function reload() {
+  loading.value = true
   errText.value = ''
-  rows.value = [] as ChildDisplay[]
+  clearApiError()
+  try {
+    const people = await childApi.mine()
+
+    // 一次拉全量预警再按 user_id 归组，而不是每人一个请求（N+1）。
+    // 后端已把可见范围限制为「自己 + 名下孩子」，所以这一把就够。
+    const alerts = await alertApi.list()
+    const pendingLevel = new Map<number, number>()
+    for (let i = 0; i < alerts.length; i++) {
+      const a = alerts[i]
+      if (a.status != '待处理') { continue }
+      const prev = pendingLevel.get(a.user_id)
+      if (prev == null || a.level > prev!) {
+        pendingLevel.set(a.user_id, a.level)
+      }
+    }
+
+    const out: ChildDisplay[] = []
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i]
+      const lv = pendingLevel.get(p.id)
+      const hasPending = lv != null
+      const z = hasPending ? zoneFromLevel(lv!) : ('green' as Zone)
+      const age = p.age
+      out.push({
+        id: p.id,
+        name: p.name,
+        isSelf: p.is_self,
+        age: age,
+        // 模板里不做字符串拼接，也不用 String(number)：一律在脚本里算完
+        ageText: age == null ? '未填年龄' : `${age} 岁`,
+        hasRing: p.has_ring,
+        zone: z,
+        zoneColor: zoneColor(z),
+        zoneText: zoneTextOf(hasPending, z),
+        // TODO(C4): 「最近一次上传」需要后端给每人的最新读数时间戳，
+        // 现有接口没有这个字段。留空 = 界面不显示，不编造时间。
+        lastUploadText: ''
+      } as ChildDisplay)
+    }
+    rows.value = out
+  } catch (e) {
+    errText.value = takeApiErrorText('读取看护对象失败')
+  }
+  loading.value = false
 }
 
 function openChild(id: number) {
-  // TODO(C4): 跳编辑页 / 弹出编辑面板
+  // TODO(C4): 跳编辑页 / 弹出编辑面板（后端 PUT /api/users/children/{id} 已就绪）
   console.log('open child', id)
 }
 
 function addChild() {
-  // TODO(C4): C-2 纯档案表单（姓名 / 年龄 / 性别），无手机号、无密码
+  // TODO(C4): C-2 纯档案表单（姓名 / 年龄 / 性别），无手机号、无密码。
+  // 后端 POST /api/users/children 已就绪，只差这张表单。
   uni.showToast({ title: '添加功能随孩子管理一并上线', icon: 'none' })
 }
 
