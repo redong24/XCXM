@@ -80,7 +80,7 @@
 
     <view class="footer-wrap">
       <text class="footer-tip" @click="onDiagnose">网络诊断（点击检测）</text>
-      <text class="ver-tip">build 09-02 17:10 错误直显版</text>
+      <text class="ver-tip">build 09-02 18:20 解析修复版</text>
     </view>
   </view>
 </template>

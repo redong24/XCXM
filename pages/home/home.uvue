@@ -178,7 +178,11 @@ async function onResultValue(r: HardwareResultValue) {
         timestamp: new Date(r.timestamp).toISOString()
       } as HardwareResultPayload)
       // 若触发预警，刷新预警列表
-      if (resp.alert != null && resp.alert.triggered) {
+      // 注意（勿回退）：resp.alert 是可变属性，Kotlin 无法对其智能转换为非空，
+      // 直接写 `resp.alert != null && resp.alert.triggered` 会报
+      // "smart cast impossible"，必须先提取到局部 const。
+      const brief = resp.alert
+      if (brief != null && brief.triggered) {
         await loadAlerts()
       }
     } catch (e) {

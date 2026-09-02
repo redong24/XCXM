@@ -11,8 +11,41 @@
 //      （o[key]）或显式标注 `const h: UTSJSONObject = {...}`，
 //      这两种写法未在本工程验证过，是此前编译失败回退缓存的嫌疑点。
 //   3. 【method 必须大写】uni-app x 的 method 合法值为 "GET"/"POST" 等大写字符串。
+//   4. 【不要再依赖 sslVerify:false】（09-02 17:30 定案，勿回退）
+//      旧地址 https://39.183.171.185:9443 用的是自签证书，且该证书本身有缺陷
+//      （Basic Constraints 为 CA:TRUE，是一张「自签 CA」而非服务器证书，
+//      Android 的 X509 校验会直接拒绝）。实测在 uni-app x Android 调试基座中，
+//      sslVerify:false 并不生效，uni.request 一律回调 fail 且
+//      errCode=602001（request 系统错误）——表现就是「登录点了没反应/报错」。
+//      解决办法不是继续和 sslVerify 缠斗，而是换用一条「公网可信证书」通道：
+//      同一台服务器上的 saas.365bmd.com 已有 DigiCert 签发的正式证书，
+//      nginx 8443 端口新增 /asthma-api/ 反代到同一个 FastAPI（127.0.0.1:8000）。
+//      于是 APP 走标准 HTTPS 校验即可，无需任何跳过证书的开关。
 
-export const BASE_URL = 'https://39.183.171.185:9443'
+// 后端基址（公网可信证书，DigiCert 签发，Android 默认信任）
+export const BASE_URL = 'https://saas.365bmd.com:8443'
+
+// API 前缀。
+// 说明：saas.365bmd.com 的 /api/ 已被同域名的 PHP 应用占用，
+// 故 AsthmaGuard 使用独立前缀 /asthma-api/，由 nginx 转发时补回 /api/。
+// 业务代码（api/index.uts）仍统一写 '/api/xxx'，由 resolveUrl 自动改写，
+// 这样后端换域名/换前缀时只需改本文件。
+export const API_PREFIX = '/asthma-api'
+
+// 旧地址（自签证书，仅内网/PC 排查用，APP 不要再指向它）
+export const LEGACY_BASE_URL = 'https://39.183.171.185:9443'
+
+/**
+ * 把业务层的 '/api/xxx' 改写为实际请求 URL。
+ * 例：'/api/auth/login' -> 'https://saas.365bmd.com:8443/asthma-api/auth/login'
+ */
+export function resolveUrl(path: string): string {
+  if (path.indexOf('/api/') == 0) {
+    // 去掉开头的 '/api'（4 个字符），补上实际前缀
+    return `${BASE_URL}${API_PREFIX}${path.substring(4)}`
+  }
+  return `${BASE_URL}${path}`
+}
 
 // 请求超时（毫秒）
 export const REQUEST_TIMEOUT = 15000
@@ -24,11 +57,6 @@ export type ApiErrorInfo = {
   detail: string
   errMsg: string
   errCode: number
-}
-
-// 后端错误响应体（FastAPI 4xx/5xx 约定为 {"detail": "..."}）
-type ErrorBody = {
-  detail: string
 }
 
 // 错误存储容器（用对象包一层；UTS 对象字面量需 as type）
@@ -91,36 +119,53 @@ export function takeApiErrorText(fallback: string): string {
 }
 
 // 从后端响应体中提取 detail 字段
+//
+// 注意（09-02 17:55，勿回退）：这里不能再 `data as ErrorBody`。
+// 非 2xx 时 res.data 的运行时类型是 UTSJSONObject（或 nginx 返回的 String），
+// 强转具名 type 会抛 Kotlin ClassCastException。
+// 统一用 UTSJSONObject.getString(key) 取值，取不到返回 null。
 function pickDetail(data: any | null): string {
   if (data == null) {
     return ''
   }
   try {
-    const body = data as ErrorBody
-    const d = body.detail
+    const obj = data as UTSJSONObject
+    const d = obj.getString('detail')
     if (d == null) {
       return ''
     }
-    return `${d}`
+    return d!
   } catch (e) {
-    // 响应体不是 {detail} 结构（如 nginx 返回 HTML 字符串），忽略
+    // 响应体不是 JSON 对象（如 nginx 返回 HTML 字符串），忽略
     return ''
   }
 }
 
-// 判空辅助（参数 any | null 是已验证写法；直接 res.data == null 未验证）
-function isNullData(data: any | null): boolean {
-  return data == null
-}
-
-// 统一请求方法（用具名参数，避免 UTS 对象字面量不能构造 interface 的限制）
-export function request<T = any>(
+// 统一请求方法
+//
+// 【关键设计变更（09-02 17:55，勿回退）】不再使用泛型，返回原始 any。
+//
+// 原因：官方文档明确写着——
+//   「request 接口内部通过特殊方式读取了泛型类型，不支持传入动态的泛型：
+//     比如将外层方法的普通泛型参数传入 request。所以目前尽量直接使用
+//     uni.request 而不是封装。如确需封装，可不使用 type，改用 UTSJSONObject。」
+//
+// 旧代码正是被点名的反例：request<T>() 把动态泛型 T 转发给 uni.request，
+// 泛型在编译期被擦除，uni.request 拿不到真实类型，于是原样返回
+// UTSJSONObject；随后 `res.data as T` 触发
+//   java.lang.ClassCastException:
+//   io.dcloud.uts.UTSJSONObject cannot be cast to uni.UNIASTHMAGUARD.TokenResp
+//
+// 现在底层原样传出 res.data，由 api/index.uts 用 asObject / asObjectArray
+// 取出 UTSJSONObject，再由手写 mapper 逐字段 get 出来构造具名 type。
+// 全程没有跨类型强转，从原理上不可能再出 ClassCastException。
+export function request(
   path: string,
   method: string,
   data: any | null = null,
   needAuth: boolean = true
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+): Promise<any> {
+  return new Promise<any>((resolve, reject) => {
     // 全部同步代码包进 try：uni.request 同步抛异常、header 构建异常等
     // 此前发生在 recordError 之前，异常被吞、页面只剩兜底文案（15:05 实测）
     try {
@@ -138,17 +183,26 @@ export function request<T = any>(
       }
 
       uni.request({
-        url: `${BASE_URL}${path}`,
+        url: resolveUrl(path),
         method: method,
         data: data,
         header: header,
         timeout: REQUEST_TIMEOUT,
-        sslVerify: false, // 后端为自签证书（issuer=subject，CN=39.183.171.185），必须跳过校验
+        // 不再设置 sslVerify：现在走 DigiCert 可信证书通道，标准校验即可通过。
+        // 旧代码在此处写 sslVerify:false 试图跳过自签证书校验，但该开关在
+        // Android 调试基座中不生效，最终一律 fail + errCode=602001。
         success: (res) => {
           const statusCode = res.statusCode ?? 0
           if (statusCode >= 200 && statusCode < 300) {
+            // 【必须先提取到局部 const】（09-02 18:25，勿回退）
+            // Promise<any> 的 resolve 在 Kotlin 侧签名是 (Any) -> Unit（非空），
+            // 而 res.data 的类型是 Any?。直接写 resolve(res.data) 会编译失败：
+            //   error: 参数类型不匹配：实际类型为 'Any?'，预期类型为 'Any'
+            // 而且 res.data 是属性访问，即使在外面判过空，Kotlin 也不会对它
+            // 做智能转换 —— 必须提取为局部 const，再判空 + `!` 断言。
+            const body = res.data
             // 2xx 但 body 为空：调用方访问字段必然 NPE，提前拦截留痕
-            if (isNullData(res.data)) {
+            if (body == null) {
               recordError({
                 path: path,
                 statusCode: statusCode,
@@ -159,20 +213,10 @@ export function request<T = any>(
               reject(new Error('响应体为空'))
               return
             }
-            // as T 类型转换可能运行时失败（Kotlin ClassCastException），
-            // 失败也要留痕，不能让它裸奔到页面 catch
-            try {
-              resolve(res.data as T)
-            } catch (e2) {
-              recordError({
-                path: path,
-                statusCode: statusCode,
-                detail: '',
-                errMsg: `响应解析失败: ${e2}`,
-                errCode: 0
-              } as ApiErrorInfo)
-              reject(new Error('响应解析失败'))
-            }
+            // 原样传出，不做任何 as 转换。
+            // 类型解析统一交给 api/index.uts 的手写 mapper
+            // （asObject / asObjectArray + 逐字段 get）。
+            resolve(body!)
             return
           }
           // 非 2xx：提取后端 detail（FastAPI 约定字段）
@@ -229,21 +273,64 @@ export function request<T = any>(
   })
 }
 
-// 便捷方法（用 function 声明，UTS 箭头函数不支持泛型与默认参数）
-export function get<T = any>(path: string, needAuth: boolean = true): Promise<T> {
-  return request<T>(path, 'GET', null, needAuth)
+// 便捷方法（用 function 声明，UTS 箭头函数不支持默认参数）
+// 注意：这里同样不能带泛型（见 request 上方注释），一律返回 any。
+export function get(path: string, needAuth: boolean = true): Promise<any> {
+  return request(path, 'GET', null, needAuth)
 }
 
-export function post<T = any>(path: string, data: any | null = null, needAuth: boolean = true): Promise<T> {
-  return request<T>(path, 'POST', data, needAuth)
+export function post(path: string, data: any | null = null, needAuth: boolean = true): Promise<any> {
+  return request(path, 'POST', data, needAuth)
 }
 
-export function put<T = any>(path: string, data: any | null = null, needAuth: boolean = true): Promise<T> {
-  return request<T>(path, 'PUT', data, needAuth)
+export function put(path: string, data: any | null = null, needAuth: boolean = true): Promise<any> {
+  return request(path, 'PUT', data, needAuth)
 }
 
-export function del<T = any>(path: string, needAuth: boolean = true): Promise<T> {
-  return request<T>(path, 'DELETE', null, needAuth)
+export function del(path: string, needAuth: boolean = true): Promise<any> {
+  return request(path, 'DELETE', null, needAuth)
+}
+
+// ---------------------------------------------------------------------------
+// 响应体转换辅助（供 api/index.uts 使用）
+// ---------------------------------------------------------------------------
+// 背景：uni.request 在 Android 上返回的 res.data 运行时类型是
+// UTSJSONObject（对象）或 Array<any>（数组）。直接 `as 具名type` 会抛
+// ClassCastException，必须先转成 UTSJSONObject，再逐字段取值。
+// 这里只提供「安全取出 UTSJSONObject / 数组」的两个工具，
+// 真正的字段映射在 api/index.uts 的 toXxx() mapper 里完成。
+
+/** 把响应体安全转为 UTSJSONObject；失败返回 null */
+export function asObject(data: any | null): UTSJSONObject | null {
+  if (data == null) {
+    return null
+  }
+  try {
+    return data as UTSJSONObject
+  } catch (e) {
+    console.log(`[api] 响应体不是 JSON 对象: ${e}`)
+    return null
+  }
+}
+
+/** 把响应体安全转为 UTSJSONObject 数组；失败返回空数组 */
+export function asObjectArray(data: any | null): Array<UTSJSONObject> {
+  const out: Array<UTSJSONObject> = []
+  if (data == null) {
+    return out
+  }
+  try {
+    const arr = data as Array<any>
+    for (let i = 0; i < arr.length; i++) {
+      const item = asObject(arr[i])
+      if (item != null) {
+        out.push(item!)
+      }
+    }
+  } catch (e) {
+    console.log(`[api] 响应体不是数组: ${e}`)
+  }
+  return out
 }
 
 // 单目标探测结果
@@ -300,27 +387,26 @@ function probe(
 }
 
 /**
- * 网络连通性三目标对比自检（15:25 重写）。
+ * 网络连通性三目标对比自检（09-02 17:35 重写，适配可信证书通道）。
  * ① 公网受信 HTTPS（百度）：不通 = 模拟器整体断网
- * ② 后端 + 跳过证书校验：登录请求同款配置
- * ③ 后端 + 系统证书校验：与②对比，判断是否自签名证书被拦
- * 一次点击出三个结果 + 自动结论，用于快速区分：
- * 模拟器断网 / 后端端口不可达 / 自签名证书校验失败。
+ * ② 新通道（可信证书，登录同款配置）：这条通了登录就该通
+ * ③ 旧自签地址（对照组）：预期失败(602001)，用于确认问题已绕开
+ * 一次点击出三个结果 + 自动结论。
  *
  * 注意：resolve 而非 reject，调用方无需 try/catch。
  */
 export async function diagnose(): Promise<string> {
   const l1 = await probe('①公网HTTPS(百度)', 'https://www.baidu.com', 'GET', null, false)
   const l2 = await probe(
-    '②后端(跳过证书校验)',
-    `${BASE_URL}/api/auth/login`,
+    '②新通道(可信证书)',
+    resolveUrl('/api/auth/login'),
     'POST',
     { phone: '__diag__', password: '__diag__' },
-    true
+    false
   )
   const l3 = await probe(
-    '③后端(系统证书校验)',
-    `${BASE_URL}/api/auth/login`,
+    '③旧自签地址(对照)',
+    `${LEGACY_BASE_URL}/api/auth/login`,
     'POST',
     { phone: '__diag__', password: '__diag__' },
     false
@@ -330,14 +416,12 @@ export async function diagnose(): Promise<string> {
   if (!l1.ok) {
     verdict = '结论：模拟器无法访问公网\n→ 与 App 无关，检查模拟器网络（重启或切换网络模式）'
   } else if (l2.ok) {
-    verdict = '结论：网络与证书均正常\n→ 若登录仍失败，请把控制台日志发给开发者'
-  } else if (!l2.ok && !l3.ok) {
-    verdict = '结论：后端不可达或证书被拦\n→ 若③的 errMsg 含 ssl/cert/证书 字样：自签名证书被拦截且跳过校验未生效\n→ 否则：9443 端口被防火墙拦截，用模拟器浏览器访问 BASE_URL 验证'
+    verdict = '结论：✅ 新通道正常，登录应可用\n（③失败属预期：旧自签证书被 Android 拒绝，已不再使用）'
   } else {
-    verdict = '结论：②失败③成功（异常组合），请把本结果发给开发者'
+    verdict = '结论：新通道不通\n→ 若 errMsg 含 8443/timeout：模拟器到 8443 端口受阻\n→ 请把本结果与控制台日志发给开发者'
   }
 
-  return `BASE_URL：${BASE_URL}
+  return `BASE_URL：${BASE_URL}${API_PREFIX}
 
 ${l1.text}
 ${l2.text}

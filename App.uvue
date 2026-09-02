@@ -2,7 +2,7 @@
 export default {
   onLaunch: function () {
     // 版本标识（勿删）：控制台首行即可确认运行的代码版本
-    console.log('=== AsthmaGuard build 09-02 17:10 错误直显版 ===')
+    console.log('=== AsthmaGuard build 09-02 18:20 解析修复版 ===')
     console.log('AsthmaGuard App Launch')
     // 初始化时检查登录态
     const token = uni.getStorageSync('token') as string

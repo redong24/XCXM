@@ -1,0 +1,185 @@
+{
+  "files_scanned": 15,
+  "checks_run": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C16",
+    "C17",
+    "C18",
+    "C19",
+    "C20",
+    "C21",
+    "C22"
+  ],
+  "fail": 16,
+  "warn": 1,
+  "info": 0,
+  "findings": [
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "api/index.uts",
+      "line": 22,
+      "excerpt": "//   —— 全程没有跨类型强转，从原理上不可能再出 ClassCastException，",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 19,
+      "excerpt": "//      errCode=602001（request 系统错误）——表现就是「登录点了没反应/报错」。",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 148,
+      "excerpt": "// 原因：官方文档明确写着——",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 202,
+      "excerpt": "// 做智能转换 —— 必须提取为局部 const，再判空 + `!` 断言。",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 245,
+      "excerpt": "// 运行时字段全部丢失——真实 errCode=602001（证书校验失败）",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "pages/login/login.uvue",
+      "line": 16,
+      "excerpt": "1. 必须用 v-model 双向绑定 —— 手动受控(:value + @input)在",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C01",
+      "severity": "FAIL",
+      "file": "pages/login/login.uvue",
+      "line": 19,
+      "excerpt": "2. type 用 \"text\" 而非 \"number\" —— 官方提示 type=number 在",
+      "reason": "Em-dash/en-dash is the #1 LLM typography tell (taste-skill 9.G, zero tolerance).",
+      "fix": "Replace with a period, comma, colon, parentheses, or a plain hyphen '-'."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 367,
+      "excerpt": "text: `${label}：✓ 可达 (HTTP ${sc})`",
+      "reason": "Emoji U+2713 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 379,
+      "excerpt": "text: `${label}：✗ ${err.errMsg}（code=${err.errCode}）`",
+      "reason": "Emoji U+2717 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 384,
+      "excerpt": "resolve({ ok: false, text: `${label}：✗ 同步异常 ${e}` } as ProbeResult)",
+      "reason": "Emoji U+2717 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "common/request.uts",
+      "line": 419,
+      "excerpt": "verdict = '结论：✅ 新通道正常，登录应可用\\n（③失败属预期：旧自签证书被 Android 拒绝，已不再使用）'",
+      "reason": "Emoji U+2705 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "pages/home/home.uvue",
+      "line": 35,
+      "excerpt": "<text class=\"alert-title\">⚠️ 预警提醒</text>",
+      "reason": "Emoji U+26A0 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "pages/home/home.uvue",
+      "line": 42,
+      "excerpt": "<text>🫁 开始手动检测</text>",
+      "reason": "Emoji U+1FAC1 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "pages/login/login.uvue",
+      "line": 5,
+      "excerpt": "<text class=\"logo-icon\">🫁</text>",
+      "reason": "Emoji U+1FAC1 used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "pages/measure/measure.uvue",
+      "line": 6,
+      "excerpt": "<text class=\"ring-icon\">💍</text>",
+      "reason": "Emoji U+1F48D used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C21",
+      "severity": "FAIL",
+      "file": "pages/profile/profile.uvue",
+      "line": 17,
+      "excerpt": "<text class=\"menu-icon\">📝</text>",
+      "reason": "Emoji U+1F4DD used as interface iconography.",
+      "fix": "Replace with a real vector icon asset (PNG/SVG) or a text label."
+    },
+    {
+      "check": "C03",
+      "severity": "WARN",
+      "file": "App.uvue",
+      "line": 27,
+      "excerpt": "font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,",
+      "reason": "Inter/Roboto/Arial as the default face is the most common AI-generated type choice.",
+      "fix": "Prefer Geist, Outfit, Satoshi, Cabinet Grotesk, or an explicit system-CJK stack."
+    }
+  ]
+}
