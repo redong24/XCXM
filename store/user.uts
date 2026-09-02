@@ -3,7 +3,7 @@
 // Android VDOM 模式下 pinia 官方库不可用（需三方插件），为避免额外依赖改用全局单例 reactive。
 
 import { reactive } from 'vue'
-import { authApi, type UserInfo, type RegisterPayload, type TokenResp } from '../api/index.uts'
+import { authApi, parseUserInfoJSON, type UserInfo, type RegisterPayload, type TokenResp } from '../api/index.uts'
 
 // state 结构类型（用 type，UTS 中 reactive 的对象字面量需 as type 断言）
 type UserState = {
@@ -58,13 +58,17 @@ export function restore(): boolean {
   const token = uni.getStorageSync('token') as string
   const userStr = uni.getStorageSync('user') as string
   if (token != '' && userStr != '') {
-    try {
+    // 注意（09-02 18:20，勿回退）：这里**不能**写 JSON.parse(userStr) as UserInfo。
+    // JSON.parse 在 Android/Kotlin 侧返回 UTSJSONObject，跨类型强转会抛
+    //   java.lang.ClassCastException: io.dcloud.uts.UTSJSONObject
+    //     cannot be cast to uni.UNIASTHMAGUARD.UserInfo
+    // 与登录崩溃是同一个根因。改由 api 层逐字段解析。
+    const cached = parseUserInfoJSON(userStr)
+    if (cached != null) {
       userState.token = token
-      userState.user = JSON.parse(userStr) as UserInfo
+      userState.user = cached
       userState.loggedIn = true
       return true
-    } catch (e) {
-      // 解析失败，视为未登录
     }
   }
   return false
