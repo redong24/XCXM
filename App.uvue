@@ -1,8 +1,6 @@
 <script>
 export default {
   onLaunch: function () {
-    // 版本标识（勿删）：控制台首行即可确认运行的代码版本
-    console.log('=== AsthmaGuard build 09-02 18:20 解析修复版 ===')
     console.log('AsthmaGuard App Launch')
     // 初始化时检查登录态
     const token = uni.getStorageSync('token') as string
@@ -10,6 +8,9 @@ export default {
       // 未登录，跳转登录页（由路由守卫处理，这里仅记录）
       console.log('未登录，等待跳转登录页')
     }
+    // TODO(C7): 在此接入 uni.getPushClientId / uni.onPushMessage
+    // 与 uni.getChannelManager().setPushChannel（高优先级通知渠道）。
+    // 见 docs/REDESIGN_PLAN.md §7。
   },
   onShow: function () {
     console.log('AsthmaGuard App Show')
@@ -21,11 +22,16 @@ export default {
 </script>
 
 <style>
-/* 全局样式（uni-app x 只支持 class 选择器，用 .page 类代替 page 标签选择器） */
+/* 全局样式（uni-app x 只支持 class 选择器，用 .page 类代替 page 标签选择器）
+ * 色值与字栈取自 uni.scss 的 token；这里因为是全局裸 CSS，
+ * 不走 SCSS 变量，改动时必须与 uni.scss / styles/tokens.uts 同步。
+ */
 .page {
-  background-color: #F5F7FA;
-  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
-    Segoe UI, Arial, Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft Yahei',
-    sans-serif;
+  background-color: #F7F8F7;
+  /* 系统 CJK 字栈：Android 端唯一可靠、零体积、中文字形正确的选择。
+   * 刻意不写 Helvetica / Arial / Roboto 这类西文默认脸（preflight C03）。
+   */
+  font-family: 'PingFang SC', 'HarmonyOS Sans SC', 'Source Han Sans SC',
+    'Noto Sans CJK SC', 'Microsoft Yahei', sans-serif;
 }
 </style>

@@ -19,7 +19,7 @@
 //   本文件用 asObject / asObjectArray 拿到 UTSJSONObject，
 //   再由手写 mapper（toUserInfo / toTokenResp / ...）逐字段 get 出来，
 //   构造真正的具名 type 对象。
-//   —— 全程没有跨类型强转，从原理上不可能再出 ClassCastException，
+//   全程没有跨类型强转，从原理上不可能再出 ClassCastException，
 //      并且后端多字段/少字段/字段为 null 都不会崩。
 import { post, get, asObject, asObjectArray } from '../common/request.uts'
 

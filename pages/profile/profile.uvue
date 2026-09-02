@@ -14,12 +14,10 @@
     <!-- 功能菜单 -->
     <view class="menu-card">
       <view class="menu-item" @click="onFeedback">
-        <text class="menu-icon">📝</text>
         <text class="menu-label">健康反馈</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-item" @click="onAbout">
-        <text class="menu-icon">ℹ️</text>
         <text class="menu-label">关于哮卫</text>
         <text class="menu-arrow">›</text>
       </view>
@@ -155,11 +153,6 @@ onMounted(() => {
   align-items: center;
   padding: 32rpx;
   border-bottom: 1rpx solid #f3f4f6;
-}
-
-.menu-icon {
-  font-size: 36rpx;
-  margin-right: 20rpx;
 }
 
 .menu-label {

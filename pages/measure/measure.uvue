@@ -3,7 +3,13 @@
     <!-- 状态显示 -->
     <view class="status-area">
       <view class="ring-visual" :class="{ active: measuring }">
-        <text class="ring-icon">💍</text>
+        <!-- 戒指图形：与 tabBar 的戒指图标同构（同一段开口弧的形状语言）。
+             原先是 emoji，见 preflight C21。 -->
+        <image
+          class="ring-figure"
+          :src="measuring ? '/static/icons/ring-lg.png' : '/static/icons/ring-lg-idle.png'"
+          mode="aspectFit"
+        />
         <text class="ring-status">{{ statusText }}</text>
       </view>
     </view>
@@ -146,8 +152,9 @@ onUnmounted(() => {
   align-items: center;
 }
 
-.ring-icon {
-  font-size: 160rpx;
+.ring-figure {
+  width: 240rpx;
+  height: 240rpx;
 }
 
 .ring-status {

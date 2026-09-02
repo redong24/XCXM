@@ -1,0 +1,197 @@
+<template>
+  <view class="children-page">
+    <!-- 骨架说明（C4 实现时删除）：
+         这一页的数据依赖后端 B1（GET /api/users/my-children），
+         该接口 C3 才落地。所以现在渲染的是「结构 + 空态」，
+         不是假数据。技能禁止用编造的数据冒充可用界面。 -->
+
+    <view class="intro">
+      <text class="intro-title">看护对象</text>
+      <text class="intro-desc">
+        戒指佩戴在谁身上，就把它绑到这里的哪一位。一枚戒指同时只能属于一个人。
+      </text>
+    </view>
+
+    <view v-if="loading" class="state">
+      <text class="state-text">正在读取</text>
+    </view>
+
+    <view v-if="!loading && errText != ''" class="state">
+      <text class="state-text">{{ errText }}</text>
+      <text class="state-action" @click="reload">重试</text>
+    </view>
+
+    <view v-if="!loading && errText == '' && rows.length == 0" class="state">
+      <text class="state-text">还没有档案。先把自己加进来，再添加需要看护的孩子。</text>
+    </view>
+
+    <view v-for="r in rows" :key="r.id" class="row" @click="openChild(r.id)">
+      <view class="row-main">
+        <text class="row-name">{{ r.name }}</text>
+        <text v-if="r.isSelf" class="row-tag">我自己</text>
+      </view>
+      <view class="row-meta">
+        <!-- 状态同时用文字与颜色表达，不单靠颜色 -->
+        <text class="row-ring" :style="'color:' + r.zoneColor">
+          {{ r.hasRing ? r.zoneText : '未绑戒指' }}
+        </text>
+        <text v-if="r.lastUploadText != ''" class="row-time">{{ r.lastUploadText }}</text>
+      </view>
+    </view>
+
+    <view class="add" @click="addChild">
+      <text class="add-text">添加看护对象</text>
+    </view>
+
+    <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import { DISCLAIMER_SHORT } from '../../styles/tokens.uts'
+import type { ChildDisplay } from '../../types/display.uts'
+
+const loading = ref<boolean>(false)
+const errText = ref<string>('')
+const rows = ref<ChildDisplay[]>([])
+
+// TODO(C3 + C4): 接后端 B1 GET /api/users/my-children。
+// 在该接口存在之前保持空数组：宁可空态，也不编数据。
+function reload() {
+  loading.value = false
+  errText.value = ''
+  rows.value = [] as ChildDisplay[]
+}
+
+function openChild(id: number) {
+  // TODO(C4): 跳编辑页 / 弹出编辑面板
+  console.log('open child', id)
+}
+
+function addChild() {
+  // TODO(C4): C-2 纯档案表单（姓名 / 年龄 / 性别），无手机号、无密码
+  uni.showToast({ title: '添加功能随孩子管理一并上线', icon: 'none' })
+}
+
+onMounted(() => {
+  reload()
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.children-page {
+  flex: 1;
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.intro {
+  padding-top: $sp-5;
+  padding-bottom: $sp-4;
+}
+
+.intro-title {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.intro-desc {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+}
+
+/* 发丝线分层，不用卡片堆叠 */
+.row {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-3;
+  padding-bottom: $sp-3;
+  min-height: $tap-min;
+  justify-content: center;
+}
+
+.row-main {
+  flex-direction: row;
+  align-items: center;
+}
+
+.row-name {
+  font-size: $fs-body;
+  color: $ink;
+}
+
+.row-tag {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-2;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-sm;
+  padding-left: $sp-1;
+  padding-right: $sp-1;
+}
+
+.row-meta {
+  flex-direction: row;
+  align-items: center;
+  margin-top: $sp-1;
+}
+
+.row-ring {
+  font-size: $fs-label;
+}
+
+.row-time {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-2;
+}
+
+.add {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  min-height: $tap-min;
+  justify-content: center;
+}
+
+.add-text {
+  font-size: $fs-body;
+  color: $accent;
+}
+
+.state {
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.state-text {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+}
+
+.state-action {
+  font-size: $fs-label;
+  color: $accent;
+  margin-top: $sp-2;
+}
+
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-6;
+  margin-bottom: $sp-5;
+}
+</style>

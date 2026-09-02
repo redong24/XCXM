@@ -10,62 +10,95 @@
     {
       "path": "pages/home/home",
       "style": {
-        "navigationBarTitleText": "哮卫",
+        "navigationBarTitleText": "哨兵",
         "navigationStyle": "custom"
       }
     },
     {
       "path": "pages/device/device",
       "style": {
-        "navigationBarTitleText": "设备管理"
+        "navigationBarTitleText": "戒指"
       }
     },
     {
       "path": "pages/measure/measure",
       "style": {
-        "navigationBarTitleText": "手动检测"
+        "navigationBarTitleText": "手动加测"
       }
     },
     {
       "path": "pages/history/history",
       "style": {
-        "navigationBarTitleText": "历史记录"
+        "navigationBarTitleText": "日志"
       }
     },
     {
       "path": "pages/profile/profile",
       "style": {
-        "navigationBarTitleText": "个人中心"
+        "navigationBarTitleText": "我"
+      }
+    },
+    {
+      "path": "pages/children/children",
+      "style": {
+        "navigationBarTitleText": "看护对象"
+      }
+    },
+    {
+      "path": "pages/alert/detail",
+      "style": {
+        "navigationBarTitleText": "预警详情",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/plan/plan",
+      "style": {
+        "navigationBarTitleText": "行动计划"
+      }
+    },
+    {
+      "path": "pages/settings/alarm",
+      "style": {
+        "navigationBarTitleText": "报警设置"
       }
     }
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "哮卫",
-    "navigationBarBackgroundColor": "#FFFFFF",
-    "backgroundColor": "#F5F7FA"
+    "navigationBarBackgroundColor": "#F7F8F7",
+    "backgroundColor": "#F7F8F7"
   },
   "tabBar": {
-    "color": "#7A7E83",
-    "selectedColor": "#3B82F6",
-    "borderStyle": "black",
+    "color": "#5A6468",
+    "selectedColor": "#2C6E8F",
+    "borderStyle": "white",
     "backgroundColor": "#FFFFFF",
     "list": [
       {
         "pagePath": "pages/home/home",
-        "text": "首页"
+        "text": "哨兵",
+        "iconPath": "static/tabbar/sentinel.png",
+        "selectedIconPath": "static/tabbar/sentinel-on.png"
       },
       {
         "pagePath": "pages/device/device",
-        "text": "设备"
+        "text": "戒指",
+        "iconPath": "static/tabbar/ring.png",
+        "selectedIconPath": "static/tabbar/ring-on.png"
       },
       {
         "pagePath": "pages/history/history",
-        "text": "记录"
+        "text": "日志",
+        "iconPath": "static/tabbar/log.png",
+        "selectedIconPath": "static/tabbar/log-on.png"
       },
       {
         "pagePath": "pages/profile/profile",
-        "text": "我的"
+        "text": "我",
+        "iconPath": "static/tabbar/me.png",
+        "selectedIconPath": "static/tabbar/me-on.png"
       }
     ]
   }

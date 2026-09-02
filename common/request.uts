@@ -16,7 +16,7 @@
 //      （Basic Constraints 为 CA:TRUE，是一张「自签 CA」而非服务器证书，
 //      Android 的 X509 校验会直接拒绝）。实测在 uni-app x Android 调试基座中，
 //      sslVerify:false 并不生效，uni.request 一律回调 fail 且
-//      errCode=602001（request 系统错误）——表现就是「登录点了没反应/报错」。
+//      errCode=602001（request 系统错误）。表现就是「登录点了没反应/报错」。
 //      解决办法不是继续和 sslVerify 缠斗，而是换用一条「公网可信证书」通道：
 //      同一台服务器上的 saas.365bmd.com 已有 DigiCert 签发的正式证书，
 //      nginx 8443 端口新增 /asthma-api/ 反代到同一个 FastAPI（127.0.0.1:8000）。
@@ -145,7 +145,7 @@ function pickDetail(data: any | null): string {
 //
 // 【关键设计变更（09-02 17:55，勿回退）】不再使用泛型，返回原始 any。
 //
-// 原因：官方文档明确写着——
+// 原因：官方文档明确写着：
 //   「request 接口内部通过特殊方式读取了泛型类型，不支持传入动态的泛型：
 //     比如将外层方法的普通泛型参数传入 request。所以目前尽量直接使用
 //     uni.request 而不是封装。如确需封装，可不使用 type，改用 UTSJSONObject。」
@@ -199,7 +199,7 @@ export function request(
             // 而 res.data 的类型是 Any?。直接写 resolve(res.data) 会编译失败：
             //   error: 参数类型不匹配：实际类型为 'Any?'，预期类型为 'Any'
             // 而且 res.data 是属性访问，即使在外面判过空，Kotlin 也不会对它
-            // 做智能转换 —— 必须提取为局部 const，再判空 + `!` 断言。
+            // 做智能转换。必须提取为局部 const，再判空 + `!` 断言。
             const body = res.data
             // 2xx 但 body 为空：调用方访问字段必然 NPE，提前拦截留痕
             if (body == null) {
@@ -242,7 +242,7 @@ export function request(
           // err 不标类型，让 UTS 自动推导为官方 RequestFail，
           // 直接访问 errCode/errMsg。
           // 血泪教训（17:02 实证）：此前标注 any|null 再 as 自定义 type，
-          // 运行时字段全部丢失——真实 errCode=602001（证书校验失败）
+          // 运行时字段全部丢失。真实 errCode=602001（证书校验失败）
           // 被读成 0，errMsg 被读成空，导致错误信息完全失真。
           try {
             console.log(`[api] fail 原始对象: ${JSON.stringify(err)}`)
@@ -364,7 +364,7 @@ function probe(
           const sc = res.statusCode ?? 0
           resolve({
             ok: true,
-            text: `${label}：✓ 可达 (HTTP ${sc})`
+            text: `${label}：可达 (HTTP ${sc})`
           } as ProbeResult)
         },
         fail: (err) => {
@@ -376,12 +376,12 @@ function probe(
           }
           resolve({
             ok: false,
-            text: `${label}：✗ ${err.errMsg}（code=${err.errCode}）`
+            text: `${label}：不可达 ${err.errMsg}（code=${err.errCode}）`
           } as ProbeResult)
         }
       })
     } catch (e) {
-      resolve({ ok: false, text: `${label}：✗ 同步异常 ${e}` } as ProbeResult)
+      resolve({ ok: false, text: `${label}：不可达 同步异常 ${e}` } as ProbeResult)
     }
   })
 }
@@ -416,7 +416,7 @@ export async function diagnose(): Promise<string> {
   if (!l1.ok) {
     verdict = '结论：模拟器无法访问公网\n→ 与 App 无关，检查模拟器网络（重启或切换网络模式）'
   } else if (l2.ok) {
-    verdict = '结论：✅ 新通道正常，登录应可用\n（③失败属预期：旧自签证书被 Android 拒绝，已不再使用）'
+    verdict = '结论：新通道正常，登录应可用\n（第 3 项失败属预期：旧自签证书被 Android 拒绝，已不再使用）'
   } else {
     verdict = '结论：新通道不通\n→ 若 errMsg 含 8443/timeout：模拟器到 8443 端口受阻\n→ 请把本结果与控制台日志发给开发者'
   }

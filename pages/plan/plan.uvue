@@ -1,0 +1,165 @@
+<template>
+  <view class="plan-page">
+    <!-- 骨架说明（C5 实现时删除）：
+         分区内容与判断依据要么来自医生录入的行动计划（优先），
+         要么来自内置的通用非药物安抚措施。两者都必须标出来源与日期，
+         这是这一页可信度的全部来源。医学内容待你确认后再填，
+         现在不预填任何具体医嘱。 -->
+
+    <view class="intro">
+      <text class="intro-title">行动计划</text>
+      <text class="intro-desc">
+        绿区、关注区、红区各对应一组动作。这套分区沿用医生给的哮喘行动计划卡。
+      </text>
+      <text class="intro-source">{{ sourceText }}</text>
+    </view>
+
+    <view v-for="z in zones" :key="z.zone" class="zone">
+      <view class="zone-head">
+        <!-- 分区标识：色块 + 文字并用，不单靠颜色 -->
+        <view class="chip" :style="'background-color:' + z.zoneColor"></view>
+        <text class="zone-name">{{ z.zoneText }}</text>
+      </view>
+      <text v-if="z.criteria != ''" class="criteria">{{ z.criteria }}</text>
+      <view v-for="s in z.steps" :key="s.order" class="step">
+        <text class="step-no">{{ s.order }}</text>
+        <text class="step-text">{{ s.text }}</text>
+      </view>
+    </view>
+
+    <view v-if="zones.length == 0" class="state">
+      <text class="state-text">
+        还没有行动计划。你可以让医生把行动计划卡的内容录进来，也可以先使用内置的通用安抚措施。
+      </text>
+    </view>
+
+    <text class="disclaimer">{{ DISCLAIMER_PLAN }}</text>
+    <text class="disclaimer">{{ DISCLAIMER_SEEK_CARE }}</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import { DISCLAIMER_PLAN, DISCLAIMER_SEEK_CARE } from '../../styles/tokens.uts'
+import type { PlanZone } from '../../types/display.uts'
+
+const zones = ref<PlanZone[]>([])
+// 来源与日期。医生录入时形如「医生行动计划 · 2026-08-12」，
+// 否则形如「内置通用安抚措施」。空串表示还没有任何计划。
+const sourceText = ref<string>('')
+
+onMounted(() => {
+  // TODO(C5): 医生 AAP 优先，缺失时回落到内置通用非药物安抚措施。
+  // 内置文案的具体医学内容需你确认后再写死，此处不猜。
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.plan-page {
+  flex: 1;
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.intro {
+  padding-top: $sp-5;
+  padding-bottom: $sp-4;
+}
+
+.intro-title {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.intro-desc {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+}
+
+.intro-source {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-2;
+}
+
+.zone {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.zone-head {
+  flex-direction: row;
+  align-items: center;
+}
+
+.chip {
+  width: 10px;
+  height: 10px;
+  border-radius: $r-sm;
+  margin-right: $sp-2;
+}
+
+.zone-name {
+  font-size: $fs-body;
+  color: $ink;
+  font-weight: 600;
+}
+
+.criteria {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+  margin-bottom: $sp-2;
+}
+
+.step {
+  flex-direction: row;
+  align-items: flex-start;
+  margin-top: $sp-2;
+}
+
+.step-no {
+  font-size: $fs-label;
+  color: $ink-2;
+  font-family: $font-metric;
+  width: 20px;
+}
+
+.step-text {
+  flex: 1;
+  font-size: $fs-body;
+  color: $ink;
+  line-height: 22px;
+}
+
+.state {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+}
+
+.state-text {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+}
+
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-4;
+}
+</style>

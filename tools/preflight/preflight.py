@@ -8,7 +8,7 @@ Leonxlnx/taste-skill SKILL.md sections 4.x / 9.x.
 
 Adapted for uni-app x: scans .uvue / .uts / .vue / .json / .scss / .css /
 .ts / .tsx / .js / .jsx / .html. uvue-specific notes are attached to the
-checks whose web assumptions do not hold (C02, C19).
+checks whose web assumptions do not hold (C02, C13, C19).
 
 Usage:
   python3 preflight.py <paths...>
@@ -207,10 +207,31 @@ def c12(path,lines,src,res):
 # ---------------- C13 image without meaningful alt ----------------
 @check("C13","image without meaningful alt","FAIL")
 def c13(path,lines,src,res):
+    # uvue platform note (verified 2026-09-02):
+    #   The uni-app x <image> component has NO alt attribute. Its documented
+    #   attribute list (src / mode / lazy-load / fade-show / webp /
+    #   show-menu-by-longpress / draggable / flatten) is exhaustive, and
+    #   uni-app has no accessibility layer at all (dcloudio/uni-app#4353,
+    #   still open). Writing alt="" here would not reach a screen reader; it
+    #   would only silence this check, which is worse than an honest INFO.
+    #   So on .uvue we downgrade to INFO and demand a nearby explanatory
+    #   comment instead, which is the only thing that actually survives.
+    uvue = path.lower().endswith(".uvue")
     for i,l in enumerate(lines,1):
         for m in re.finditer(r"<(img|image)\b[^>]*>",l,re.I):
             tag=m.group(0)
             am=re.search(r'\balt\s*=\s*"(.*?)"',tag,re.I)
+            if uvue:
+                # Is the image documented by a comment within the 4 lines above?
+                ctx="\n".join(lines[max(0,i-5):i-1])
+                if "<!--" in ctx or "//" in ctx:
+                    continue
+                res.append(Finding("C13","INFO",path,i,tag,
+                    "uvue <image> has no alt attribute on this platform "
+                    "(uni-app has no a11y layer), and this one is undocumented.",
+                    "Add a comment above it stating what the image conveys, "
+                    "and keep the meaning available as adjacent <text>."))
+                continue
             if am is None:
                 res.append(Finding("C13","FAIL",path,i,tag,
                     "Image has no alt attribute.",

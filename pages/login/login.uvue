@@ -1,9 +1,10 @@
 <template>
   <view class="login-page">
     <view class="logo-area" @click="onLogoClick">
-      <view class="logo-circle">
-        <text class="logo-icon">🫁</text>
-      </view>
+      <!-- 品牌标记 = 哮喘行动计划卡（绿/关注/红三分区 + 位置标记）。
+           原先是 emoji，emoji 随系统换脸、视觉重量不可控，且技能禁止把
+           emoji 当图标用（preflight C21）。资产由 tools/icons 脚本生成。 -->
+      <image class="logo-mark" src="/static/brand/mark.png" mode="aspectFit" />
       <text class="app-name">哮卫 AsthmaGuard</text>
       <text class="app-slogan">儿童哮喘可穿戴监测系统</text>
     </view>
@@ -13,10 +14,10 @@
         <text class="label">手机号</text>
         <!--
           关键修正（勿回退）：
-          1. 必须用 v-model 双向绑定 —— 手动受控(:value + @input)在
+          1. 必须用 v-model 双向绑定。手动受控(:value + @input)在
              uni-app x Android 上 state 不会随输入更新（14:02 实测
              输入框显示 11 位但 phone.value 为空，提示"请输入手机号"）
-          2. type 用 "text" 而非 "number" —— 官方提示 type=number 在
+          2. type 用 "text" 而非 "number"。官方提示 type=number 在
              不同 ROM 行为不一致；inputmode=numeric 仍弹数字键盘
           3. 超 11 位由 validatePhone 在提交时拦截提示，不再依赖 maxlength
         -->
@@ -79,8 +80,10 @@
     </view>
 
     <view class="footer-wrap">
-      <text class="footer-tip" @click="onDiagnose">网络诊断（点击检测）</text>
-      <text class="ver-tip">build 09-02 18:20 解析修复版</text>
+      <!-- 网络诊断降级为安静入口：它是排障工具，不是产品功能 -->
+      <text class="footer-tip" @click="onDiagnose">网络诊断</text>
+      <!-- 责任口径（§11.1，6 处之一）。文案取自 styles/tokens.uts 单一来源 -->
+      <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
     </view>
   </view>
 </template>
@@ -89,6 +92,7 @@
 // 注意：uni-app x 会自动引入 vue 公开 API（ref 等），无需 import
 import { login, register } from '../../store/user.uts'
 import { takeApiErrorText, clearApiError, diagnose } from '../../common/request.uts'
+import { DISCLAIMER_SHORT } from '../../styles/tokens.uts'
 import type { RegisterPayload } from '../../api/index.uts'
 
 const mode = ref<string>('login')
@@ -240,19 +244,12 @@ function onLogoClick() {
   margin-bottom: 60rpx;
 }
 
-.logo-circle {
-  width: 160rpx;
-  height: 160rpx;
-  border-radius: 50%;
-  background: #3b82f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* 品牌标记直接作为图形出现，不再套一个蓝色圆底：
+   圆底 + 居中字形是最常见的那种「随便找个图标塞进圆里」的做法。 */
+.logo-mark {
+  width: 168rpx;
+  height: 112rpx;
   margin-bottom: 24rpx;
-}
-
-.logo-icon {
-  font-size: 72rpx;
 }
 
 .app-name {
@@ -366,9 +363,9 @@ function onLogoClick() {
      改用主题蓝色区分可点击性 */
 }
 
-.ver-tip {
-  font-size: 20rpx;
-  color: #c0c4cc;
-  margin-top: 12rpx;
+.disclaimer {
+  font-size: 22rpx;
+  color: #5a6468;
+  margin-top: 16rpx;
 }
 </style>

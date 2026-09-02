@@ -32,14 +32,14 @@
 
     <!-- 预警提示 -->
     <view v-if="latestAlert != null" class="alert-banner" :class="latestAlertLevelClass">
-      <text class="alert-title">⚠️ 预警提醒</text>
+      <text class="alert-title">预警提醒</text>
       <text class="alert-desc">{{ latestAlertLabel }}</text>
     </view>
 
     <!-- 手动检测按钮 -->
     <view class="action-area">
       <button class="measure-btn" @click="goMeasure">
-        <text>🫁 开始手动检测</text>
+        <text>开始手动加测</text>
       </button>
     </view>
 

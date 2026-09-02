@@ -1,0 +1,79 @@
+/**
+ * 界面展示用的数据类型。
+ *
+ * 为什么单独放一个文件：
+ *   UTS 不允许在 <script setup> 里声明 type（UTS100006），
+ *   而模板里又不能调用带参数的函数，所以颜色、文案这类派生值
+ *   必须在脚本里预先算好、塞进展示对象再交给模板。
+ *   这些类型就是那个「预先算好」的契约。
+ *
+ * 与 api/index.uts 里的 *Resp 类型的分工：
+ *   *Resp   = 后端原样返回的形状，字段名跟着接口走；
+ *   *Display = 界面直接渲染的形状，已带好颜色/中文/相对时间。
+ *   两者之间由 api/index.uts 的手写 mapper 转换。
+ */
+
+import type { Zone } from '../styles/tokens.uts'
+
+/** 看护对象（含「我自己」）。C-2 纯档案模型：孩子没有手机号、没有密码。 */
+export type ChildDisplay = {
+  /** users.id */
+  id: number
+  name: string
+  /** 「我自己」为 true，列表里恒排第一项 */
+  isSelf: boolean
+  /** 年龄，用于后端 B5 的年龄分档阈值；缺失时为 null */
+  age: number | null
+  /** 预先算好的年龄文案，如「7 岁」或「未填年龄」。
+   *  模板里不做字符串拼接：UTS 模板表达式能力有限，
+   *  且 String(number) 不受支持，一律在脚本里算完再传进来。 */
+  ageText: string
+  /** 是否已绑定戒指。未绑定的档案不参与哨兵值守，界面必须说清楚 */
+  hasRing: boolean
+  /** 当前分区 */
+  zone: Zone
+  /** 预先算好的分区色，避免模板调用 zoneColor(z) */
+  zoneColor: string
+  /** 预先算好的分区中文名 */
+  zoneText: string
+  /** 相对时间，如「12 秒前」。从未上传时为空串 */
+  lastUploadText: string
+}
+
+/**
+ * switch 组件 change 事件的事件值。
+ * 与 api/index.uts 里的 UniInputEventDetail 同一套做法：
+ * type 声明内不允许嵌套对象字面量（UTS110111101），
+ * 所以内层必须拆成独立的具名顶层 type。
+ */
+export type UniSwitchChangeDetail = {
+  value: boolean
+}
+
+/** switch 组件 change 事件对象。 */
+export type UniSwitchChangeEventLike = {
+  detail: UniSwitchChangeDetail
+}
+
+/** 行动计划里的一个步骤。 */
+export type PlanStep = {
+  /** 从 1 开始的序号，模板直接渲染，不做 index + 1 */
+  order: number
+  text: string
+}
+
+/** 行动计划的一个分区（绿/黄/红各一个）。 */
+export type PlanZone = {
+  zone: Zone
+  zoneColor: string
+  zoneText: string
+  /** 该分区的判断依据，如「能正常说话、活动不受限」 */
+  criteria: string
+  steps: PlanStep[]
+}
+
+/**
+ * 行动计划的来源。可信度的关键：界面必须标出来源与日期。
+ * 'doctor' 医生录入（优先并覆盖默认） | 'default' 内置通用非药物安抚措施
+ */
+export type PlanSource = 'doctor' | 'default'

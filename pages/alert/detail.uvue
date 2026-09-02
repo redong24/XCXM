@@ -1,0 +1,350 @@
+<template>
+  <!-- 全应用唯一的深色界面。换肤本身即报警语义（Theme Lock 的唯一例外），
+       不得复用到任何非报警场景。 -->
+  <view class="alert-page">
+    <view class="topbar">
+      <text class="back" @click="goBack">返回</text>
+      <text class="clock">{{ timeText }}</text>
+    </view>
+
+    <!-- 顶部口径：说清这是监测数值，不是诊断 -->
+    <text class="notice">{{ DISCLAIMER_ALERT }}</text>
+
+    <view class="head">
+      <text class="zone">{{ zoneText }}</text>
+      <text class="who">{{ subjectText }}</text>
+      <text class="reading">{{ readingText }}</text>
+      <text v-if="durationText != ''" class="dur">{{ durationText }}</text>
+    </view>
+
+    <!-- A：知道并消除。唯一主按钮，最大命中区 -->
+    <view class="ack" @click="acknowledge">
+      <text class="ack-text">我知道了，消除警报</text>
+    </view>
+
+    <!-- B：动作指引。编号步骤 + 来源标注 -->
+    <view class="block">
+      <text class="block-title">现在要做的</text>
+      <view v-for="s in steps" :key="s.order" class="step">
+        <text class="step-no">{{ s.order }}</text>
+        <text class="step-text">{{ s.text }}</text>
+      </view>
+      <text class="source">{{ sourceText }}</text>
+      <text class="seek">{{ DISCLAIMER_SEEK_CARE }}</text>
+    </view>
+
+    <!-- D：记录这次发作 -->
+    <view class="block">
+      <text class="block-title">记录这次发作</text>
+
+      <text class="field-label">严重程度</text>
+      <view class="levels">
+        <view
+          v-for="n in levelOptions"
+          :key="n"
+          class="level"
+          :class="n == level ? 'level-on' : ''"
+          @click="pickLevel(n)"
+        >
+          <text class="level-text" :class="n == level ? 'level-text-on' : ''">{{ n }}</text>
+        </view>
+      </view>
+
+      <text class="field-label">用了缓解药</text>
+      <view class="binary">
+        <view class="bin" :class="saba == 1 ? 'bin-on' : ''" @click="pickSaba(1)">
+          <text class="bin-text" :class="saba == 1 ? 'bin-text-on' : ''">是</text>
+        </view>
+        <view class="bin" :class="saba == 0 ? 'bin-on' : ''" @click="pickSaba(0)">
+          <text class="bin-text" :class="saba == 0 ? 'bin-text-on' : ''">否</text>
+        </view>
+      </view>
+
+      <text class="field-label">备注</text>
+      <input class="remark" v-model="remark" type="text" placeholder="可不填" />
+
+      <view class="save" @click="saveLog">
+        <text class="save-text">保存日志</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import { DISCLAIMER_ALERT, DISCLAIMER_SEEK_CARE } from '../../styles/tokens.uts'
+import type { PlanStep } from '../../types/display.uts'
+
+// 骨架说明（C5 实现时删除）：
+//   这一页要跑通 A + B + D 闭环，依赖三件事：
+//     1. 路由参数 alert_id（从推送点击或日志列表进来）
+//     2. 后端 B4：feedbacks 增加 alert_id 外键，才能把发作日志挂到这条预警上
+//     3. 行动计划：医生录入的 AAP 优先，否则用内置通用非药物安抚措施
+//   在 B4 落地前不接 API，避免写出一份将来必然要推翻的提交逻辑。
+
+const timeText = ref<string>('')
+const zoneText = ref<string>('红区预警')
+const subjectText = ref<string>('')
+const readingText = ref<string>('')
+const durationText = ref<string>('')
+
+const steps = ref<PlanStep[]>([])
+const sourceText = ref<string>('')
+
+// 严重程度 1 到 4，与后端 feedbacks.feedback_level 对齐。
+// 模板不能调用带参数的函数，所以候选值预先摊平成数组。
+const levelOptions = ref<number[]>([1, 2, 3, 4])
+const level = ref<number>(0)
+const saba = ref<number>(-1)
+const remark = ref<string>('')
+
+function pickLevel(n: number) {
+  level.value = n
+}
+
+function pickSaba(v: number) {
+  saba.value = v
+}
+
+function goBack() {
+  uni.navigateBack()
+}
+
+function acknowledge() {
+  // TODO(C5): PUT /api/alerts/{id} 置为已处理，然后回到哨兵页
+  uni.showToast({ title: '消除警报随预警闭环一并上线', icon: 'none' })
+}
+
+function saveLog() {
+  // TODO(C5): POST /api/feedbacks/ 带 alert_id（依赖后端 B4）
+  uni.showToast({ title: '发作日志随后端 alert_id 一并上线', icon: 'none' })
+}
+
+onMounted(() => {
+  // TODO(C5): 读路由参数 alert_id 并拉取这条预警
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.alert-page {
+  flex: 1;
+  background-color: $alert-bg;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.topbar {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  min-height: $tap-min;
+}
+
+.back {
+  font-size: $fs-body;
+  color: $alert-fg-2;
+}
+
+.clock {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  font-family: $font-metric;
+}
+
+.notice {
+  font-size: $fs-utility;
+  color: $alert-fg-2;
+  margin-bottom: $sp-4;
+}
+
+.head {
+  padding-bottom: $sp-5;
+}
+
+.zone {
+  font-size: $fs-title;
+  color: $alert-fg;
+  font-weight: 600;
+}
+
+.who {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  margin-top: $sp-2;
+}
+
+.reading {
+  font-size: $fs-metric-xl;
+  color: $alert-fg;
+  font-family: $font-metric;
+  margin-top: $sp-2;
+}
+
+.dur {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  margin-top: $sp-1;
+}
+
+/* 唯一主按钮，命中区给到 56px */
+.ack {
+  min-height: $tap-primary;
+  border-radius: $r-md;
+  background-color: $zone-red;
+  align-items: center;
+  justify-content: center;
+}
+
+.ack-text {
+  font-size: $fs-title;
+  color: $alert-fg;
+  font-weight: 600;
+}
+
+.block {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $alert-hairline;
+  margin-top: $sp-5;
+  padding-top: $sp-4;
+}
+
+.block-title {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  margin-bottom: $sp-3;
+}
+
+.step {
+  flex-direction: row;
+  align-items: flex-start;
+  margin-bottom: $sp-3;
+}
+
+.step-no {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  font-family: $font-metric;
+  width: 20px;
+}
+
+.step-text {
+  flex: 1;
+  font-size: $fs-body;
+  color: $alert-fg;
+  line-height: 22px;
+}
+
+.source {
+  font-size: $fs-utility;
+  color: $alert-fg-2;
+  margin-top: $sp-1;
+}
+
+.seek {
+  font-size: $fs-label;
+  color: $alert-fg;
+  margin-top: $sp-3;
+}
+
+.field-label {
+  font-size: $fs-label;
+  color: $alert-fg-2;
+  margin-top: $sp-3;
+  margin-bottom: $sp-2;
+}
+
+.levels {
+  flex-direction: row;
+}
+
+.level {
+  width: $tap-min;
+  height: $tap-min;
+  border-radius: $r-md;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $alert-hairline;
+  align-items: center;
+  justify-content: center;
+  margin-right: $sp-2;
+}
+
+/* 选中态同时改边框与填充，不单靠颜色 */
+.level-on {
+  border-color: $alert-fg;
+  background-color: $alert-fg;
+}
+
+.level-text {
+  font-size: $fs-body;
+  color: $alert-fg-2;
+  font-family: $font-metric;
+}
+
+.level-text-on {
+  color: $alert-bg;
+  font-weight: 600;
+}
+
+.binary {
+  flex-direction: row;
+}
+
+.bin {
+  min-width: 72px;
+  height: $tap-min;
+  border-radius: $r-md;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $alert-hairline;
+  align-items: center;
+  justify-content: center;
+  margin-right: $sp-2;
+}
+
+.bin-on {
+  border-color: $alert-fg;
+  background-color: $alert-fg;
+}
+
+.bin-text {
+  font-size: $fs-body;
+  color: $alert-fg-2;
+}
+
+.bin-text-on {
+  color: $alert-bg;
+  font-weight: 600;
+}
+
+.remark {
+  height: $tap-min;
+  border-bottom-width: $hair-w;
+  border-bottom-style: solid;
+  border-bottom-color: $alert-hairline;
+  font-size: $fs-body;
+  color: $alert-fg;
+}
+
+.save {
+  min-height: $tap-min;
+  border-radius: $r-md;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $alert-fg-2;
+  align-items: center;
+  justify-content: center;
+  margin-top: $sp-4;
+  margin-bottom: $sp-6;
+}
+
+.save-text {
+  font-size: $fs-body;
+  color: $alert-fg;
+}
+</style>
