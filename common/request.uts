@@ -1,0 +1,347 @@
+// HTTP 请求封装（统一鉴权 + 错误处理 + baseURL）
+// uni-app x 环境用 uni.request
+//
+// 设计要点（血泪教训，勿回退）：
+//   1. 【错误信息必须透传】后端 FastAPI 的 4xx/5xx 返回 {"detail": "..."}，
+//      网络层失败则 fail 回调携带 errMsg/errCode。此前这两类信息被统一丢弃，
+//      页面只显示「操作失败」，导致真实原因（手机号或密码错误 / 证书校验失败 /
+//      网络不可达）完全无法定位。现在统一记录到 lastApiError，页面取用展示。
+//   2. 【只用本工程已验证的 UTS 写法】UTS 的 any 不能直接点属性，取字段一律
+//      用 `as` 转成具名 type 再访问成员。不要改用 UTSJSONObject 变量下标
+//      （o[key]）或显式标注 `const h: UTSJSONObject = {...}`，
+//      这两种写法未在本工程验证过，是此前编译失败回退缓存的嫌疑点。
+//   3. 【method 必须大写】uni-app x 的 method 合法值为 "GET"/"POST" 等大写字符串。
+
+export const BASE_URL = 'https://39.183.171.185:9443'
+
+// 请求超时（毫秒）
+export const REQUEST_TIMEOUT = 15000
+
+// 最近一次请求错误的详细上下文
+export type ApiErrorInfo = {
+  path: string
+  statusCode: number
+  detail: string
+  errMsg: string
+  errCode: number
+}
+
+// 后端错误响应体（FastAPI 4xx/5xx 约定为 {"detail": "..."}）
+type ErrorBody = {
+  detail: string
+}
+
+// 错误存储容器（用对象包一层；UTS 对象字面量需 as type）
+type ErrorStore = {
+  info: ApiErrorInfo | null
+}
+const errorStore = {
+  info: null as ApiErrorInfo | null
+} as ErrorStore
+
+/** 记录最近一次错误，并打印日志便于 HBuilderX 控制台排查 */
+function recordError(info: ApiErrorInfo): void {
+  errorStore.info = info
+  console.log(
+    `[api] 请求失败 path=${info.path} status=${info.statusCode} detail=${info.detail} errMsg=${info.errMsg} errCode=${info.errCode}`
+  )
+}
+
+/** 清空错误记录 */
+export function clearApiError(): void {
+  errorStore.info = null
+}
+
+/**
+ * 取出并清空最近一次错误，返回可直接展示给用户的中文文案。
+ * 无错误记录时返回 fallback。
+ */
+export function takeApiErrorText(fallback: string): string {
+  const info = errorStore.info
+  if (info == null) {
+    return fallback
+  }
+  errorStore.info = null
+
+  const parts: string[] = []
+  if (info.detail != '') {
+    parts.push(info.detail)
+  }
+  if (info.errMsg != '') {
+    parts.push(info.errMsg)
+  }
+  if (parts.length == 0) {
+    if (info.statusCode > 0) {
+      parts.push(`HTTP ${info.statusCode}`)
+    }
+  }
+  if (parts.length == 0) {
+    return fallback
+  }
+
+  // 手动拼接（避免依赖数组 join 的跨端差异）
+  let text = ''
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0) {
+      text = `${text} · `
+    }
+    text = `${text}${parts[i]}`
+  }
+  return text
+}
+
+// 从后端响应体中提取 detail 字段
+function pickDetail(data: any | null): string {
+  if (data == null) {
+    return ''
+  }
+  try {
+    const body = data as ErrorBody
+    const d = body.detail
+    if (d == null) {
+      return ''
+    }
+    return `${d}`
+  } catch (e) {
+    // 响应体不是 {detail} 结构（如 nginx 返回 HTML 字符串），忽略
+    return ''
+  }
+}
+
+// 判空辅助（参数 any | null 是已验证写法；直接 res.data == null 未验证）
+function isNullData(data: any | null): boolean {
+  return data == null
+}
+
+// 统一请求方法（用具名参数，避免 UTS 对象字面量不能构造 interface 的限制）
+export function request<T = any>(
+  path: string,
+  method: string,
+  data: any | null = null,
+  needAuth: boolean = true
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    // 全部同步代码包进 try：uni.request 同步抛异常、header 构建异常等
+    // 此前发生在 recordError 之前，异常被吞、页面只剩兜底文案（15:05 实测）
+    try {
+      // 组装请求头（对象字面量会被推导为 UTSJSONObject，支持下标赋值）
+      const header = {
+        'Content-Type': 'application/json'
+      }
+
+      // 鉴权：附带 JWT
+      if (needAuth) {
+        const token = uni.getStorageSync('token') as string
+        if (token != '') {
+          header['Authorization'] = `Bearer ${token}`
+        }
+      }
+
+      uni.request({
+        url: `${BASE_URL}${path}`,
+        method: method,
+        data: data,
+        header: header,
+        timeout: REQUEST_TIMEOUT,
+        sslVerify: false, // 后端为自签证书（issuer=subject，CN=39.183.171.185），必须跳过校验
+        success: (res) => {
+          const statusCode = res.statusCode ?? 0
+          if (statusCode >= 200 && statusCode < 300) {
+            // 2xx 但 body 为空：调用方访问字段必然 NPE，提前拦截留痕
+            if (isNullData(res.data)) {
+              recordError({
+                path: path,
+                statusCode: statusCode,
+                detail: '',
+                errMsg: `HTTP ${statusCode} 但响应体为空`,
+                errCode: 0
+              } as ApiErrorInfo)
+              reject(new Error('响应体为空'))
+              return
+            }
+            // as T 类型转换可能运行时失败（Kotlin ClassCastException），
+            // 失败也要留痕，不能让它裸奔到页面 catch
+            try {
+              resolve(res.data as T)
+            } catch (e2) {
+              recordError({
+                path: path,
+                statusCode: statusCode,
+                detail: '',
+                errMsg: `响应解析失败: ${e2}`,
+                errCode: 0
+              } as ApiErrorInfo)
+              reject(new Error('响应解析失败'))
+            }
+            return
+          }
+          // 非 2xx：提取后端 detail（FastAPI 约定字段）
+          const detail = pickDetail(res.data)
+          if (statusCode === 401) {
+            // 登录接口自身的 401 属于「手机号或密码错误」的正常业务分支，
+            // 不能清 token 跳登录页，否则登录页会自己跳自己，掩盖真实错误。
+            if (path != '/api/auth/login') {
+              uni.removeStorageSync('token')
+              uni.reLaunch({ url: '/pages/login/login' })
+            }
+          }
+          recordError({
+            path: path,
+            statusCode: statusCode,
+            detail: detail,
+            errMsg: '',
+            errCode: 0
+          } as ApiErrorInfo)
+          reject(new Error(`请求失败（HTTP ${statusCode}）`))
+        },
+        fail: (err) => {
+          // err 不标类型，让 UTS 自动推导为官方 RequestFail，
+          // 直接访问 errCode/errMsg。
+          // 血泪教训（17:02 实证）：此前标注 any|null 再 as 自定义 type，
+          // 运行时字段全部丢失——真实 errCode=602001（证书校验失败）
+          // 被读成 0，errMsg 被读成空，导致错误信息完全失真。
+          try {
+            console.log(`[api] fail 原始对象: ${JSON.stringify(err)}`)
+          } catch (e) {
+            console.log('[api] fail 对象序列化失败')
+          }
+          recordError({
+            path: path,
+            statusCode: 0,
+            detail: '',
+            errMsg: `${err.errMsg}（code=${err.errCode}）`,
+            errCode: err.errCode
+          } as ApiErrorInfo)
+          reject(new Error('网络请求失败'))
+        }
+      })
+    } catch (e) {
+      // uni.request 同步抛异常（参数类型/平台兼容），留痕后 reject
+      recordError({
+        path: path,
+        statusCode: 0,
+        detail: '',
+        errMsg: `请求发送异常: ${e}`,
+        errCode: 0
+      } as ApiErrorInfo)
+      reject(new Error('请求发送异常'))
+    }
+  })
+}
+
+// 便捷方法（用 function 声明，UTS 箭头函数不支持泛型与默认参数）
+export function get<T = any>(path: string, needAuth: boolean = true): Promise<T> {
+  return request<T>(path, 'GET', null, needAuth)
+}
+
+export function post<T = any>(path: string, data: any | null = null, needAuth: boolean = true): Promise<T> {
+  return request<T>(path, 'POST', data, needAuth)
+}
+
+export function put<T = any>(path: string, data: any | null = null, needAuth: boolean = true): Promise<T> {
+  return request<T>(path, 'PUT', data, needAuth)
+}
+
+export function del<T = any>(path: string, needAuth: boolean = true): Promise<T> {
+  return request<T>(path, 'DELETE', null, needAuth)
+}
+
+// 单目标探测结果
+type ProbeResult = {
+  ok: boolean
+  text: string
+}
+
+/**
+ * 探测单个 URL 的连通性（内部工具）。
+ * skipSsl=false 走系统证书校验，=true 跳过校验（对应自签名证书场景）。
+ * 永远 resolve，不 reject。
+ */
+function probe(
+  label: string,
+  url: string,
+  method: string,
+  data: any | null,
+  skipSsl: boolean
+): Promise<ProbeResult> {
+  return new Promise<ProbeResult>((resolve) => {
+    try {
+      uni.request({
+        url: url,
+        method: method,
+        data: data,
+        header: { 'Content-Type': 'application/json' },
+        timeout: 8000,
+        sslVerify: !skipSsl,
+        success: (res) => {
+          const sc = res.statusCode ?? 0
+          resolve({
+            ok: true,
+            text: `${label}：✓ 可达 (HTTP ${sc})`
+          } as ProbeResult)
+        },
+        fail: (err) => {
+          // 同 request() 的 fail：自动推导 RequestFail，直接访问字段
+          try {
+            console.log(`[diag] ${label} fail: ${JSON.stringify(err)}`)
+          } catch (e) {
+            console.log(`[diag] ${label} fail 序列化失败`)
+          }
+          resolve({
+            ok: false,
+            text: `${label}：✗ ${err.errMsg}（code=${err.errCode}）`
+          } as ProbeResult)
+        }
+      })
+    } catch (e) {
+      resolve({ ok: false, text: `${label}：✗ 同步异常 ${e}` } as ProbeResult)
+    }
+  })
+}
+
+/**
+ * 网络连通性三目标对比自检（15:25 重写）。
+ * ① 公网受信 HTTPS（百度）：不通 = 模拟器整体断网
+ * ② 后端 + 跳过证书校验：登录请求同款配置
+ * ③ 后端 + 系统证书校验：与②对比，判断是否自签名证书被拦
+ * 一次点击出三个结果 + 自动结论，用于快速区分：
+ * 模拟器断网 / 后端端口不可达 / 自签名证书校验失败。
+ *
+ * 注意：resolve 而非 reject，调用方无需 try/catch。
+ */
+export async function diagnose(): Promise<string> {
+  const l1 = await probe('①公网HTTPS(百度)', 'https://www.baidu.com', 'GET', null, false)
+  const l2 = await probe(
+    '②后端(跳过证书校验)',
+    `${BASE_URL}/api/auth/login`,
+    'POST',
+    { phone: '__diag__', password: '__diag__' },
+    true
+  )
+  const l3 = await probe(
+    '③后端(系统证书校验)',
+    `${BASE_URL}/api/auth/login`,
+    'POST',
+    { phone: '__diag__', password: '__diag__' },
+    false
+  )
+
+  let verdict = ''
+  if (!l1.ok) {
+    verdict = '结论：模拟器无法访问公网\n→ 与 App 无关，检查模拟器网络（重启或切换网络模式）'
+  } else if (l2.ok) {
+    verdict = '结论：网络与证书均正常\n→ 若登录仍失败，请把控制台日志发给开发者'
+  } else if (!l2.ok && !l3.ok) {
+    verdict = '结论：后端不可达或证书被拦\n→ 若③的 errMsg 含 ssl/cert/证书 字样：自签名证书被拦截且跳过校验未生效\n→ 否则：9443 端口被防火墙拦截，用模拟器浏览器访问 BASE_URL 验证'
+  } else {
+    verdict = '结论：②失败③成功（异常组合），请把本结果发给开发者'
+  }
+
+  return `BASE_URL：${BASE_URL}
+
+${l1.text}
+${l2.text}
+${l3.text}
+
+${verdict}`
+}

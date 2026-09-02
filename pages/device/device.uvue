@@ -1,0 +1,288 @@
+<template>
+  <view class="device-page">
+    <!-- 当前设备状态 -->
+    <view class="current-device card">
+      <text class="card-title">当前设备</text>
+      <template v-if="deviceState.currentDevice != null">
+        <view class="device-row">
+          <view>
+            <text class="device-name">RWFit 智能戒指</text>
+            <text class="device-mac">{{ deviceState.currentDevice?.mac }}</text>
+          </view>
+          <view class="status-badge" :class="deviceState.connected ? 'online' : 'offline'">
+            <text>{{ deviceState.connected ? '已连接' : '未连接' }}</text>
+          </view>
+        </view>
+        <button class="unbind-btn" @click="onUnbind">解绑设备</button>
+      </template>
+      <template v-else>
+        <view class="empty">
+          <text>尚未绑定设备</text>
+        </view>
+      </template>
+    </view>
+
+    <!-- 扫描连接 -->
+    <view class="scan-area card">
+      <text class="card-title">扫描附近设备</text>
+      <button class="scan-btn" :loading="deviceState.scanning" @click="onScan">
+        {{ deviceState.scanning ? '扫描中...' : '开始扫描' }}
+      </button>
+
+      <view v-if="deviceState.nearbyDevices.length > 0" class="device-list">
+        <view
+          v-for="(d, idx) in deviceState.nearbyDevices"
+          :key="idx"
+          class="device-item"
+        >
+          <view>
+            <text class="device-name">{{ d.name }}</text>
+            <text class="device-mac">{{ d.mac }}（信号 {{ d.rssi }}）</text>
+          </view>
+          <button class="connect-btn" @click="onConnect(d)">连接</button>
+        </view>
+      </view>
+      <view v-else class="empty">
+        <text>点击「开始扫描」搜索附近的戒指设备</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/onMounted 等），无需 import
+import { deviceState, setCurrentDevice, setScanning, setNearbyDevices, restore as restoreDevice } from '../../store/device.uts'
+import { userId } from '../../store/user.uts'
+import { deviceApi, type DeviceInfo } from '../../api/index.uts'
+import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+import {
+  initSDK,
+  destroySDK,
+  startScan,
+  stopScan,
+  connect,
+  type BleDevice
+} from '../../utils/rwble.uts'
+
+const connectingMac = ref('')
+
+async function onScan() {
+  setScanning(true)
+  setNearbyDevices([] as BleDevice[])
+  try {
+    await startScan((device: BleDevice) => {
+      const list = deviceState.nearbyDevices.slice()
+      if (!list.some((d) => d.mac === device.mac)) {
+        list.push(device)
+        setNearbyDevices(list)
+      }
+    })
+  } finally {
+    setTimeout(() => {
+      setScanning(false)
+      stopScan()
+    }, 5000)
+  }
+}
+
+// 向后端解析设备的真实 id（按 MAC 在「我的设备」中匹配）
+//
+// 背景（重要，勿回退）：此前蓝牙连上后本地直接存 id=0「临时 id」，
+// 但代码里从未有任何一步去后端换取真实 id，导致上报心率/血氧时
+// device_id=0，后端返回 404「设备不存在」，且错误被 catch 吞掉，
+// 表现为「采集成功但预警永远不触发」的静默失败。
+//
+// 权限说明：后端 POST /api/devices/（创建设备）仅 admin 可用，
+// 故移动端不能自助登记，只能绑定已登记到自己名下的设备。
+async function resolveDeviceId(mac: string): Promise<DeviceInfo | null> {
+  clearApiError()
+  try {
+    const list = await deviceApi.mine()
+    const target = mac.toUpperCase()
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i]
+      if (d.mac.toUpperCase() === target) {
+        return d
+      }
+    }
+    return null
+  } catch (e) {
+    return null
+  }
+}
+
+// 蓝牙连接成功后的处理（前置 async 函数；UTS 无声明提升，须先定义后使用）
+async function onConnected(mac: string): Promise<boolean> {
+  const bound = await resolveDeviceId(mac)
+  if (bound == null) {
+    // 后端查不到该 MAC 的绑定记录：仍记录本地连接态（MAC 可见），
+    // 但必须明确告知用户，避免其以为「已连上就能上传数据」
+    setCurrentDevice({
+      id: 0,
+      mac: mac,
+      firmware: null,
+      bind_user_id: userId(),
+      status: 1,
+      created_at: ''
+    } as DeviceInfo)
+    const reason = takeApiErrorText('')
+    uni.showModal({
+      title: '设备未登记',
+      content:
+        reason != ''
+          ? `蓝牙已连接，但该戒指尚未登记到当前账号。\n\n后端提示：${reason}\n\n请联系管理员在后台登记设备 MAC：${mac}`
+          : `蓝牙已连接，但该戒指尚未登记到当前账号，上报数据会失败。\n\n请联系管理员在后台登记设备 MAC：${mac}`,
+      showCancel: false
+    })
+    return false
+  }
+
+  setCurrentDevice(bound)
+  uni.showToast({ title: '设备已连接', icon: 'success' })
+  return true
+}
+
+function onConnect(device: BleDevice) {
+  connectingMac.value = device.mac
+  connect(device.mac, (status) => {
+    if (status === 'connected') {
+      // 注意：connect 的回调要求返回 Unit，不能传 async 函数（error17），
+      // 故用非 async 回调包裹，内部调用前置的 async 处理函数
+      onConnected(device.mac)
+    } else if (status === 'error' || status === 'timeout') {
+      uni.showToast({ title: '连接失败', icon: 'none' })
+    }
+  })
+}
+
+async function onUnbind() {
+  // 注意：reactive 对象是 getter 访问，Kotlin 无法智能转换为非空，
+  // 必须先提取到局部 val，否则后续 .id 会报 "nullable receiver"
+  const dev = deviceState.currentDevice
+  if (dev == null || dev.id === 0) {
+    setCurrentDevice(null)
+    uni.showToast({ title: '已解绑', icon: 'success' })
+    return
+  }
+  clearApiError()
+  try {
+    await deviceApi.unbind(dev.id)
+    setCurrentDevice(null)
+    uni.showToast({ title: '已解绑', icon: 'success' })
+  } catch (e) {
+    const msg = takeApiErrorText('')
+    uni.showToast({ title: msg != '' ? msg : '解绑失败', icon: 'none' })
+  }
+}
+
+onMounted(() => {
+  restoreDevice()
+  initSDK()
+})
+
+onUnmounted(() => {
+  destroySDK()
+})
+</script>
+
+<style scoped>
+.device-page {
+  padding: 32rpx;
+  background: #f5f7fa;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  margin-bottom: 32rpx;
+}
+
+.card-title {
+  font-size: 30rpx;
+  font-weight: bold;
+  color: #1f2937;
+  margin-bottom: 24rpx;
+}
+
+.device-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.device-name {
+  font-size: 30rpx;
+  color: #1f2937;
+}
+
+.device-mac {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-top: 4rpx;
+}
+
+.status-badge {
+  padding: 8rpx 20rpx;
+  border-radius: 20rpx;
+  font-size: 24rpx;
+}
+
+.status-badge.online {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.offline {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.scan-btn {
+  width: 100%;
+  height: 88rpx;
+  background: #3b82f6;
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 30rpx;
+  margin-bottom: 24rpx;
+}
+
+.connect-btn {
+  padding: 12rpx 32rpx;
+  background: #10b981;
+  color: #ffffff;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+}
+
+.unbind-btn {
+  width: 100%;
+  height: 80rpx;
+  background: #ffffff;
+  color: #ef4444;
+  border: 2rpx solid #ef4444;
+  border-radius: 16rpx;
+  font-size: 28rpx;
+}
+
+.device-list {
+  margin-top: 8rpx;
+}
+
+.device-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.empty {
+  padding: 40rpx 0;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 26rpx;
+}
+</style>

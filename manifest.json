@@ -1,0 +1,59 @@
+{
+  "name": "哮卫 AsthmaGuard",
+  "appid": "__UNI__ASTHMAGUARD",
+  "description": "儿童哮喘可穿戴监测系统移动端",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "uni-app-x": {
+    "styleIsolationVersion": "2"
+  },
+  "app-plus": {
+    "usingComponents": true,
+    "nvueStyleCompiler": "uni-app",
+    "compilerVersion": 3,
+    "splashscreen": {
+      "alwaysShowBeforeRender": true,
+      "waiting": true,
+      "autoclose": true,
+      "delay": 0
+    },
+    "modules": {
+      "Bluetooth": {},
+      "Geolocation": {},
+      "Camera": {}
+    },
+    "distribute": {
+      "android": {
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.BLUETOOTH\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_ADMIN\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_SCAN\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_CONNECT\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+          "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>"
+        ],
+        "minSdkVersion": 26,
+        "targetSdkVersion": 34
+      },
+      "ios": {
+        "dSYMs": false,
+        "privacyDescription": {
+          "NSBluetoothAlwaysUsageDescription": "用于连接 RWFit 智能戒指，采集健康数据",
+          "NSBluetoothPeripheralUsageDescription": "用于连接 RWFit 智能戒指，采集健康数据",
+          "NSLocationWhenInUseUsageDescription": "用于蓝牙扫描定位附近设备"
+        }
+      }
+    }
+  },
+  "h5": {
+    "title": "哮卫 AsthmaGuard",
+    "router": {
+      "mode": "hash"
+    }
+  }
+}

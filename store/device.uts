@@ -1,0 +1,56 @@
+// 设备状态管理（当前连接的戒指设备）
+// 使用 uni-app x 官方推荐的「全局 reactive 变量」方案。
+
+import { reactive } from 'vue'
+import type { DeviceInfo } from '../api/index.uts'
+import type { BleDevice } from '../utils/rwble.uts'
+
+// state 结构类型（用 type，UTS 中 reactive 的对象字面量需 as type 断言）
+type DeviceState = {
+  currentDevice: DeviceInfo | null
+  connected: boolean
+  scanning: boolean
+  nearbyDevices: BleDevice[]
+}
+
+// 全局单例 state（响应式）
+export const deviceState = reactive({
+  currentDevice: null as DeviceInfo | null,
+  connected: false as boolean,
+  scanning: false as boolean,
+  nearbyDevices: [] as BleDevice[]
+} as DeviceState)
+
+/** 设置当前设备 */
+export function setCurrentDevice(device: DeviceInfo | null) {
+  deviceState.currentDevice = device
+  deviceState.connected = device !== null
+  if (device != null) {
+    uni.setStorageSync('currentDevice', JSON.stringify(device))
+  } else {
+    uni.removeStorageSync('currentDevice')
+  }
+}
+
+/** 从本地存储恢复设备状态 */
+export function restore() {
+  const devStr = uni.getStorageSync('currentDevice') as string
+  if (devStr != '') {
+    try {
+      deviceState.currentDevice = JSON.parse(devStr) as DeviceInfo
+      deviceState.connected = true
+    } catch (e) {
+      // 忽略
+    }
+  }
+}
+
+/** 设置扫描状态 */
+export function setScanning(v: boolean) {
+  deviceState.scanning = v
+}
+
+/** 设置附近设备列表 */
+export function setNearbyDevices(list: BleDevice[]) {
+  deviceState.nearbyDevices = list
+}

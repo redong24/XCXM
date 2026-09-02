@@ -1,0 +1,246 @@
+<template>
+  <view class="history-page">
+    <view class="tabs">
+      <text
+        class="tab"
+        :class="{ active: currentTab === 'alerts' }"
+        @click="currentTab = 'alerts'"
+      >预警记录</text>
+      <text
+        class="tab"
+        :class="{ active: currentTab === 'feedbacks' }"
+        @click="currentTab = 'feedbacks'"
+      >反馈记录</text>
+    </view>
+
+    <!-- 预警列表 -->
+    <view v-if="currentTab === 'alerts'" class="list">
+      <view v-if="alertError != ''" class="empty">
+        <text>加载失败：{{ alertError }}</text>
+      </view>
+      <view v-if="alertError == '' && alerts.length === 0" class="empty">
+        <text>暂无预警记录</text>
+      </view>
+      <view v-for="a in alerts" :key="a.id" class="list-item">
+        <view class="item-main">
+          <text class="item-type">{{ a.label }}</text>
+          <text class="item-value">{{ a.valueText }}</text>
+        </view>
+        <view class="item-side">
+          <text class="item-time">{{ a.time }}</text>
+          <text class="item-status" :class="a.statusClass">{{ a.status }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 反馈列表 -->
+    <view v-else class="list">
+      <view v-if="feedbackError != ''" class="empty">
+        <text>加载失败：{{ feedbackError }}</text>
+      </view>
+      <view v-if="feedbackError == '' && feedbacks.length === 0" class="empty">
+        <text>暂无反馈记录</text>
+      </view>
+      <view v-for="f in feedbacks" :key="f.id" class="list-item">
+        <view class="item-main">
+          <text class="item-type">{{ f.levelText }}</text>
+          <text class="item-value">{{ f.remarkText }}</text>
+        </view>
+        <view class="item-side">
+          <text class="item-time">{{ f.time }}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/onMounted 等），无需 import
+import { alertApi, feedbackApi, type AlertDisplay, type FeedbackDisplay } from '../../api/index.uts'
+import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+
+const currentTab = ref<string>('alerts')
+const alerts = ref<AlertDisplay[]>([])
+const feedbacks = ref<FeedbackDisplay[]>([])
+// 加载失败原因。此前失败只打日志，列表为空，用户会误以为「暂无记录」
+const alertError = ref('')
+const feedbackError = ref('')
+
+function alertTypeLabel(type: string): string {
+  const map = new Map<string, string>()
+  map.set('hr_high', '心率过高')
+  map.set('hr_low', '心率过低')
+  map.set('bo_low', '血氧过低')
+  map.set('cv_hr', '心率互验告警')
+  map.set('cv_bo', '血氧互验告警')
+  map.set('cv_hrv', 'HRV互验告警')
+  return map.get(type) ?? type
+}
+
+function formatTime(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const h = d.getHours()
+    const m = d.getMinutes()
+    // 补零：用三元 + 模板字符串，避开 String(number) 与 padStart 的兼容问题
+    const hh = h < 10 ? `0${h}` : `${h}`
+    const mm = m < 10 ? `0${m}` : `${m}`
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`
+  } catch (e) {
+    return iso
+  }
+}
+
+// 状态映射为英文 class（uvue 不支持中文类名）
+function statusClass(status: string): string {
+  const map = new Map<string, string>()
+  map.set('待处理', 's-pending')
+  map.set('已处理', 's-done')
+  map.set('已忽略', 's-ignored')
+  return map.get(status) ?? 's-pending'
+}
+
+async function loadAlerts() {
+  alertError.value = ''
+  clearApiError()
+  try {
+    const raw = await alertApi.list()
+    const list: AlertDisplay[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const a = raw[i]
+      const valueText = a.value != null ? `值：${a.value}` : '值：--'
+      const thresholdText = a.threshold != null ? `（阈值 ${a.threshold}）` : '（阈值 --）'
+      list.push({
+        id: a.id,
+        status: a.status,
+        label: alertTypeLabel(a.alert_type),
+        valueText: `${valueText}${thresholdText}`,
+        time: formatTime(a.created_at),
+        statusClass: statusClass(a.status)
+      } as AlertDisplay)
+    }
+    alerts.value = list
+  } catch (e) {
+    // 透传真实原因（典型：role 为 user 时 /api/alerts 返回 403「权限不足」）
+    alertError.value = takeApiErrorText('未知错误')
+  }
+}
+
+async function loadFeedbacks() {
+  feedbackError.value = ''
+  clearApiError()
+  try {
+    const raw = await feedbackApi.list()
+    const list: FeedbackDisplay[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const f = raw[i]
+      list.push({
+        id: f.id,
+        levelText: `反馈等级 ${f.feedback_level}`,
+        remarkText: f.remark != null ? f.remark : '无备注',
+        time: formatTime(f.timestamp)
+      } as FeedbackDisplay)
+    }
+    feedbacks.value = list
+  } catch (e) {
+    feedbackError.value = takeApiErrorText('未知错误')
+  }
+}
+
+onMounted(() => {
+  loadAlerts()
+  loadFeedbacks()
+})
+</script>
+
+<style scoped>
+.history-page {
+  padding: 32rpx;
+  background: #f5f7fa;
+}
+
+.tabs {
+  display: flex;
+  background: #ffffff;
+  border-radius: 20rpx;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 28rpx;
+  color: #6b7280;
+}
+
+.tab.active {
+  color: #3b82f6;
+  font-weight: bold;
+  border-bottom: 4rpx solid #3b82f6;
+}
+
+.list {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 8rpx 24rpx;
+}
+
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.item-main {
+  flex: 1;
+}
+
+.item-type {
+  font-size: 28rpx;
+  color: #1f2937;
+  font-weight: bold;
+}
+
+.item-value {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-top: 4rpx;
+}
+
+.item-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.item-time {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.item-status {
+  font-size: 22rpx;
+  margin-top: 4rpx;
+}
+
+.s-pending {
+  color: #f59e0b;
+}
+.s-done {
+  color: #10b981;
+}
+.s-ignored {
+  color: #9ca3af;
+}
+
+.empty {
+  padding: 60rpx 0;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 26rpx;
+}
+</style>

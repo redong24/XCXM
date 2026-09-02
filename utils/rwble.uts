@@ -1,0 +1,206 @@
+// RWFit 戒指蓝牙适配层
+//
+// 职责：封装 rw-uniapp-uts-plugin（插件市场 id 27471，模块名 hl-rwble-ring）的
+// 蓝牙调用，向上层提供统一的设备扫描/连接/结果值/原始PPG采集接口。
+//
+// 设计要点：
+//   1. 接口抽象：上层页面只依赖本适配层的接口，不直接 import 插件，
+//      便于硬件未到位时切换 mock 实现、便于后续插件 API 变更时只改这一处。
+//   2. Mock 回退：USE_MOCK = true 时（硬件未到位），返回模拟数据，保证
+//      页面联调与后端链路可独立跑通。
+//
+// 硬件到位后：将 USE_MOCK 置为 false，并把下方 TODO 标记处补上真实插件调用。
+
+// 是否使用 mock（硬件未到位时为 true）
+export const USE_MOCK = true
+
+// 设备连接状态（字符串联合类型在 UTS 中不受支持，退化为 string）
+export type DeviceStatus = string
+
+// 蓝牙设备（用 type，UTS 对象字面量需 as type 而非 interface）
+export type BleDevice = {
+  name: string
+  mac: string
+  rssi: number
+}
+
+// 硬件结果值（实时回调）
+export type HardwareResultValue = {
+  type: string // 'hr' | 'bo' | 'hrv'
+  value: number
+  timestamp: number
+}
+
+// 原始 PPG 采集结果
+export type RawPpgResult = {
+  channel: number // 1绿光/2红光/3红外
+  data: number[] // 原始样本（int32）
+  fs: number // 采样率
+  capturedAt: number // 采集时间戳
+}
+
+// 连接事件回调
+export type ConnectionCallback = (status: DeviceStatus, device: BleDevice | null) => void
+// 结果值回调
+export type ResultValueCallback = (result: HardwareResultValue) => void
+// 原始PPG回调
+export type RawPpgCallback = (result: RawPpgResult) => void
+
+// ---------------------------------------------------------------------------
+// 插件引用（硬件到位后取消注释，替换 mock）
+// ---------------------------------------------------------------------------
+// import * as RwBleRing from '@/uni_modules/hl-rwble-ring'
+
+// ---------------------------------------------------------------------------
+// SDK 生命周期
+// ---------------------------------------------------------------------------
+
+export function initSDK(): void {
+  if (USE_MOCK) {
+    console.log('[RwBle] mock 模式初始化')
+    return
+  }
+  // TODO: RwBleRing.initSDK()
+  // RwBleRing.enableDebugLog((level, tag, message) => {
+  //   console.log(`[RwBle][${level}] ${tag}: ${message}`)
+  // })
+}
+
+export function destroySDK(): void {
+  if (USE_MOCK) {
+    console.log('[RwBle] mock 模式销毁')
+    return
+  }
+  // TODO: RwBleRing.destroySDK()
+}
+
+// ---------------------------------------------------------------------------
+// 设备扫描
+// ---------------------------------------------------------------------------
+
+export function startScan(onFound: (device: BleDevice) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (USE_MOCK) {
+      // 模拟扫描：1.5s 后返回一个 mock 设备
+      console.log('[RwBle] mock 开始扫描')
+      setTimeout(() => {
+        onFound({ name: 'RWFit Ring', mac: 'AA:BB:CC:DD:EE:FF', rssi: -65 } as BleDevice)
+      }, 1500)
+      resolve()
+      return
+    }
+    // TODO: 真实扫描
+    // RwBleRing.startScan((device) => {
+    //   onFound({ name: device.name, mac: device.mac, rssi: device.rssi })
+    // })
+    // resolve()
+    reject(new Error('真实扫描待接入插件'))
+  })
+}
+
+export function stopScan(): void {
+  if (USE_MOCK) {
+    console.log('[RwBle] mock 停止扫描')
+    return
+  }
+  // TODO: RwBleRing.stopScan()
+}
+
+// ---------------------------------------------------------------------------
+// 设备连接
+// ---------------------------------------------------------------------------
+
+export function connect(mac: string, onStatus: ConnectionCallback): void {
+  if (USE_MOCK) {
+    console.log(`[RwBle] mock 连接设备 ${mac}`)
+    onStatus('connecting', { name: 'RWFit Ring', mac, rssi: -65 } as BleDevice)
+    setTimeout(() => {
+      onStatus('connected', { name: 'RWFit Ring', mac, rssi: -65 } as BleDevice)
+    }, 1000)
+    return
+  }
+  // TODO: 真实连接
+  // RwBleRing.connect(mac, (event) => {
+  //   const status = mapStatus(event.status)
+  //   onStatus(status, event.device ? { name: event.device.name, mac: event.device.mac, rssi: event.device.rssi } : null)
+  // })
+}
+
+export function disconnect(mac: string): void {
+  if (USE_MOCK) {
+    console.log(`[RwBle] mock 断开设备 ${mac}`)
+    return
+  }
+  // TODO: RwBleRing.disconnect(mac)
+}
+
+// ---------------------------------------------------------------------------
+// 硬件结果值实时接收
+// ---------------------------------------------------------------------------
+
+export function startHealthData(callback: ResultValueCallback): void {
+  if (USE_MOCK) {
+    // 模拟实时结果值：每 2s 推送一次
+    console.log('[RwBle] mock 开始实时结果值接收')
+    setInterval(() => {
+      const hr = 68 + Math.round(Math.random() * 10)
+      const bo = 97 + Math.random() * 2
+      callback({ type: 'hr', value: hr, timestamp: Date.now() } as HardwareResultValue)
+      callback({ type: 'bo', value: Math.round(bo * 10) / 10, timestamp: Date.now() } as HardwareResultValue)
+    }, 2000)
+    return
+  }
+  // TODO: 真实调用（controlHealthDataJL 实时测量）
+  // RwBleRing.controlHealthDataJL((result) => {
+  //   // 解析 result.data 得到 hr/bo/hrv
+  //   callback(...)
+  // })
+}
+
+export function stopHealthData(): void {
+  if (USE_MOCK) {
+    console.log('[RwBle] mock 停止实时结果值接收')
+    return
+  }
+  // TODO: RwBleRing.stopHealthData()
+}
+
+// ---------------------------------------------------------------------------
+// 原始 PPG 采集（近实时，深度算法链路）
+// ---------------------------------------------------------------------------
+
+export function startRawPpgCapture(
+  channel: number,
+  callback: RawPpgCallback
+): void {
+  if (USE_MOCK) {
+    // 模拟：采集 1 分钟后返回合成 PPG
+    console.log(`[RwBle] mock 开始原始PPG采集（通道 ${channel}）`)
+    setTimeout(() => {
+      const fs = 125
+      const seconds = 60
+      const n = fs * seconds
+      const data: number[] = []
+      for (let i = 0; i < n; i++) {
+        // 合成 72bpm PPG + 噪声
+        const t = i / fs
+        const base = 1000 + 100 * Math.sin(2 * Math.PI * 1.2 * t)
+        const noise = Math.round((Math.random() - 0.5) * 30)
+        data.push(Math.round(base) + noise)
+      }
+      callback({ channel, data, fs, capturedAt: Date.now() } as RawPpgResult)
+    }, 3000) // mock 缩短为 3s，避免等待 1 分钟
+    return
+  }
+  // TODO: 真实调用（ringControlSensorRaw 启动采集）
+  // RwBleRing.ringControlSensorRaw(channel, ...)
+  // 收到 onResult 停止通知后，调用 ringGetHistorySensorRaw 同步
+}
+
+export function stopRawPpgCapture(): void {
+  if (USE_MOCK) {
+    console.log('[RwBle] mock 停止原始PPG采集')
+    return
+  }
+  // TODO: RwBleRing.stopSensorRaw()
+}

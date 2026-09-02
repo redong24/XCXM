@@ -1,0 +1,81 @@
+// 用户状态管理（token + 用户信息）
+// 使用 uni-app x 官方推荐的「全局 reactive 变量」方案。
+// Android VDOM 模式下 pinia 官方库不可用（需三方插件），为避免额外依赖改用全局单例 reactive。
+
+import { reactive } from 'vue'
+import { authApi, type UserInfo, type RegisterPayload, type TokenResp } from '../api/index.uts'
+
+// state 结构类型（用 type，UTS 中 reactive 的对象字面量需 as type 断言）
+type UserState = {
+  token: string
+  user: UserInfo | null
+  loggedIn: boolean
+}
+
+// 全局单例 state（响应式）
+export const userState = reactive({
+  token: '' as string,
+  user: null as UserInfo | null,
+  loggedIn: false as boolean
+} as UserState)
+
+/** 当前用户 id */
+export function userId(): number | null {
+  return userState.user?.id ?? null
+}
+
+/** 是否为监护人 */
+export function isGuardian(): boolean {
+  return userState.user?.role === 'guardian'
+}
+
+/** 登录 */
+export async function login(phone: string, password: string): Promise<TokenResp> {
+  const resp = await authApi.login(phone, password)
+  userState.token = resp.access_token
+  userState.user = resp.user
+  userState.loggedIn = true
+  // 持久化失败不阻断登录（内存态已生效）：
+  // JSON.stringify 自定义 type 是未验证写法，可能在部分机型抛异常，
+  // 此前该异常会一路传到页面 catch，被误报成「操作失败」
+  try {
+    uni.setStorageSync('token', resp.access_token)
+    uni.setStorageSync('user', JSON.stringify(resp.user))
+  } catch (e) {
+    console.log(`[user] 登录态持久化失败（不影响本次登录）: ${e}`)
+  }
+  return resp
+}
+
+/** 注册 */
+export async function register(payload: RegisterPayload): Promise<UserInfo> {
+  const user = await authApi.register(payload)
+  return user
+}
+
+/** 从本地存储恢复登录态 */
+export function restore(): boolean {
+  const token = uni.getStorageSync('token') as string
+  const userStr = uni.getStorageSync('user') as string
+  if (token != '' && userStr != '') {
+    try {
+      userState.token = token
+      userState.user = JSON.parse(userStr) as UserInfo
+      userState.loggedIn = true
+      return true
+    } catch (e) {
+      // 解析失败，视为未登录
+    }
+  }
+  return false
+}
+
+/** 退出登录 */
+export function logout() {
+  userState.token = ''
+  userState.user = null
+  userState.loggedIn = false
+  uni.removeStorageSync('token')
+  uni.removeStorageSync('user')
+  uni.reLaunch({ url: '/pages/login/login' })
+}

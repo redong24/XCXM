@@ -1,0 +1,219 @@
+<template>
+  <view class="measure-page">
+    <!-- 状态显示 -->
+    <view class="status-area">
+      <view class="ring-visual" :class="{ active: measuring }">
+        <text class="ring-icon">💍</text>
+        <text class="ring-status">{{ statusText }}</text>
+      </view>
+    </view>
+
+    <!-- 采集结果 -->
+    <view v-if="hasResult" class="result-card">
+      <view class="result-item">
+        <text class="result-label">心率</text>
+        <text class="result-value">{{ hrResult }} bpm</text>
+      </view>
+      <view class="result-item">
+        <text class="result-label">血氧</text>
+        <text class="result-value">{{ boResult }}%</text>
+      </view>
+      <view class="result-item">
+        <text class="result-label">样本数</text>
+        <text class="result-value">{{ sampleCount }}</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-area">
+      <button
+        v-if="!measuring"
+        class="start-btn"
+        :class="{ 'start-btn-disabled': !deviceState.connected }"
+        :disabled="!deviceState.connected"
+        @click="onStart"
+      >
+        {{ deviceState.connected ? '开始采集' : '请先连接设备' }}
+      </button>
+      <button v-else class="stop-btn" @click="onStop">停止采集</button>
+    </view>
+
+    <text class="tip">采集约 1 分钟原始 PPG 波形，上传后由算法服务重算生理参数</text>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/onUnmounted 等），无需 import
+import { deviceState } from '../../store/device.uts'
+import { dataApi, type RawPPGPayload } from '../../api/index.uts'
+import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+import {
+  startRawPpgCapture,
+  stopRawPpgCapture,
+  type RawPpgResult
+} from '../../utils/rwble.uts'
+
+const measuring = ref(false)
+const statusText = ref('待机')
+const hasResult = ref(false)
+const hrResult = ref('--')
+const boResult = ref('--')
+const sampleCount = ref('--')
+
+// 原始 PPG 采集结果处理（async）
+// 注意：UTS 不存在函数声明提升，必须先定义、后使用，故放在 onStart 之前
+async function handleRawPpgResult(raw: RawPpgResult) {
+  // 提取到局部常量：reactive 属性是 getter 访问，判空后重复访问 Kotlin 无法 smart cast
+  const dev = deviceState.currentDevice
+  if (dev == null) {
+    // 此前用 device_id: 0 兜底，后端必然返回 404「设备不存在」，
+    // 且错误被 catch 吞掉表现为静默失败，故改为显式拦截
+    measuring.value = false
+    statusText.value = '待机'
+    uni.showToast({ title: '请先连接设备', icon: 'none' })
+    return
+  }
+
+  statusText.value = '上传中...'
+  try {
+    clearApiError()
+    // 上传原始 PPG 到后端（device_id 必须是后端真实存在的设备 id）
+    const resp = await dataApi.uploadRawPPG({
+      device_id: dev.id,
+      channel: raw.channel,
+      seq: Math.floor(raw.capturedAt / 1000),
+      data: raw.data,
+      fs: raw.fs,
+      captured_at: new Date(raw.capturedAt).toISOString()
+    } as RawPPGPayload)
+    // 注意：UTS 的 String() 不支持 number 参数，用模板字符串转换
+    sampleCount.value = `${resp.sample_count}`
+    hasResult.value = true
+    uni.showToast({ title: '采集完成', icon: 'success' })
+  } catch (e) {
+    // 透传真实原因（如 404 设备不存在），便于定位
+    const msg = takeApiErrorText('')
+    uni.showToast({ title: msg != '' ? msg : '上传失败', icon: 'none' })
+  } finally {
+    measuring.value = false
+    statusText.value = '待机'
+  }
+}
+
+function onStart() {
+  measuring.value = true
+  statusText.value = '采集中...'
+  hasResult.value = false
+
+  // 注意：startRawPpgCapture 的回调签名要求返回 Unit，
+  // 传 async 函数会得到 UTSPromise<Unit> 导致 error17，
+  // 因此用非 async 回调包裹，内部调用 async 处理函数（不 await）
+  startRawPpgCapture(1, (raw: RawPpgResult) => {
+    handleRawPpgResult(raw)
+  })
+}
+
+function onStop() {
+  stopRawPpgCapture()
+  measuring.value = false
+  statusText.value = '已停止'
+}
+
+onUnmounted(() => {
+  if (measuring.value) {
+    stopRawPpgCapture()
+  }
+})
+</script>
+
+<style scoped>
+.measure-page {
+  padding: 40rpx 32rpx;
+  background: #f5f7fa;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-area {
+  display: flex;
+  justify-content: center;
+  margin: 60rpx 0;
+}
+
+.ring-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ring-icon {
+  font-size: 160rpx;
+}
+
+.ring-status {
+  font-size: 28rpx;
+  color: #6b7280;
+  margin-top: 16rpx;
+}
+
+.result-card {
+  background: #ffffff;
+  border-radius: 20rpx;
+  padding: 32rpx;
+  margin-bottom: 32rpx;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.result-label {
+  font-size: 28rpx;
+  color: #6b7280;
+}
+
+.result-value {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.action-area {
+  margin-top: auto;
+}
+
+.start-btn {
+  width: 100%;
+  height: 96rpx;
+  background: #3b82f6;
+  color: #ffffff;
+  border-radius: 20rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.start-btn-disabled {
+  background: #d1d5db;
+  color: #9ca3af;
+}
+
+.stop-btn {
+  width: 100%;
+  height: 96rpx;
+  background: #ef4444;
+  color: #ffffff;
+  border-radius: 20rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+}
+
+.tip {
+  font-size: 22rpx;
+  color: #9ca3af;
+  text-align: center;
+  margin-top: 24rpx;
+}
+</style>

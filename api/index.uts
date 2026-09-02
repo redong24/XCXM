@@ -1,0 +1,228 @@
+// 后端 API 客户端（与 backend-product 对齐）
+
+import { post, get } from '../common/request.uts'
+
+// ---------- 类型定义（统一用 type，UTS 对象字面量需 as type 而非 interface） ----------
+
+export type UserInfo = {
+  id: number
+  phone: string | null
+  name: string
+  age: number | null
+  gender: number
+  guardian_id: number | null
+  role: string
+  created_at: string
+}
+
+export type TokenResp = {
+  access_token: string
+  token_type: string
+  user: UserInfo
+}
+
+export type DeviceInfo = {
+  id: number
+  mac: string
+  firmware: string | null
+  bind_user_id: number | null
+  status: number
+  created_at: string
+}
+
+export type AlertBrief = {
+  id?: number
+  triggered: boolean
+  message?: string
+}
+
+export type HardwareResultResp = {
+  result_id: number
+  alert: AlertBrief | null
+}
+
+export type RawPPGResp = {
+  record_id: number
+  storage_key: string
+  sample_count: number
+}
+
+export type AlertInfo = {
+  id: number
+  user_id: number
+  alert_type: string
+  level: number
+  value: number | null
+  threshold: number | null
+  status: string
+  created_at: string
+}
+
+export type FeedbackResp = {
+  id: number
+  user_id: number
+  feedback_level: number
+  saba_usage: number | null
+  remark: string | null
+  timestamp: string
+}
+
+// ---------- 请求体类型（用 type，UTS 对象字面量需 as type 而非 interface） ----------
+
+// 注册载荷
+// role 说明：后端 /api/alerts 要求 admin/doctor/guardian 角色，
+// 而注册接口若不传 role 会默认给 'user'，导致注册后首页/历史页查预警必 403。
+// 移动端注册的是家长/监护人账号，故默认 'guardian'。
+export type RegisterPayload = {
+  phone: string
+  name: string
+  password: string
+  age: number | null
+  gender: number | null
+  role: string
+}
+
+export type HardwareResultPayload = {
+  device_id: number
+  type: string // 'hr' | 'bo' | 'hrv'
+  value: number
+  timestamp?: string
+}
+
+export type RawPPGPayload = {
+  device_id: number
+  channel: number
+  seq: number
+  data: number[]
+  fs?: number
+  captured_at?: string
+}
+
+export type FeedbackPayload = {
+  user_id: number
+  feedback_level: number
+  saba_usage?: number
+  remark?: string
+}
+
+// ---------- 页面显示层类型 ----------
+// 注意：UTS 不允许在 <script setup> 内声明 type（UTS100006），
+// 所以页面用到的显示模型统一在顶层定义，页面 import 后使用。
+// 设计原因：uvue 模板中禁用带参函数调用，故 label/time 等展示字段
+// 需在数据加载阶段预计算好，再交由模板做简单插值。
+
+// 预警列表显示条目（history 用全字段，home 的 valueText/statusClass 留空）
+export type AlertDisplay = {
+  id: number
+  status: string
+  label: string
+  valueText: string
+  time: string
+  statusClass: string
+}
+
+// 反馈列表显示条目
+export type FeedbackDisplay = {
+  id: number
+  levelText: string
+  remarkText: string
+  time: string
+}
+
+// ---------- 事件类型 ----------
+// input 事件的事件值（官方 UniInputEvent.detail）
+// 注意（UTS110111101，勿回退）：type 声明内不允许直接写嵌套对象字面量，
+// 如 { detail: { value: string } } 会直接编译失败，
+// 必须把内层对象拆成独立的具名顶层 type
+export type UniInputEventDetail = {
+  value: string
+}
+
+// input 事件对象结构（对应 uni-app x 官方 UniInputEvent）
+// 顶层声明（UTS100006：type 不可写在 <script setup> 内）
+// 用途：login 页用 @input 强制过滤手机号非数字 + 截断 11 位
+export type UniInputEventLike = {
+  detail: UniInputEventDetail
+}
+
+// ---------- 认证 ----------
+
+export class AuthApi {
+  /** 登录 */
+  login(phone: string, password: string): Promise<TokenResp> {
+    return post<TokenResp>('/api/auth/login', { phone, password }, false)
+  }
+  /** 注册 */
+  register(payload: RegisterPayload): Promise<UserInfo> {
+    return post<UserInfo>('/api/auth/register', payload, false)
+  }
+  /** 当前用户 */
+  me(): Promise<UserInfo> {
+    return get<UserInfo>('/api/auth/me')
+  }
+}
+export const authApi = new AuthApi()
+
+// ---------- 设备 ----------
+
+export class DeviceApi {
+  /** 列出所有设备（admin/doctor 后台管理） */
+  list(): Promise<DeviceInfo[]> {
+    return get<DeviceInfo[]>('/api/devices/')
+  }
+  /** 查询当前用户的设备（移动端个人视角） */
+  mine(): Promise<DeviceInfo[]> {
+    return get<DeviceInfo[]>('/api/devices/mine')
+  }
+  /** 设备详情 */
+  detail(deviceId: number): Promise<DeviceInfo> {
+    return get<DeviceInfo>(`/api/devices/${deviceId}`)
+  }
+  /** 绑定设备到用户（user/guardian 绑定自己或孩子，admin/doctor 绑定任意） */
+  bind(deviceId: number, userId: number): Promise<DeviceInfo> {
+    return post<DeviceInfo>(`/api/devices/${deviceId}/bind`, { user_id: userId })
+  }
+  /** 解绑设备（user 解绑自己的，admin/doctor 解绑任意） */
+  unbind(deviceId: number): Promise<DeviceInfo> {
+    return post<DeviceInfo>(`/api/devices/${deviceId}/unbind`)
+  }
+}
+export const deviceApi = new DeviceApi()
+
+// ---------- 数据上报 ----------
+
+export class DataApi {
+  /** 上报硬件结果值（实时预警） */
+  uploadHardwareResult(payload: HardwareResultPayload): Promise<HardwareResultResp> {
+    return post<HardwareResultResp>('/api/data/hardware-result', payload)
+  }
+  /** 上报原始 PPG 波形 */
+  uploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
+    return post<RawPPGResp>('/api/data/raw-ppg', payload)
+  }
+}
+export const dataApi = new DataApi()
+
+// ---------- 预警 ----------
+
+export class AlertApi {
+  /** 拉取当前用户预警列表 */
+  list(): Promise<AlertInfo[]> {
+    return get<AlertInfo[]>('/api/alerts')
+  }
+}
+export const alertApi = new AlertApi()
+
+// ---------- 反馈 ----------
+
+export class FeedbackApi {
+  /** 提交用户反馈（四级） */
+  submit(payload: FeedbackPayload): Promise<FeedbackResp> {
+    return post<FeedbackResp>('/api/feedbacks/', payload)
+  }
+  /** 拉取当前用户反馈列表 */
+  list(): Promise<FeedbackResp[]> {
+    return get<FeedbackResp[]>('/api/feedbacks/')
+  }
+}
+export const feedbackApi = new FeedbackApi()

@@ -1,0 +1,31 @@
+<script>
+export default {
+  onLaunch: function () {
+    // 版本标识（勿删）：控制台首行即可确认运行的代码版本
+    console.log('=== AsthmaGuard build 09-02 17:10 错误直显版 ===')
+    console.log('AsthmaGuard App Launch')
+    // 初始化时检查登录态
+    const token = uni.getStorageSync('token') as string
+    if (token == '') {
+      // 未登录，跳转登录页（由路由守卫处理，这里仅记录）
+      console.log('未登录，等待跳转登录页')
+    }
+  },
+  onShow: function () {
+    console.log('AsthmaGuard App Show')
+  },
+  onHide: function () {
+    console.log('AsthmaGuard App Hide')
+  }
+}
+</script>
+
+<style>
+/* 全局样式（uni-app x 只支持 class 选择器，用 .page 类代替 page 标签选择器） */
+.page {
+  background-color: #F5F7FA;
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica,
+    Segoe UI, Arial, Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft Yahei',
+    sans-serif;
+}
+</style>

@@ -1,0 +1,8 @@
+09-02 17:16:48.032  2035  2035 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+09-02 17:16:48.032  2035  2035 F DEBUG   : Build fingerprint: 'Xiaomi/unicorn/unicorn:14/UQ1A.240205.08180011/lyb.20260818.001116:user/release-keys'
+09-02 17:16:48.032  2035  2035 F DEBUG   : Revision: '0'
+09-02 17:16:48.032  2035  2035 F DEBUG   : ABI: 'x86_64'
+09-02 17:16:48.032  2035  2035 F DEBUG   : Timestamp: 2026-09-02 17:16:47.708664020+0800
+09-02 17:16:48.032  2035  2035 F DEBUG   : Process uptime: 3s
+09-02 17:16:48.032  2035  2035 F DEBUG   : Cmdline: io.dcloud.uniappx
+09-02 17:16:48.032  2035  2035 F DEBUG   : pid: 1957, tid: 2009, name: RenderThread  >>> io.dcloud.uniappx <<<

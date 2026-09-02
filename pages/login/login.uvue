@@ -1,0 +1,374 @@
+<template>
+  <view class="login-page">
+    <view class="logo-area" @click="onLogoClick">
+      <view class="logo-circle">
+        <text class="logo-icon">🫁</text>
+      </view>
+      <text class="app-name">哮卫 AsthmaGuard</text>
+      <text class="app-slogan">儿童哮喘可穿戴监测系统</text>
+    </view>
+
+    <view class="form-card">
+      <view class="form-item">
+        <text class="label">手机号</text>
+        <!--
+          关键修正（勿回退）：
+          1. 必须用 v-model 双向绑定 —— 手动受控(:value + @input)在
+             uni-app x Android 上 state 不会随输入更新（14:02 实测
+             输入框显示 11 位但 phone.value 为空，提示"请输入手机号"）
+          2. type 用 "text" 而非 "number" —— 官方提示 type=number 在
+             不同 ROM 行为不一致；inputmode=numeric 仍弹数字键盘
+          3. 超 11 位由 validatePhone 在提交时拦截提示，不再依赖 maxlength
+        -->
+        <input
+          class="input"
+          type="text"
+          inputmode="numeric"
+          v-model="phone"
+          placeholder="请输入 11 位手机号"
+          :maxlength="11"
+        />
+      </view>
+
+      <view class="form-item">
+        <text class="label">密码</text>
+        <input
+          class="input"
+          type="password"
+          v-model="password"
+          placeholder="请输入密码（至少 6 位）"
+          :maxlength="32"
+        />
+      </view>
+
+      <view class="mode-tabs">
+        <text
+          class="mode-tab"
+          :class="{ active: mode === 'login' }"
+          @click="mode = 'login'"
+        >登录</text>
+        <text
+          class="mode-tab"
+          :class="{ active: mode === 'register' }"
+          @click="mode = 'register'"
+        >注册</text>
+      </view>
+
+      <template v-if="mode === 'register'">
+        <view class="form-item">
+          <text class="label">姓名</text>
+          <input class="input" v-model="name" placeholder="请输入姓名" />
+        </view>
+        <view class="form-item">
+          <text class="label">年龄</text>
+          <input class="input" type="text" inputmode="numeric" v-model="age" placeholder="请输入年龄" />
+        </view>
+      </template>
+
+      <button class="submit-btn" :loading="loading" @click="onSubmit">
+        {{ mode === 'login' ? '登录' : '注册' }}
+      </button>
+
+      <text v-if="errorMsg != ''" class="error-msg">{{ errorMsg }}</text>
+
+      <view class="demo-tip">
+        <text class="demo-title">演示账号</text>
+        <text class="demo-line">监护人：13800138001 / 123456</text>
+        <text class="demo-line">管理员：13800138002 / 123456</text>
+      </view>
+    </view>
+
+    <view class="footer-wrap">
+      <text class="footer-tip" @click="onDiagnose">网络诊断（点击检测）</text>
+      <text class="ver-tip">build 09-02 17:10 错误直显版</text>
+    </view>
+  </view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref 等），无需 import
+import { login, register } from '../../store/user.uts'
+import { takeApiErrorText, clearApiError, diagnose } from '../../common/request.uts'
+import type { RegisterPayload } from '../../api/index.uts'
+
+const mode = ref<string>('login')
+// 关键：显式标注为 string，不能省略让 UTS 推断为 any。
+// 否则 ref<string>('') 推断成 number/double，访问 .length 时会抛
+// Kotlin 的 Unresolved reference / NPE，导致 validatePhone 抛异常
+// 进入 onSubmit 的 catch，最终走兜底文案（看起来像"请求失败"，
+// 但其实是类型推断导致的本地异常被吞）。
+const phone = ref<string>('')
+const password = ref<string>('')
+const name = ref<string>('')
+const age = ref<string>('')
+const loading = ref<boolean>(false)
+const errorMsg = ref<string>('')
+
+// 连续点击 logo 7 次可填入演示账号（省去手输，避免手滑多打一位）
+const logoTapCount = ref(0)
+
+function validatePhone(): string {
+  const p = phone.value
+  if (p == '') {
+    return '请输入手机号'
+  }
+  if (p.length != 11) {
+    return `手机号应为 11 位，当前已输入 ${p.length} 位`
+  }
+  if (p.charAt(0) != '1') {
+    return '手机号需以 1 开头'
+  }
+  return ''
+}
+
+// 登录流程（前置 async 函数，供 onSubmit 调用）
+// 注意：UTS 不存在函数声明提升，必须先定义、后使用
+async function doLogin(): Promise<boolean> {
+  clearApiError()
+  await login(phone.value, password.value)
+  return true
+}
+
+// 注册流程（前置 async 函数）
+async function doRegister(): Promise<boolean> {
+  if (name.value == '') {
+    errorMsg.value = '请输入姓名'
+    return false
+  }
+  clearApiError()
+  // role 必须显式传 guardian：后端注册默认给 'user'，
+  // 而 /api/alerts 要求 admin/doctor/guardian，否则查预警必 403
+  await register({
+    phone: phone.value,
+    name: name.value,
+    password: password.value,
+    age: age.value != '' ? parseInt(age.value) : null,
+    gender: null,
+    role: 'guardian'
+  } as RegisterPayload)
+  // 注册成功后自动登录
+  clearApiError()
+  await login(phone.value, password.value)
+  return true
+}
+
+async function onSubmit() {
+  errorMsg.value = ''
+
+  if (password.value == '') {
+    errorMsg.value = '请输入密码'
+    return
+  }
+  if (password.value.length < 6) {
+    errorMsg.value = '密码至少 6 位'
+    return
+  }
+  const phoneErr = validatePhone()
+  if (phoneErr != '') {
+    errorMsg.value = phoneErr
+    return
+  }
+
+  loading.value = true
+  let ok = false
+  try {
+    if (mode.value === 'login') {
+      ok = await doLogin()
+    } else {
+      ok = await doRegister()
+    }
+  } catch (e) {
+    // 关键：透传后端/网络层的真实原因，而不是笼统的「操作失败」
+    const realMsg = takeApiErrorText('')
+    if (realMsg != '') {
+      errorMsg.value = realMsg
+    } else {
+      // request 层未留痕的漏网异常（理论上 15:15 版后不会再走到），
+      // 把原始异常 toString 带出来，保证任何失败都有迹可查
+      errorMsg.value = `操作失败：${e}`
+    }
+    console.log(`[login] 登录异常: ${e}`)
+    ok = false
+  } finally {
+    loading.value = false
+  }
+
+  if (ok) {
+    uni.reLaunch({ url: '/pages/home/home' })
+  }
+}
+
+// 网络诊断：直接把结果弹窗展示，便于定位「连不上」类问题
+function onDiagnose() {
+  uni.showLoading({ title: '检测中...' })
+  diagnose().then((result: string) => {
+    uni.hideLoading()
+    uni.showModal({
+      title: '网络诊断',
+      content: result,
+      showCancel: false
+    })
+  })
+}
+
+// 连点 logo 填入演示账号
+function onLogoClick() {
+  logoTapCount.value = logoTapCount.value + 1
+  if (logoTapCount.value >= 7) {
+    logoTapCount.value = 0
+    phone.value = '13800138001'
+    password.value = '123456'
+    mode.value = 'login'
+    uni.showToast({ title: '已填入演示账号', icon: 'none' })
+  }
+}
+</script>
+
+<style scoped>
+.login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80rpx 40rpx 40rpx;
+  background: #f5f7fa;
+}
+
+.logo-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 60rpx;
+}
+
+.logo-circle {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24rpx;
+}
+
+.logo-icon {
+  font-size: 72rpx;
+}
+
+.app-name {
+  font-size: 40rpx;
+  font-weight: bold;
+  color: #1f2937;
+}
+
+.app-slogan {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-top: 8rpx;
+}
+
+.form-card {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 24rpx;
+  padding: 40rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0, 0, 0, 0.05);
+}
+
+.form-item {
+  margin-bottom: 32rpx;
+}
+
+.label {
+  font-size: 28rpx;
+  color: #374151;
+  margin-bottom: 12rpx;
+}
+
+.input {
+  width: 100%;
+  height: 88rpx;
+  background: #f5f7fa;
+  border-radius: 16rpx;
+  padding: 0 24rpx;
+  font-size: 28rpx;
+}
+
+.mode-tabs {
+  display: flex;
+  margin-bottom: 32rpx;
+}
+
+.mode-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  color: #6b7280;
+  padding: 16rpx 0;
+  border-bottom: 4rpx solid transparent;
+}
+
+.mode-tab.active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+  font-weight: bold;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 88rpx;
+  background: #3b82f6;
+  color: #ffffff;
+  border-radius: 16rpx;
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-top: 16rpx;
+}
+
+.error-msg {
+  color: #ef4444;
+  font-size: 24rpx;
+  margin-top: 16rpx;
+  text-align: center;
+}
+
+.demo-tip {
+  margin-top: 28rpx;
+  padding-top: 20rpx;
+  border-top-width: 2rpx;
+  border-top-style: solid;
+  border-top-color: #f0f1f3;
+}
+
+.demo-title {
+  font-size: 22rpx;
+  color: #9ca3af;
+  margin-bottom: 8rpx;
+}
+
+.demo-line {
+  font-size: 24rpx;
+  color: #6b7280;
+  line-height: 40rpx;
+}
+
+.footer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 40rpx;
+}
+
+.footer-tip {
+  font-size: 22rpx;
+  color: #3b82f6;
+  /* text-decoration 非 uni-app x 标准属性（编译警告），
+     改用主题蓝色区分可点击性 */
+}
+
+.ver-tip {
+  font-size: 20rpx;
+  color: #c0c4cc;
+  margin-top: 12rpx;
+}
+</style>
