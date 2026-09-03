@@ -523,15 +523,38 @@ async function onResultValue(r: HardwareResultValue) {
   }
 }
 
+// 开启实时测量。
+// 必须声明在 onMounted 之前：UTS/Kotlin 没有函数提升，被调用者若写在
+// 调用者之后会直接编译失败（这是 utscheck 的 U05 检查项）。
+function startRealtime() {
+  startHealthData(
+    (r: HardwareResultValue) => {
+      onResultValue(r)
+    },
+    (errMsg: string) => {
+      // 最常见的原因是设备还没 ready（等戒指上报功能菜单）。
+      // 这属于正常时序而非故障，不打扰用户，只留日志。
+      console.log(`[home] 实时测量未开启：${errMsg}`)
+    }
+  )
+}
+
 onMounted(() => {
   if (!userState.loggedIn) { restoreUser() }
   restoreDevice()
   applySentinel('amber' as SentinelState)
 
-  initSDK()
-  // 注意：UTS 中函数声明不支持作为值传递，故用箭头函数包一层
-  startHealthData((r: HardwareResultValue) => {
-    onResultValue(r)
+  // 适配层已改为回调式：初始化在真实模式下是异步的（要等原生 SDK 起来）。
+  // 注意：UTS 中函数声明不支持作为值传递，故用箭头函数包一层。
+  initSDK((ok: boolean, errMsg: string) => {
+    if (!ok) {
+      // 刻意不弹 toast：首页一进来就报蓝牙错误会盖住主要信息，
+      // 而「戒指此刻没连上」本身是常态（在充电、不在身边）。
+      // 连接状态的呈现与引导由「戒指」页负责。
+      console.log(`[home] 蓝牙初始化未完成：${errMsg}`)
+      return
+    }
+    startRealtime()
   })
 
   reload()
