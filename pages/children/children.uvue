@@ -1,5 +1,9 @@
 <template>
-  <view class="children-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="children-page" :scroll-y="true">
     <!-- 数据来自后端 B1（GET /api/users/my-children），
          读取路径已接后端 B1。新建/编辑表单属 C4：
          后端 POST/PUT /api/users/children 已就绪，只差表单。 -->
@@ -111,7 +115,9 @@
     </view>
 
     <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -583,5 +589,8 @@ onMounted(() => {
   color: $ink-2;
   margin-top: $sp-6;
   margin-bottom: $sp-5;
+}
+.tail {
+  height: $sp-6;
 }
 </style>

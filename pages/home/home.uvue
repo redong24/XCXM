@@ -1,5 +1,9 @@
 <template>
-  <view class="home-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="home-page" :scroll-y="true">
     <!-- ① 是谁 + 哨兵在不在岗 -->
     <view class="topbar">
       <!-- 孩子切换：一击展开，不进二级页。多孩家庭最频繁的操作 -->
@@ -114,7 +118,9 @@
     </view>
 
     <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -857,5 +863,8 @@ onUnmounted(() => {
   color: $ink-2;
   margin-top: $sp-5;
   margin-bottom: $sp-5;
+}
+.tail {
+  height: $sp-6;
 }
 </style>

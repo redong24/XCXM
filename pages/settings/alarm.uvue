@@ -1,5 +1,9 @@
 <template>
-  <view class="alarm-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="alarm-page" :scroll-y="true">
     <!-- 哨兵值守能力的诚实说明。
          §7.7：状态判定只有两个输入（通知权限、网络可达），
          没有第三个输入，所以本轮算不出「在岗」，值域只有黄和灰。
@@ -86,7 +90,9 @@
     </view>
 
     <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -275,5 +281,8 @@ onMounted(() => {
   color: $ink-2;
   margin-top: $sp-5;
   margin-bottom: $sp-5;
+}
+.tail {
+  height: $sp-6;
 }
 </style>

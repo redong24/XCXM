@@ -1,5 +1,9 @@
 <template>
-  <view class="login-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="login-page" :scroll-y="true">
     <view class="logo-area" @click="onLogoClick">
       <!-- 品牌标记 = 哮喘行动计划卡（绿/关注/红三分区 + 位置标记）。
            原先是 emoji，emoji 随系统换脸、视觉重量不可控，且技能禁止把
@@ -85,7 +89,9 @@
       <!-- 责任口径（§11.1，6 处之一）。文案取自 styles/tokens.uts 单一来源 -->
       <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
     </view>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -230,9 +236,10 @@ function onLogoClick() {
 
 <style scoped>
 .login-page {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  /* 根节点改成 scroll-view 后，这里不能再写 align-items: center。
+     该属性会作用在滚动容器自身而不是内容上，导致子元素宽度塌缩、
+     不再撑满一行。居中改由内层 .logo-area / .form-area 自己负责。 */
+  flex: 1;
   padding: 80rpx 40rpx 40rpx;
   background: #f5f7fa;
 }
@@ -367,5 +374,8 @@ function onLogoClick() {
   font-size: 22rpx;
   color: #5a6468;
   margin-top: 16rpx;
+}
+.tail {
+  height: 48rpx;
 }
 </style>

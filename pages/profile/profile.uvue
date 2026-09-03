@@ -1,5 +1,9 @@
 <template>
-  <view class="profile-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="profile-page" :scroll-y="true">
     <!-- 用户信息 -->
     <view class="user-card">
       <view class="avatar">
@@ -25,7 +29,9 @@
 
     <!-- 退出登录 -->
     <button class="logout-btn" @click="onLogout">退出登录</button>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -179,5 +185,8 @@ onMounted(() => {
   color: #ef4444;
   border-radius: 20rpx;
   font-size: 30rpx;
+}
+.tail {
+  height: 48rpx;
 }
 </style>
