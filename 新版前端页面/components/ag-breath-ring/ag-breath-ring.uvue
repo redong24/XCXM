@@ -1,0 +1,194 @@
+<template>
+  <view class="breath-wrap">
+    <!-- 外层柔光晕（呼吸缩放）-->
+    <view class="halo" :style="{ transform: `scale(${haloScale})`, opacity: haloOpacity }"></view>
+
+    <!-- 中层轨道虚线（缓慢旋转）-->
+    <view class="orbit-guide" :style="{ transform: `rotate(${guideRotation}deg)` }"></view>
+
+    <!-- 内层星尘粒子（6 颗围绕分布，跟着旋转）-->
+    <view
+      v-for="(dot, index) in particles"
+      :key="index"
+      class="particle"
+      :class="`particle-${dot.type}`"
+      :style="{ transform: `translate(${dot.x}px, ${dot.y}px) rotate(${orbitRotation}deg)` }"
+    ></view>
+
+    <!-- 中央呼吸核心 -->
+    <view class="core">
+      <text class="core-num">{{ breath }}</text>
+      <text class="core-unit">次/分</text>
+      <text class="core-label">RESPIRATION</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGBreathRing · 呼吸光环 · V4 首页核心动画
+ *
+ * 组成：
+ *   1. 中央核心圆 · 显示呼吸频率
+ *   2. 内层星尘粒子（6 颗）· 顺时针旋转
+ *   3. 中层虚线轨道 · 缓慢旋转
+ *   4. 外层光晕 · 呼吸缩放（4s 一循环，与儿童呼吸节律吻合）
+ *
+ * uni-app x 不支持 CSS keyframe 动画，全部用 setInterval 驱动 transform
+ */
+
+type Particle = {
+  x: number;
+  y: number;
+  type: 'main' | 'coral';
+};
+
+// 6 颗粒子固定角度分布（60° 间隔）
+const ORBIT_RADIUS = 95;
+const PARTICLES: Particle[] = [
+  { x: ORBIT_RADIUS,               y: 0,                            type: 'main'  },
+  { x: ORBIT_RADIUS * 0.5,         y: ORBIT_RADIUS * 0.866,         type: 'coral' },
+  { x: -ORBIT_RADIUS * 0.5,        y: ORBIT_RADIUS * 0.866,         type: 'main'  },
+  { x: -ORBIT_RADIUS,              y: 0,                            type: 'main'  },
+  { x: -ORBIT_RADIUS * 0.5,        y: -ORBIT_RADIUS * 0.866,        type: 'coral' },
+  { x: ORBIT_RADIUS * 0.5,         y: -ORBIT_RADIUS * 0.866,        type: 'main'  },
+];
+
+export default {
+  props: {
+    breath: { type: Number, default: 22 },
+  },
+  data() {
+    return {
+      particles: PARTICLES,
+      orbitRotation: 0 as number,
+      guideRotation: 0 as number,
+      haloScale: 1.0 as number,
+      haloOpacity: 0.8 as number,
+      breathTimer: null as number | null,
+      orbitTimer: null as number | null,
+    };
+  },
+  mounted() {
+    this.startAnimations();
+  },
+  beforeUnmount() {
+    this.stopAnimations();
+  },
+  methods: {
+    startAnimations() {
+      // Orbit rotation — 60fps, 12s full cycle for main, guide rotates slower
+      const startTime = Date.now();
+      this.orbitTimer = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        // Main orbit: 360deg / 12s
+        this.orbitRotation = (elapsed * 30) % 360;
+        // Guide: 360deg / 40s
+        this.guideRotation = (elapsed * 9) % 360;
+        // Halo breathing: sin wave, 4s cycle
+        const phase = (elapsed % 4) / 4 * 2 * Math.PI;
+        this.haloScale = 0.9 + 0.15 * (Math.sin(phase) + 1) / 2;
+        this.haloOpacity = 0.7 + 0.3 * (Math.sin(phase) + 1) / 2;
+      }, 33);
+    },
+    stopAnimations() {
+      if (this.orbitTimer != null) {
+        clearInterval(this.orbitTimer);
+        this.orbitTimer = null;
+      }
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.breath-wrap {
+  width: 280px;
+  height: 280px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+
+/* 外层柔光晕 */
+.halo {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border-radius: 130px;
+  background: radial-gradient(circle,
+    rgba(255, 143, 50, 0.3) 0%,
+    rgba(255, 131, 103, 0.12) 40%,
+    transparent 70%);
+}
+
+/* 中层虚线轨道（uni-app x 不支持 border-style: dashed 在圆形上，用 border-color + opacity 简化）*/
+.orbit-guide {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: 100px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.22);
+}
+
+/* 星尘粒子 */
+.particle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 5px;
+  left: 50%;
+  top: 50%;
+  margin-left: -5px;
+  margin-top: -5px;
+}
+.particle-main {
+  background: $sun-1;
+  box-shadow: 0 0 8px rgba(255, 181, 71, 0.8);
+}
+.particle-coral {
+  background: $coral;
+  box-shadow: 0 0 8px rgba(255, 131, 103, 0.7);
+}
+
+/* 中央核心圆 */
+.core {
+  width: 140px;
+  height: 140px;
+  border-radius: 70px;
+  background: radial-gradient(circle at 45% 30%, #FFFFFF 0%, $card-2 60%, $paper 100%);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 24px rgba(245, 143, 50, 0.15);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.15);
+  z-index: 5;
+}
+.core-num {
+  font-family: $font-num;
+  font-size: 48px;
+  font-weight: 300;
+  color: $ink;
+  letter-spacing: -0.04em;
+  line-height: 48px;
+}
+.core-unit {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.core-label {
+  font-size: 9px;
+  color: $sun-2;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  margin-top: 6px;
+}
+</style>

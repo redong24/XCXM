@@ -1,0 +1,129 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">关于</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 品牌 hero -->
+    <view class="brand-hero">
+      <image class="brand-logo" src="/static/brand/mark-256.png" mode="aspectFit"/>
+      <text class="brand-name">AsthmaGuard 哮卫</text>
+      <text class="brand-tagline">您孩子呼吸的哨兵</text>
+      <view class="version-tag">
+        <text class="version-text">v 1.2.0 · Build 240903</text>
+      </view>
+    </view>
+
+    <!-- 免责声明 -->
+    <view class="disclaimer-card">
+      <text class="disc-title">重要声明</text>
+      <text class="disc-text">
+        {{ disclaimerFull }}
+      </text>
+    </view>
+
+    <!-- 信息 list -->
+    <view class="info-list">
+      <view class="info-item" @tap="openLink('https://asthmaguard.cn')" hover-class="info-active">
+        <text class="info-l">官方网站</text>
+        <text class="info-v">asthmaguard.cn</text>
+        <text class="arrow">›</text>
+      </view>
+      <view class="info-item">
+        <text class="info-l">用户协议</text>
+        <text class="arrow">›</text>
+      </view>
+      <view class="info-item">
+        <text class="info-l">隐私政策</text>
+        <text class="arrow">›</text>
+      </view>
+      <view class="info-item">
+        <text class="info-l">开源许可</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <view class="info-list">
+      <view class="info-item">
+        <text class="info-l">检查更新</text>
+        <text class="info-v info-v-green">已是最新</text>
+      </view>
+      <view class="info-item">
+        <text class="info-l">帮助中心</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 公司信息 -->
+    <view class="company-info">
+      <text class="company-l">出品</text>
+      <text class="company-v">杭州哮卫科技有限公司</text>
+      <text class="company-copy">© 2026 AsthmaGuard · All rights reserved</text>
+      <text class="company-icp">浙 ICP 备 2024XXXXXX 号 · 医疗器械备案号 XXXXXX</text>
+    </view>
+
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { DISCLAIMER_ABOUT } from '@/utils/copy';
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      disclaimerFull: DISCLAIMER_ABOUT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    openLink(url: string) { uni.showToast({ title: url, icon: 'none' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.2) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.brand-hero { padding: 12px 24px 24px; align-items: center; display: flex; flex-direction: column; }
+.brand-logo { width: 100px; height: 100px; }
+.brand-name { font-size: 22px; font-weight: 700; color: $ink; letter-spacing: -0.02em; margin-top: 8px; }
+.brand-tagline { font-size: 13px; color: $ink-2; margin-top: 4px; }
+.version-tag { margin-top: 10px; padding: 4px 12px; background: $sun-wash; border-radius: 12px; }
+.version-text { color: $sun-2; font-family: $font-num; font-size: 11px; font-weight: 700; }
+
+.disclaimer-card { margin: 0 $sp-6; padding: 16px 18px; background: rgba(255, 143, 50, 0.08); border-width: 1px; border-style: solid; border-color: rgba(255, 143, 50, 0.22); border-radius: $r-md; }
+.disc-title { font-size: 13px; font-weight: 700; color: $sun-2; letter-spacing: -0.01em; margin-bottom: 8px; }
+.disc-text { font-size: 12px; color: $ink-2; line-height: 20px; }
+
+.info-list { margin: 16px $sp-6 0; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.info-item { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.info-item:last-child { border-bottom-width: 0; }
+.info-active { opacity: 0.85; }
+.info-l { flex: 1; font-size: 14px; color: $ink; font-weight: 500; }
+.info-v { font-size: 12px; color: $ink-2; margin-right: 6px; }
+.info-v-green { color: $leaf; font-weight: 600; }
+.arrow { color: $ink-3; font-size: 18px; }
+
+.company-info { padding: 32px 24px 0; align-items: center; display: flex; flex-direction: column; }
+.company-l { font-size: 10px; color: $ink-3; letter-spacing: 0.24em; }
+.company-v { font-size: 12px; color: $ink; font-weight: 600; margin-top: 4px; }
+.company-copy { font-size: 10px; color: $ink-3; margin-top: 8px; }
+.company-icp { font-size: 9px; color: $ink-3; margin-top: 3px; letter-spacing: 0.02em; }
+</style>

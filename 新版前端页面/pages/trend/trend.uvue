@@ -1,0 +1,775 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 头部 -->
+    <view class="page-h">
+      <view class="titles">
+        <text class="page-title">趋势</text>
+        <text class="page-sub">
+          最近 7 天 · <text class="sub-hl">1 次关注等级提升</text>
+        </text>
+      </view>
+      <view class="kid-mini" @tap="openChildrenList">
+        <view class="kid-av" :style="{ backgroundColor: kid.avatarColor }">
+          <text class="kid-av-text">{{ kid.name.charAt(0) }}</text>
+        </view>
+        <text class="kid-n">{{ kid.name }}</text>
+      </view>
+    </view>
+
+    <!-- 时间段 tabs -->
+    <view class="period-tabs">
+      <view
+        v-for="p in periods"
+        :key="p"
+        class="period-seg"
+        :class="{ 'period-seg-active': period == p }"
+        @tap="period = p"
+      >
+        <text class="period-text" :class="{ 'period-text-active': period == p }">{{ p }}</text>
+      </view>
+    </view>
+
+    <!-- 日期导航 -->
+    <view class="date-nav">
+      <view class="date-btn" @tap="prevPeriod">
+        <text class="date-btn-icon">‹</text>
+      </view>
+      <view class="date-center">
+        <text class="date-main">{{ dateRange }}</text>
+        <text class="date-year">2026 · 本周</text>
+      </view>
+      <view class="date-btn" @tap="nextPeriod">
+        <text class="date-btn-icon">›</text>
+      </view>
+    </view>
+
+    <!-- 周报卡 -->
+    <view class="summary-card">
+      <view class="summary-top">
+        <!-- 评分环 -->
+        <view class="score-circ">
+          <view class="score-ring">
+            <view class="score-fill" :style="{ transform: `rotate(${scoreDeg}deg)` }"></view>
+          </view>
+          <view class="score-inner">
+            <text class="score-num">{{ weekScore }}</text>
+            <text class="score-label">SCORE</text>
+          </view>
+        </view>
+        <view class="summary-body">
+          <text class="summary-kicker">WEEKLY REPORT</text>
+          <text class="summary-headline">
+            <text class="summary-name">{{ kid.name }}</text>本周<text class="summary-hl">整体平稳</text>
+          </text>
+          <text class="summary-detail">相比上周得分提升 6 分 · 呼吸频率更规律 · 出现 1 次关注等级提升</text>
+        </view>
+      </view>
+
+      <view class="summary-stats">
+        <view class="stat">
+          <view class="stat-val-row">
+            <text class="stat-val">6</text>
+            <text class="stat-unit"> 天</text>
+          </view>
+          <text class="stat-lbl">绿色区</text>
+        </view>
+        <view class="stat">
+          <view class="stat-val-row">
+            <text class="stat-val">1</text>
+            <text class="stat-unit"> 次</text>
+          </view>
+          <text class="stat-lbl">黄色关注</text>
+        </view>
+        <view class="stat">
+          <view class="stat-val-row">
+            <text class="stat-val">0</text>
+            <text class="stat-unit"> 次</text>
+          </view>
+          <text class="stat-lbl">红色关注</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 图表卡 -->
+    <view class="chart-card">
+      <view class="chart-h">
+        <text class="chart-t">呼吸频率趋势</text>
+        <text class="chart-rng">20 – 30 参考区间</text>
+      </view>
+
+      <!-- Metric tabs -->
+      <view class="metric-tabs">
+        <view
+          v-for="(m, idx) in metricTypes"
+          :key="m.key"
+          class="mt"
+          :class="{ 'mt-active': activeMetric == m.key }"
+          @tap="activeMetric = m.key"
+        >
+          <view class="mt-dot" :style="{ backgroundColor: m.color }"></view>
+          <text class="mt-text" :class="{ 'mt-text-active': activeMetric == m.key }">{{ m.label }}</text>
+        </view>
+      </view>
+
+      <!-- Chart · 用 view 拼的柱状图 -->
+      <view class="chart-body">
+        <view class="chart-ref-band"></view>
+        <view class="chart-bars">
+          <view v-for="(pt, idx) in chartData" :key="idx" class="bar-col">
+            <view class="bar-space"></view>
+            <view
+              class="bar"
+              :class="{ 'bar-warn': pt.value > 30 }"
+              :style="{ height: `${(pt.value / 40) * 100}%` }"
+            >
+              <text v-if="pt.value > 30" class="bar-peak-label">{{ pt.value }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="chart-x-labels">
+        <text v-for="l in dayLabels" :key="l" class="x-label">{{ l }}</text>
+      </view>
+    </view>
+
+    <!-- 最近事件 -->
+    <view class="sec-title-row">
+      <text class="sec-title">最近事件</text>
+      <text class="sec-more" @tap="openHistory">全部记录 →</text>
+    </view>
+
+    <view class="events-list">
+      <view v-for="e in recentEvents" :key="e.id" class="event-row" @tap="openHistory">
+        <view class="event-icn" :class="`event-icn-${e.type}`">
+          <text class="event-icn-glyph">{{ e.icon }}</text>
+        </view>
+        <view class="event-body">
+          <text class="event-action">{{ e.action }}</text>
+          <text class="event-meta">{{ e.meta }}</text>
+        </view>
+        <view class="event-val">
+          <view class="event-val-row">
+            <text class="event-val-num">{{ e.value }}</text>
+            <text class="event-val-unit">{{ e.unit }}</text>
+          </view>
+          <text class="event-val-tag" :class="`event-val-tag-${e.tagType}`">{{ e.tag }}</text>
+        </view>
+      </view>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 90px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+type MetricType = {
+  key: string;
+  label: string;
+  color: string;
+};
+
+type ChartPoint = {
+  day: string;
+  value: number;
+};
+
+type EventItem = {
+  id: string;
+  type: 'warn' | 'ok' | 'med';
+  icon: string;
+  action: string;
+  meta: string;
+  value: string;
+  unit: string;
+  tag: string;
+  tagType: 'warn' | 'ok';
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      periods: ['日', '周', '月', '年'] as string[],
+      period: '周' as string,
+      weekScore: 82 as number,
+      activeMetric: 'breath' as string,
+      dateRange: '8/28 – 9/3' as string,
+      metricTypes: [
+        { key: 'breath', label: '呼吸频率', color: '#F58F32' },
+        { key: 'hr',     label: '心率',     color: '#FF8367' },
+        { key: 'spo2',   label: '血氧',     color: '#6BB280' },
+      ] as MetricType[],
+      chartData: [
+        { day: '周四', value: 22 },
+        { day: '周五', value: 21 },
+        { day: '周六', value: 23 },
+        { day: '周日', value: 32 },  // Warning peak
+        { day: '周一', value: 24 },
+        { day: '周二', value: 22 },
+        { day: '今天', value: 22 },
+      ] as ChartPoint[],
+      recentEvents: [
+        {
+          id: 'e1', type: 'warn', icon: '!',
+          action: '关注等级 · 提升',
+          meta: '周日 03:12 · 已处理',
+          value: '32', unit: '次/分',
+          tag: '超参考区间', tagType: 'warn',
+        },
+        {
+          id: 'e2', type: 'med', icon: '💊',
+          action: '缓解药物 · 沙丁胺醇',
+          meta: '周日 03:15 · 2 喷',
+          value: '按方案', unit: '',
+          tag: '', tagType: 'ok',
+        },
+        {
+          id: 'e3', type: 'ok', icon: '✓',
+          action: '手动测量 · 完成',
+          meta: '周日 03:25 · 数值回落',
+          value: '24', unit: '次/分',
+          tag: '已恢复', tagType: 'ok',
+        },
+      ] as EventItem[],
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  computed: {
+    scoreDeg(): number {
+      return (this.weekScore / 100) * 360;
+    },
+    dayLabels(): string[] {
+      return this.chartData.map((c): string => c.day);
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    prevPeriod() { uni.showToast({ title: '上一周', icon: 'none' }); },
+    nextPeriod() { uni.showToast({ title: '下一周', icon: 'none' }); },
+    openHistory() { uni.navigateTo({ url: '/pages/history/history' }); },
+    openChildrenList() { uni.navigateTo({ url: '/pages/children/children' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.18) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+/* Header */
+.page-h {
+  padding: 6px $sp-6 12px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.titles { flex: 1; }
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.page-sub {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 3px;
+}
+.sub-hl {
+  color: $sun-2;
+  font-weight: 600;
+}
+.kid-mini {
+  padding: 6px 12px 6px 6px;
+  background: $sun-wash;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.kid-av {
+  width: 26px;
+  height: 26px;
+  border-radius: 13px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.kid-av-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 12px;
+}
+.kid-n {
+  font-size: 12px;
+  font-weight: 600;
+  color: $ink;
+  margin-left: 8px;
+}
+
+/* Period tabs */
+.period-tabs {
+  margin: 8px $sp-6 0;
+  padding: 4px;
+  background: $card-2;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: row;
+}
+.period-seg {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 10px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.period-seg-active {
+  background: $card;
+  box-shadow: 0 2px 6px rgba(60, 40, 20, 0.08);
+}
+.period-text {
+  font-size: 12px;
+  color: $ink-2;
+  font-weight: 500;
+}
+.period-text-active {
+  color: $sun-2;
+  font-weight: 700;
+}
+
+/* Date nav */
+.date-nav {
+  margin: 14px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.date-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.date-btn-icon {
+  color: $ink-2;
+  font-size: 18px;
+  line-height: 18px;
+  margin-top: -2px;
+}
+.date-center {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.date-main {
+  font-size: 16px;
+  font-weight: 700;
+  color: $ink;
+  font-family: $font-num;
+  letter-spacing: -0.01em;
+}
+.date-year {
+  font-size: 10px;
+  color: $ink-3;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+/* Summary card */
+.summary-card {
+  margin: 16px $sp-6 0;
+  padding: 20px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+}
+.summary-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.score-circ {
+  width: 90px;
+  height: 90px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  margin-right: 20px;
+}
+.score-ring {
+  position: absolute;
+  width: 90px;
+  height: 90px;
+  border-radius: 45px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: $card-3;
+}
+.score-fill {
+  position: absolute;
+  inset: -6px;
+  border-radius: 45px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: $sun-2;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+.score-inner {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+}
+.score-num {
+  font-family: $font-num;
+  font-size: 28px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.03em;
+  line-height: 28px;
+}
+.score-label {
+  font-size: 9px;
+  color: $ink-3;
+  letter-spacing: 0.1em;
+  margin-top: 2px;
+}
+.summary-body { flex: 1; }
+.summary-kicker {
+  font-size: 10px;
+  color: $sun-2;
+  letter-spacing: 0.24em;
+  font-weight: 700;
+}
+.summary-headline {
+  font-size: 17px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+  margin-top: 4px;
+  line-height: 22px;
+}
+.summary-name { color: $ink; }
+.summary-hl { color: $sun-2; font-weight: 700; }
+.summary-detail {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 6px;
+  line-height: 18px;
+}
+
+.summary-stats {
+  padding-top: 16px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  display: flex;
+  flex-direction: row;
+}
+.stat {
+  flex: 1;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.stat-val-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.stat-val {
+  font-family: $font-num;
+  font-size: 20px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+}
+.stat-unit {
+  font-size: 11px;
+  color: $ink-2;
+}
+.stat-lbl {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 3px;
+}
+
+/* Chart card */
+.chart-card {
+  margin: 12px $sp-6 0;
+  padding: 18px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+}
+.chart-h {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.chart-t {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+}
+.chart-rng {
+  font-size: 10px;
+  color: $ink-3;
+  font-family: $font-num;
+}
+
+.metric-tabs {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 14px;
+}
+.mt {
+  padding: 6px 12px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-right: 6px;
+}
+.mt-active {
+  background: $sun-1;
+  border-color: $sun-1;
+}
+.mt-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.mt-text {
+  font-size: 11px;
+  color: $ink-2;
+}
+.mt-text-active {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+/* Chart body */
+.chart-body {
+  height: 140px;
+  position: relative;
+}
+.chart-ref-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30%;
+  height: 40%;
+  background: rgba(245, 143, 50, 0.05);
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.chart-bars {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  padding: 0 4px;
+}
+.bar-col {
+  flex: 1;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+.bar-space { flex: 1; }
+.bar {
+  width: 12px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, $sun-1, $sun-2);
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  position: relative;
+}
+.bar-warn {
+  background: linear-gradient(180deg, $coral, $zone-red);
+}
+.bar-peak-label {
+  position: absolute;
+  top: -14px;
+  font-family: $font-num;
+  font-size: 10px;
+  font-weight: 700;
+  color: $zone-red;
+}
+
+.chart-x-labels {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+.x-label {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+}
+
+/* Section header */
+.sec-title-row {
+  padding: 22px $sp-6 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.sec-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.sec-more {
+  font-size: 11px;
+  color: $sun-2;
+  font-weight: 500;
+}
+
+/* Events list */
+.events-list {
+  margin: 0 $sp-6;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  overflow: hidden;
+}
+.event-row {
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.event-row:last-child { border-bottom-width: 0; }
+.event-icn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.event-icn-warn { background: linear-gradient(135deg, $sun-1, $zone-red); }
+.event-icn-ok   { background: linear-gradient(135deg, #8DD5A5, $leaf); }
+.event-icn-med  { background: linear-gradient(135deg, $sun-3, $sun-1); }
+.event-icn-glyph {
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 700;
+}
+.event-body { flex: 1; }
+.event-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: $ink;
+}
+.event-meta {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 2px;
+  font-family: $font-num;
+}
+.event-val {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+}
+.event-val-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.event-val-num {
+  font-family: $font-num;
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.02em;
+}
+.event-val-unit {
+  font-size: 10px;
+  color: $ink-2;
+  margin-left: 2px;
+}
+.event-val-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.event-val-tag-warn { color: $zone-red; }
+.event-val-tag-ok { color: $leaf; }
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

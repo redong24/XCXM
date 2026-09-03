@@ -1,0 +1,439 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 顶部问候 + 通知铃铛 -->
+    <view class="header">
+      <view class="header-titles">
+        <text class="greeting">{{ greeting }}，妈妈</text>
+        <view class="h1-row">
+          <text class="h1-name">{{ kid.name }}</text>
+          <text class="h1-rest">今天状态很好</text>
+        </view>
+        <view class="sub-row">
+          <view class="live-dot"></view>
+          <text class="sub">哨兵在岗 · {{ dutyDuration }}</text>
+        </view>
+      </view>
+      <view class="header-btn" @tap="openInbox" hover-class="header-btn-active">
+        <text class="header-btn-icon">◐</text>
+        <view v-if="hasUnread" class="header-btn-dot"></view>
+      </view>
+    </view>
+
+    <!-- 儿童切换条 -->
+    <view class="kid-wrap">
+      <ag-kid-chip
+        :kid="kid"
+        :meta-text="`RWFit R2 · 电量 ${ringStatus.battery}% · 信号强`"
+        :connected="ringStatus.connected"
+        @tap="openChildrenList"
+      />
+    </view>
+
+    <!-- 呼吸光环 -->
+    <view class="breath-hero">
+      <ag-breath-ring :breath="reading.breath" />
+      <text class="breath-title">呼吸节律稳定 · 无异常</text>
+      <text class="breath-caption">数据 {{ dataAge }} 秒前更新</text>
+    </view>
+
+    <!-- 三指标条 -->
+    <view class="metric-wrap">
+      <ag-metric-bar :cells="metricCells" />
+    </view>
+
+    <!-- 今日方案（两张小卡）-->
+    <view class="sec-title-row">
+      <text class="sec-title">今日方案</text>
+      <text class="sec-more" @tap="openPlan">查看全部 →</text>
+    </view>
+
+    <view class="mini-cards-row">
+      <!-- 行动计划卡 -->
+      <view class="mini-card" @tap="openPlan" hover-class="mini-card-active">
+        <view class="mini-card-top">
+          <view class="mini-icon mini-icon-plan">
+            <text class="mini-icon-glyph">✓</text>
+          </view>
+          <view class="mini-badge mini-badge-green">
+            <text class="mini-badge-text">绿色区</text>
+          </view>
+        </view>
+        <text class="mini-label">哮喘行动计划</text>
+        <view class="mini-value-row">
+          <text class="mini-value">2</text>
+          <text class="mini-value-unit">/2 剂</text>
+        </view>
+        <view class="mini-bands">
+          <view class="band band-g"></view>
+          <view class="band band-y"></view>
+          <view class="band band-r"></view>
+        </view>
+        <text class="mini-note">晨间维持 · 下次 20:00</text>
+      </view>
+
+      <!-- 空气质量卡 -->
+      <view class="mini-card">
+        <view class="mini-card-top">
+          <view class="mini-icon mini-icon-air">
+            <text class="mini-icon-glyph">≋</text>
+          </view>
+          <view class="mini-badge mini-badge-green">
+            <text class="mini-badge-text">优</text>
+          </view>
+        </view>
+        <text class="mini-label">空气 · 家中</text>
+        <view class="mini-value-row">
+          <text class="mini-value">42</text>
+          <text class="mini-value-unit">AQI</text>
+        </view>
+        <text class="mini-note" style="margin-top: 20px;">杭州西湖 · 花粉指数低</text>
+      </view>
+    </view>
+
+    <!-- CTA -->
+    <view class="cta-wrap">
+      <ag-button label="开始手动测量 · 30 秒完成" type="primary" @tap="startMeasure" />
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+
+    <!-- 底部预留 tabbar 空间 -->
+    <view style="height: 90px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid, type Kid } from '@/composables/useKid';
+import { getRingStatus, getLatestReading, type RingReading, type RingStatus } from '@/composables/useRing';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+import AgButton from '@/components/ag-button/ag-button.uvue';
+import AgKidChip from '@/components/ag-kid-chip/ag-kid-chip.uvue';
+import AgMetricBar, { type MetricCell } from '@/components/ag-metric-bar/ag-metric-bar.uvue';
+import AgBreathRing from '@/components/ag-breath-ring/ag-breath-ring.uvue';
+
+export default {
+  components: { AgButton, AgKidChip, AgMetricBar, AgBreathRing },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      ringStatus: getRingStatus(),
+      reading: getLatestReading(),
+      dutyDuration: '6 小时 24 分',
+      dataAge: 12 as number,
+      hasUnread: true as boolean,
+      disclaimerShort: DISCLAIMER_SHORT,
+      readingTimer: null as number | null,
+      ageTimer: null as number | null,
+    };
+  },
+  computed: {
+    greeting(): string {
+      const h = new Date().getHours();
+      if (h < 6) return '深夜';
+      if (h < 11) return '早安';
+      if (h < 14) return '午安';
+      if (h < 18) return '下午好';
+      return '晚安';
+    },
+    metricCells(): MetricCell[] {
+      return [
+        { label: '心率', value: `${this.reading.hr}`, unit: 'bpm', trend: '↗ 平稳', trendColor: '#6BB280' },
+        { label: '血氧', value: `${this.reading.spo2}`, unit: '%',   trend: '↗ 正常', trendColor: '#6BB280' },
+        { label: 'HRV', value: `${this.reading.hrv}`, unit: 'ms',   trend: '↗ 良好', trendColor: '#6BB280' },
+      ];
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  onShow() {
+    // 每 5 秒刷新一次读数
+    this.readingTimer = setInterval(() => {
+      this.reading = getLatestReading();
+      this.dataAge = 0;
+    }, 5000);
+    // 每秒递增数据年龄
+    this.ageTimer = setInterval(() => {
+      this.dataAge += 1;
+    }, 1000);
+  },
+  onHide() {
+    if (this.readingTimer != null) clearInterval(this.readingTimer);
+    if (this.ageTimer != null) clearInterval(this.ageTimer);
+  },
+  methods: {
+    openInbox() {
+      uni.navigateTo({ url: '/pages/inbox/inbox' });
+    },
+    openChildrenList() {
+      uni.navigateTo({ url: '/pages/children/children' });
+    },
+    openPlan() {
+      uni.navigateTo({ url: '/pages/plan/plan' });
+    },
+    startMeasure() {
+      uni.navigateTo({ url: '/pages/measure/measuring' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.20) 0%, transparent 55%),
+    radial-gradient(60% 40% at 90% 15%, rgba(255, 207, 122, 0.16) 0%, transparent 50%);
+}
+.status-bar { width: 100%; }
+
+/* Header */
+.header {
+  padding: 6px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.header-titles { flex: 1; }
+.greeting {
+  font-size: 12px;
+  color: $ink-2;
+}
+.h1-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 3px;
+}
+.h1-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: $sun-2;
+  letter-spacing: -0.01em;
+}
+.h1-rest {
+  font-size: 22px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.sub-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 4px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 6px;
+}
+.sub {
+  font-size: 11px;
+  color: $ink-2;
+}
+.header-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $sun-wash;
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.15);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+.header-btn-icon {
+  font-size: 18px;
+  color: $ink;
+}
+.header-btn-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background: $coral;
+}
+.header-btn-active { opacity: 0.7; }
+
+/* Kid chip */
+.kid-wrap {
+  padding: 14px $sp-6 0;
+}
+
+/* Breath */
+.breath-hero {
+  margin-top: 18px;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.breath-title {
+  font-size: 16px;
+  color: $ink;
+  font-weight: 500;
+  margin-top: 12px;
+}
+.breath-caption {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+/* Metric bar wrap */
+.metric-wrap {
+  padding: 18px $sp-6 0;
+}
+
+/* Section title */
+.sec-title-row {
+  padding: 20px $sp-6 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.sec-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.sec-more {
+  font-size: 11px;
+  color: $sun-2;
+  font-weight: 500;
+}
+
+/* Mini cards */
+.mini-cards-row {
+  padding: 0 $sp-6;
+  display: flex;
+  flex-direction: row;
+}
+.mini-card {
+  flex: 1;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  padding: 14px;
+  margin-right: 10px;
+}
+.mini-card:last-child { margin-right: 0; }
+.mini-card-active { opacity: 0.85; }
+.mini-card-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.mini-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.mini-icon-plan {
+  background: linear-gradient(135deg, $sun-3, $sun-1);
+}
+.mini-icon-air {
+  background: linear-gradient(135deg, #9FC4E0, $sky);
+}
+.mini-icon-glyph {
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 700;
+}
+.mini-badge {
+  padding: 3px 8px;
+  border-radius: 8px;
+}
+.mini-badge-green {
+  background: $leaf-wash;
+}
+.mini-badge-text {
+  font-size: 9px;
+  color: $leaf;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.mini-label {
+  font-size: 11px;
+  color: $ink-2;
+}
+.mini-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 4px;
+}
+.mini-value {
+  font-family: $font-num;
+  font-size: 26px;
+  font-weight: 500;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 26px;
+}
+.mini-value-unit {
+  font-size: 11px;
+  color: $ink-2;
+  margin-left: 3px;
+}
+.mini-bands {
+  display: flex;
+  flex-direction: row;
+  margin-top: 8px;
+  height: 6px;
+}
+.band {
+  flex: 1;
+  border-radius: 2px;
+  margin-right: 3px;
+  opacity: 0.35;
+}
+.band:last-child { margin-right: 0; }
+.band-g {
+  background: $leaf;
+  opacity: 1;
+}
+.band-y { background: $sun-1; }
+.band-r { background: $coral; }
+.mini-note {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 6px;
+}
+
+/* CTA */
+.cta-wrap {
+  padding: 18px $sp-6 0;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

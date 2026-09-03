@@ -1,0 +1,463 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">关注记录</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 顶部统计 -->
+    <view class="summary-row">
+      <view class="summary-cell">
+        <text class="summary-n">30</text>
+        <text class="summary-l">最近 30 天</text>
+      </view>
+      <view class="summary-cell">
+        <text class="summary-n summary-n-warn">3</text>
+        <text class="summary-l">黄色关注</text>
+      </view>
+      <view class="summary-cell">
+        <text class="summary-n summary-n-red">1</text>
+        <text class="summary-l">红色关注</text>
+      </view>
+      <view class="summary-cell">
+        <text class="summary-n summary-n-ok">4</text>
+        <text class="summary-l">已处理</text>
+      </view>
+    </view>
+
+    <!-- 筛选 chip -->
+    <scroll-view class="filter-scroll" scroll-x="true">
+      <view class="filter-row">
+        <view
+          v-for="(f, idx) in filters"
+          :key="f.key"
+          class="filter-chip"
+          :class="{ 'filter-chip-active': activeFilter == f.key }"
+          @tap="activeFilter = f.key"
+        >
+          <text class="filter-chip-text" :class="{ 'filter-chip-text-active': activeFilter == f.key }">{{ f.label }}</text>
+          <text class="filter-chip-count" :class="{ 'filter-chip-count-active': activeFilter == f.key }">{{ f.count }}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 时间线 -->
+    <view v-for="group in visibleGroups" :key="group.date">
+      <view class="day-header">
+        <text class="day-date">{{ group.date }}</text>
+        <text class="day-rel">{{ group.rel }}</text>
+      </view>
+
+      <view
+        v-for="e in group.events"
+        :key="e.id"
+        class="alert-item"
+        :class="`alert-item-${e.zone}`"
+        @tap="openDetail(e.id)"
+        hover-class="alert-item-active"
+      >
+        <view class="zone-icon" :class="`zone-icon-${e.zone}`">
+          <text class="zone-icon-glyph">{{ e.zone == 'red' ? '!' : '◐' }}</text>
+        </view>
+        <view class="item-body">
+          <view class="item-top">
+            <text class="item-title">{{ e.title }}</text>
+            <text class="item-time">{{ e.time }}</text>
+          </view>
+          <text class="item-metrics">{{ e.metrics }}</text>
+          <view class="item-status">
+            <text class="status-resolved" :class="{ 'status-auto': e.autoResolved }">
+              ✓ {{ e.autoResolved ? '自行恢复' : `已处理 · ${e.resolvedTime}` }}
+            </text>
+            <text v-if="e.action != ''" class="status-sep">·</text>
+            <text v-if="e.action != ''" class="status-action">{{ e.action }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+type FilterOpt = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+type AlertEvent = {
+  id: string;
+  zone: 'red' | 'yellow';
+  title: string;
+  time: string;
+  metrics: string;
+  autoResolved: boolean;
+  resolvedTime: string;
+  action: string;
+};
+
+type EventGroup = {
+  date: string;
+  rel: string;
+  events: AlertEvent[];
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      activeFilter: 'all' as string,
+      disclaimerShort: DISCLAIMER_SHORT,
+      filters: [
+        { key: 'all',     label: '全部',   count: 4 },
+        { key: 'red',     label: '红色',   count: 1 },
+        { key: 'yellow',  label: '黄色',   count: 3 },
+        { key: 'pending', label: '未处理', count: 0 },
+      ] as FilterOpt[],
+      groups: [
+        {
+          date: '9 月 1 日 · 周日',
+          rel: '2 天前',
+          events: [
+            {
+              id: 'a1',
+              zone: 'red',
+              title: '红色关注 · 呼吸频率',
+              time: '03:12',
+              metrics: '呼吸 36 次/分 · 血氧 92% · 持续 2 分 13 秒',
+              autoResolved: false,
+              resolvedTime: '03:15',
+              action: '按方案 · 沙丁胺醇 2 喷',
+            },
+          ] as AlertEvent[],
+        },
+        {
+          date: '8 月 28 日 · 周四',
+          rel: '6 天前',
+          events: [
+            {
+              id: 'a2',
+              zone: 'yellow',
+              title: '黄色关注 · 心率上升',
+              time: '14:32',
+              metrics: '心率 128 bpm · 持续 8 分钟 · 幼儿园活动时间',
+              autoResolved: true,
+              resolvedTime: '',
+              action: '运动引起 · 无需干预',
+            },
+          ] as AlertEvent[],
+        },
+        {
+          date: '8 月 21 日 · 周四',
+          rel: '上周',
+          events: [
+            {
+              id: 'a3',
+              zone: 'yellow',
+              title: '黄色关注 · 夜间咳嗽',
+              time: '02:47',
+              metrics: '呼吸 32 次/分 · 检测到咳嗽波形 · 3 次',
+              autoResolved: false,
+              resolvedTime: '02:55',
+              action: '按方案 · 沙丁胺醇 2 喷',
+            },
+            {
+              id: 'a4',
+              zone: 'yellow',
+              title: '黄色关注 · 血氧波动',
+              time: '19:04',
+              metrics: '血氧 93% · 持续 5 分钟',
+              autoResolved: true,
+              resolvedTime: '',
+              action: '',
+            },
+          ] as AlertEvent[],
+        },
+      ] as EventGroup[],
+    };
+  },
+  computed: {
+    visibleGroups(): EventGroup[] {
+      if (this.activeFilter == 'all') return this.groups;
+      return this.groups.map((g): EventGroup => {
+        const filtered = g.events.filter((e): boolean => {
+          if (this.activeFilter == 'red') return e.zone == 'red';
+          if (this.activeFilter == 'yellow') return e.zone == 'yellow';
+          if (this.activeFilter == 'pending') return !e.autoResolved && e.resolvedTime == '';
+          return true;
+        });
+        return { date: g.date, rel: g.rel, events: filtered } as EventGroup;
+      }).filter((g): boolean => g.events.length > 0);
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    openDetail(id: string) {
+      uni.navigateTo({ url: '/pages/alert/detail' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Summary strip */
+.summary-row {
+  margin: 16px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+}
+.summary-cell {
+  flex: 1;
+  padding: 14px 12px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 8px;
+}
+.summary-cell:last-child { margin-right: 0; }
+.summary-n {
+  font-family: $font-num;
+  font-size: 24px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 24px;
+}
+.summary-n-warn { color: $sun-2; }
+.summary-n-red { color: $zone-red; }
+.summary-n-ok { color: $leaf; }
+.summary-l {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 5px;
+  letter-spacing: 0.04em;
+}
+
+/* Filter chips */
+.filter-scroll {
+  margin-top: 16px;
+  padding: 0 $sp-6;
+  width: 100%;
+}
+.filter-row {
+  display: flex;
+  flex-direction: row;
+}
+.filter-chip {
+  padding: 8px 14px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-right: 8px;
+}
+.filter-chip-active {
+  background: $sun-1;
+  border-color: $sun-1;
+}
+.filter-chip-text {
+  font-size: 12px;
+  color: $ink-2;
+  font-weight: 500;
+}
+.filter-chip-text-active {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+.filter-chip-count {
+  font-family: $font-num;
+  font-size: 10px;
+  color: $sun-2;
+  margin-left: 4px;
+  font-weight: 700;
+}
+.filter-chip-count-active {
+  color: #FFFFFF;
+  opacity: 0.9;
+}
+
+/* Day header */
+.day-header {
+  padding: 20px $sp-6 8px;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.day-date {
+  color: $sun-2;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-right: 10px;
+}
+.day-rel {
+  color: $ink-3;
+  font-size: 10px;
+}
+
+/* Alert item */
+.alert-item {
+  margin: 0 $sp-6 8px;
+  padding: 14px 16px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  display: flex;
+  flex-direction: row;
+  border-left-width: 3px;
+}
+.alert-item-active { opacity: 0.85; }
+.alert-item-red {
+  border-left-color: $zone-red;
+}
+.alert-item-yellow {
+  border-left-color: $sun-1;
+}
+.zone-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.zone-icon-red {
+  background: linear-gradient(135deg, #FF9E8D, $zone-red);
+}
+.zone-icon-yellow {
+  background: linear-gradient(135deg, #FFD68C, $sun-1);
+}
+.zone-icon-glyph {
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+}
+.item-body { flex: 1; }
+.item-top {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.item-time {
+  font-family: $font-num;
+  font-size: 11px;
+  color: $ink-3;
+}
+.item-metrics {
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 17px;
+  margin-top: 4px;
+}
+.item-status {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.status-resolved {
+  font-size: 10px;
+  color: $leaf;
+  font-weight: 600;
+}
+.status-auto { color: $leaf; }
+.status-sep {
+  color: $ink-3;
+  font-size: 10px;
+  margin: 0 6px;
+}
+.status-action {
+  font-size: 10px;
+  color: $sun-2;
+  font-weight: 600;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 24px;
+  letter-spacing: 0.04em;
+}
+</style>

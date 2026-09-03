@@ -1,0 +1,126 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 搜索栏 -->
+    <view class="search-bar">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <view class="search-input-wrap">
+        <text class="search-icon">◐</text>
+        <input class="search-input" v-model="query" placeholder="搜索症状、事件、药品..." confirm-type="search"/>
+        <view v-if="query != ''" class="clear-btn" @tap="query = ''"><text class="clear-text">×</text></view>
+      </view>
+      <view class="cancel-btn" @tap="handleBack" hover-class="btn-active"><text class="cancel-text">取消</text></view>
+    </view>
+
+    <scroll-view class="scroll-body" scroll-y="true">
+      <!-- 空态 / 历史 / 结果 -->
+      <view v-if="query == ''" class="empty-state">
+        <text class="sec-title">最近搜索</text>
+        <view class="chip-group">
+          <view v-for="q in history" :key="q" class="chip" @tap="query = q">
+            <text class="chip-text">{{ q }}</text>
+          </view>
+        </view>
+
+        <text class="sec-title">热门话题</text>
+        <view class="topic-list">
+          <view v-for="(t, i) in hotTopics" :key="i" class="topic-item">
+            <text class="topic-n">{{ i + 1 }}</text>
+            <text class="topic-title">{{ t }}</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 结果 -->
+      <view v-else class="results">
+        <text class="result-count">找到 {{ results.length }} 条结果</text>
+        <view v-for="r in results" :key="r.id" class="result-item">
+          <view class="result-icon" :class="`result-icon-${r.type}`"><text class="result-icon-glyph">{{ r.icon }}</text></view>
+          <view class="result-body">
+            <text class="result-title">{{ r.title }}</text>
+            <text class="result-desc">{{ r.desc }}</text>
+          </view>
+          <text class="arrow">›</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+</template>
+
+<script lang="uts">
+type Result = { id: string; type: string; icon: string; title: string; desc: string };
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      query: '' as string,
+      history: ['呼吸频率', '沙丁胺醇', '花粉过敏', '夜间咳嗽'] as string[],
+      hotTopics: [
+        '如何看懂关注等级 · 绿黄红三区',
+        '正确使用吸入器的 6 个步骤',
+        '如何区分感冒和哮喘发作',
+        '儿童哮喘常见的 8 种诱因',
+        '如何和学校老师沟通哮喘情况',
+      ] as string[],
+      results: [
+        { id: '1', type: 'record', icon: '≣', title: '关注记录 · 呼吸 36 次/分', desc: '9月3日 03:12 · 已缓解' },
+        { id: '2', type: 'med',    icon: '◐', title: '沙丁胺醇气雾剂', desc: '药品库 · 缓解药 · 剩余 156 喷' },
+        { id: '3', type: 'know',   icon: 'i', title: '沙丁胺醇的正确使用方法', desc: '知识科普 · 5 分钟阅读' },
+        { id: '4', type: 'sym',    icon: '✎', title: '症状记录 · 咳嗽 · 喘息', desc: '9月3日 03:08 · 用药后缓解' },
+      ] as Result[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { width: 100%; height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.12) 0%, transparent 55%);
+  display: flex; flex-direction: column; }
+.status-bar { width: 100%; }
+.search-bar { padding: 6px $sp-4 10px; display: flex; flex-direction: row; align-items: center; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 8px; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.btn-active { opacity: 0.7; }
+.search-input-wrap { flex: 1; height: 40px; padding: 0 12px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: 20px; display: flex; flex-direction: row; align-items: center; }
+.search-icon { color: $ink-3; font-size: 14px; margin-right: 6px; }
+.search-input { flex: 1; font-size: 13px; color: $ink; }
+.clear-btn { width: 20px; height: 20px; border-radius: 10px; background: $card-3; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.clear-text { color: $ink-2; font-size: 14px; line-height: 14px; }
+.cancel-btn { padding: 8px 4px 8px 10px; }
+.cancel-text { color: $sun-2; font-size: 13px; font-weight: 600; }
+
+.scroll-body { flex: 1; }
+.sec-title { padding: 20px $sp-6 10px; font-size: 11px; color: $sun-2; letter-spacing: 0.14em; font-weight: 700; }
+.chip-group { padding: 0 $sp-6; display: flex; flex-direction: row; flex-wrap: wrap; }
+.chip { padding: 8px 14px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: 20px; margin-right: 8px; margin-bottom: 8px; }
+.chip-text { font-size: 12px; color: $ink; }
+
+.topic-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.topic-item { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.topic-item:last-child { border-bottom-width: 0; }
+.topic-n { width: 22px; height: 22px; border-radius: 11px; background: $sun-wash; color: $sun-2; font-size: 11px; font-weight: 700; font-family: $font-num; align-items: center; justify-content: center; text-align: center; line-height: 22px; margin-right: 12px; }
+.topic-title { flex: 1; font-size: 13px; color: $ink; }
+
+.results { padding: 8px $sp-6 40px; }
+.result-count { font-size: 11px; color: $ink-3; padding: 8px 0 12px; letter-spacing: 0.04em; }
+.result-item { padding: 12px 14px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; display: flex; flex-direction: row; align-items: center; margin-bottom: 8px; }
+.result-icon { width: 34px; height: 34px; border-radius: 10px; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.result-icon-record { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.result-icon-med { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.result-icon-know { background: linear-gradient(135deg, #B9DFC7, $leaf); }
+.result-icon-sym { background: linear-gradient(135deg, $sun-3, $coral); }
+.result-icon-glyph { color: #FFFFFF; font-size: 14px; font-weight: 700; }
+.result-body { flex: 1; }
+.result-title { font-size: 13px; font-weight: 600; color: $ink; letter-spacing: -0.01em; }
+.result-desc { font-size: 11px; color: $ink-2; margin-top: 2px; }
+.arrow { color: $ink-3; font-size: 18px; }
+</style>

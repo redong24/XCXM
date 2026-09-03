@@ -1,0 +1,76 @@
+/**
+ * AsthmaGuard · Ring (Bluetooth) Mock
+ *
+ * 这是一个 MOCK 桩 —— 提供模拟的实时数据、连接状态、电量。
+ * 真实对接 RWFit R2 时替换为 uni.openBluetoothAdapter / uni.createBLEConnection 等 API。
+ *
+ * Mock 行为：
+ *   - 心率：随机 92~104 bpm
+ *   - 血氧：随机 96~99%
+ *   - 呼吸：随机 20~28 次/分
+ *   - 电量：静态 76%，每小时降 1%
+ */
+
+export type RingReading = {
+  breath: number;   // 次/分
+  hr: number;       // bpm
+  spo2: number;     // %
+  hrv: number;      // ms
+  timestamp: number;
+};
+
+export type RingStatus = {
+  connected: boolean;
+  battery: number;      // 0-100
+  signalDbm: number;    // -100 ~ 0
+  serialNumber: string; // RW2-284961
+  lastSyncAt: number;
+  model: string;        // RWFit R2
+};
+
+// ── Mock state ──
+const MOCK_STATUS: RingStatus = {
+  connected: true,
+  battery: 76,
+  signalDbm: -56,
+  serialNumber: 'RW2-284961',
+  lastSyncAt: Date.now() - 12000,
+  model: 'RWFit R2',
+};
+
+export function getRingStatus(): RingStatus {
+  return MOCK_STATUS;
+}
+
+// 生成一次随机读数（用作实时更新）
+export function getLatestReading(): RingReading {
+  return {
+    breath: 20 + Math.floor(Math.random() * 8),   // 20~27
+    hr:     92 + Math.floor(Math.random() * 12),  // 92~103
+    spo2:   96 + Math.floor(Math.random() * 4),   // 96~99
+    hrv:    45 + Math.floor(Math.random() * 20),  // 45~64
+    timestamp: Date.now(),
+  };
+}
+
+// 触发一次手动测量（30 秒）· 返回结果
+// 真实场景应触发 BLE 数据包 + progress event
+export function startManualMeasurement(): Promise<RingReading> {
+  return new Promise((resolve) => {
+    // 模拟 30 秒采集
+    setTimeout(() => {
+      resolve(getLatestReading());
+    }, 30000);
+  });
+}
+
+// 检查戒指是否连接
+export function isRingConnected(): boolean {
+  return MOCK_STATUS.connected;
+}
+
+// 模拟断连（用于测试离线警告页）
+export function simulateDisconnect(): void {
+  MOCK_STATUS.connected = false;
+  MOCK_STATUS.lastSyncAt = Date.now() - 12 * 60 * 1000;
+}

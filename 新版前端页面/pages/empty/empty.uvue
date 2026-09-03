@@ -1,0 +1,85 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="content">
+      <view class="illus">
+        <view class="halo"></view>
+        <view class="halo-ring"></view>
+        <view class="icon-box">
+          <text class="icon-glyph">○</text>
+        </view>
+      </view>
+
+      <text class="title">哨兵尚未上岗</text>
+      <text class="desc">给 RWFit 智能戒指通电，佩戴到孩子手上{{ '\n' }}然后回到这里开始配对</text>
+
+      <view class="steps">
+        <view class="step">
+          <view class="step-n"><text class="step-n-text">1</text></view>
+          <text class="step-text">给戒指充电（大约 40 分钟）</text>
+        </view>
+        <view class="step">
+          <view class="step-n"><text class="step-n-text">2</text></view>
+          <text class="step-text">打开手机蓝牙</text>
+        </view>
+        <view class="step">
+          <view class="step-n"><text class="step-n-text">3</text></view>
+          <text class="step-text">戒指戴在孩子拇指或食指</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="bottom-area" :style="{ paddingBottom: `${safeBottom}px` }">
+      <ag-button label="开始配对戒指" type="primary" @tap="handlePair"/>
+      <view class="skip-btn" @tap="handleLater" hover-class="btn-active">
+        <text class="skip-text">稍后再说</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+export default {
+  components: { AgButton },
+  data() { return { statusBarHeight: 44 as number, safeBottom: 30 as number }; },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 20;
+  },
+  methods: {
+    handlePair() { uni.navigateTo({ url: '/pages/pair/pair' }); },
+    handleLater() { uni.reLaunch({ url: '/pages/home/home' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { width: 100%; height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 30%, rgba(255, 181, 71, 0.2) 0%, transparent 60%);
+  display: flex; flex-direction: column; }
+.status-bar { width: 100%; }
+.content { flex: 1; padding: 40px 32px 0; align-items: center; display: flex; flex-direction: column; }
+
+.illus { width: 200px; height: 200px; align-items: center; justify-content: center; display: flex; flex-direction: row; position: relative; margin-bottom: 30px; }
+.halo { position: absolute; width: 200px; height: 200px; border-radius: 100px; background: radial-gradient(circle, rgba(255, 143, 50, 0.22) 0%, transparent 65%); }
+.halo-ring { position: absolute; width: 160px; height: 160px; border-radius: 80px; border-width: 2px; border-style: dashed; border-color: $sun-1; opacity: 0.5; }
+.icon-box { width: 90px; height: 90px; border-radius: 45px; background: $card; border-width: 2px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; z-index: 5; box-shadow: 0 6px 20px rgba(245, 143, 50, 0.15); }
+.icon-glyph { color: $ink-3; font-size: 48px; font-weight: 300; line-height: 48px; }
+
+.title { font-size: 22px; font-weight: 700; color: $ink; letter-spacing: -0.02em; text-align: center; }
+.desc { font-size: 13px; color: $ink-2; line-height: 20px; margin-top: 10px; text-align: center; }
+
+.steps { margin-top: 30px; padding: 18px 20px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; width: 100%; }
+.step { display: flex; flex-direction: row; align-items: center; padding: 8px 0; }
+.step-n { width: 24px; height: 24px; border-radius: 12px; background: $sun-wash; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.step-n-text { color: $sun-2; font-size: 12px; font-weight: 700; font-family: $font-num; }
+.step-text { flex: 1; font-size: 13px; color: $ink; }
+
+.bottom-area { padding: 20px 24px 0; }
+.skip-btn { padding: 12px 0; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.skip-text { color: $ink-3; font-size: 12px; }
+.btn-active { opacity: 0.7; }
+</style>

@@ -1,0 +1,301 @@
+<template>
+  <view class="page">
+    <!-- 状态栏占位（自定义导航样式下需要）-->
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 顶部品牌区（暖阳晨光渐变背景）-->
+    <view class="brand-hero">
+      <!-- 品牌 mark -->
+      <image
+        class="brand-mark"
+        src="/static/brand/mark-256.png"
+        mode="widthFix"
+      />
+      <text class="brand-name">{{ brandName }}</text>
+      <text class="brand-tagline">{{ brandTagline }}</text>
+    </view>
+
+    <!-- 底部登录面板 -->
+    <view class="login-panel">
+      <view class="panel-title-row">
+        <text class="panel-title">开始使用</text>
+        <text class="panel-sub">短信验证码登录 · 首次会自动创建账号</text>
+      </view>
+
+      <!-- 手机号输入 -->
+      <view class="field">
+        <text class="field-icon">📱</text>
+        <input
+          class="field-input"
+          type="number"
+          placeholder="手机号"
+          v-model="phone"
+          maxlength="11"
+        />
+      </view>
+
+      <!-- 验证码输入 -->
+      <view class="field">
+        <text class="field-icon">🔒</text>
+        <input
+          class="field-input"
+          type="number"
+          placeholder="验证码"
+          v-model="code"
+          maxlength="6"
+        />
+        <view class="code-btn" @tap="handleSendCode" hover-class="code-btn-active">
+          <text class="code-btn-text">{{ codeSent ? `${countdown}s` : '获取验证码' }}</text>
+        </view>
+      </view>
+
+      <!-- 合规声明 -->
+      <view class="terms" @tap="agreed = !agreed">
+        <view class="terms-check" :class="{ 'terms-check-on': agreed }">
+          <text v-if="agreed" class="terms-check-mark">✓</text>
+        </view>
+        <text class="terms-text">
+          我已阅读并同意《用户协议》和《隐私政策》。{{ disclaimerLogin }}
+        </text>
+      </view>
+
+      <!-- 登录 CTA -->
+      <ag-button
+        label="进入哨兵"
+        type="primary"
+        :disabled="!canSubmit"
+        @tap="handleLogin"
+      />
+
+      <!-- 免责短提示 -->
+      <text class="disclaimer-short">{{ disclaimerShort }} · 数据本地加密存储</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { BRAND_NAME_EN, BRAND_TAGLINE, DISCLAIMER_LOGIN, DISCLAIMER_SHORT } from '@/utils/copy';
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      brandName: BRAND_NAME_EN,
+      brandTagline: BRAND_TAGLINE,
+      disclaimerLogin: DISCLAIMER_LOGIN,
+      disclaimerShort: DISCLAIMER_SHORT,
+
+      statusBarHeight: 44 as number,
+      phone: '' as string,
+      code: '' as string,
+      agreed: true as boolean,
+      codeSent: false as boolean,
+      countdown: 60 as number,
+    };
+  },
+  computed: {
+    canSubmit(): boolean {
+      return this.phone.length == 11 && this.code.length >= 4 && this.agreed;
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleSendCode() {
+      if (this.phone.length != 11) {
+        uni.showToast({ title: '请输入手机号', icon: 'none' });
+        return;
+      }
+      this.codeSent = true;
+      this.countdown = 60;
+      // 模拟倒计时
+      const timer = setInterval(() => {
+        this.countdown -= 1;
+        if (this.countdown <= 0) {
+          clearInterval(timer);
+          this.codeSent = false;
+        }
+      }, 1000);
+      uni.showToast({ title: '验证码已发送', icon: 'none' });
+    },
+    handleLogin() {
+      if (!this.canSubmit) return;
+      // Mock 登录
+      uni.setStorageSync('ag_token', 'mock-token-' + Date.now());
+      uni.showLoading({ title: '登录中...' });
+      setTimeout(() => {
+        uni.hideLoading();
+        // 首次登录 → 引导；否则 → 主页
+        const onboarded = uni.getStorageSync('ag_onboarded') as boolean | null;
+        if (onboarded != true) {
+          uni.reLaunch({ url: '/pages/onboarding/onboarding' });
+        } else {
+          uni.reLaunch({ url: '/pages/home/home' });
+        }
+      }, 800);
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  display: flex;
+  flex-direction: column;
+}
+
+.status-bar {
+  width: 100%;
+}
+
+/* 顶部品牌区 — 暖阳晨光背景 */
+.brand-hero {
+  padding-top: 60px;
+  padding-bottom: 40px;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  /* 径向暖光 */
+  background:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.28) 0%, transparent 60%),
+    radial-gradient(50% 40% at 20% 20%, rgba(255, 131, 103, 0.12) 0%, transparent 55%),
+    linear-gradient(180deg, #FBF6EE 0%, #F5EDDF 100%);
+}
+.brand-mark {
+  width: 96px;
+  height: 96px;
+}
+.brand-name {
+  margin-top: 22px;
+  font-size: 34px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.03em;
+  font-family: $font-num;
+}
+.brand-tagline {
+  margin-top: 8px;
+  font-size: 11px;
+  color: $sun-2;
+  letter-spacing: 0.24em;
+  font-weight: 600;
+}
+
+/* 底部登录面板 */
+.login-panel {
+  flex: 1;
+  background: $card;
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  padding: 22px;
+  margin-top: -14px;
+  display: flex;
+  flex-direction: column;
+}
+.panel-title-row {
+  margin-bottom: 12px;
+}
+.panel-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.panel-sub {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+/* 输入框 */
+.field {
+  padding: 14px 16px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.field-icon {
+  color: $ink-3;
+  font-size: 16px;
+  margin-right: 12px;
+}
+.field-input {
+  flex: 1;
+  font-size: 15px;
+  color: $ink;
+  font-weight: 500;
+}
+.code-btn {
+  padding: 6px 12px;
+  background: $sun-wash;
+  border-radius: 8px;
+}
+.code-btn-text {
+  color: $sun-2;
+  font-size: 12px;
+  font-weight: 600;
+}
+.code-btn-active { opacity: 0.7; }
+
+/* 合规勾选 */
+.terms {
+  padding: 10px 14px;
+  background: rgba(255, 143, 50, 0.06);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  margin-top: 4px;
+  margin-bottom: 16px;
+}
+.terms-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: transparent;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $sun-2;
+  margin-right: 10px;
+  margin-top: 2px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.terms-check-on {
+  background: $sun-1;
+  border-color: $sun-1;
+}
+.terms-check-mark {
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 12px;
+}
+.terms-text {
+  flex: 1;
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 18px;
+}
+
+.disclaimer-short {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 12px;
+  letter-spacing: 0.02em;
+}
+</style>

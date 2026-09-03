@@ -1,0 +1,150 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">家庭成员</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 家庭 hero -->
+    <view class="family-hero">
+      <view class="family-icon"><text class="family-icon-glyph">⌂</text></view>
+      <text class="family-name">{{ familyName }}</text>
+      <text class="family-meta">{{ members.length }} 位成员 · 共同守护 {{ kidsCount }} 个孩子</text>
+    </view>
+
+    <!-- 成员列表 -->
+    <text class="sec-title">成员</text>
+    <view class="member-list">
+      <view v-for="m in members" :key="m.id" class="member-item">
+        <view class="member-avatar" :style="{ backgroundColor: m.color }">
+          <text class="member-avatar-text">{{ m.name.charAt(0) }}</text>
+        </view>
+        <view class="member-body">
+          <view class="member-name-row">
+            <text class="member-name">{{ m.name }}</text>
+            <view v-if="m.isOwner" class="owner-tag"><text class="owner-text">管理员</text></view>
+            <view v-if="m.isMe" class="me-tag"><text class="me-text">我</text></view>
+          </view>
+          <text class="member-role">{{ m.role }} · {{ m.phone }}</text>
+        </view>
+        <text class="member-perm">{{ m.permission }}</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 邀请卡 -->
+    <view class="invite-card" @tap="handleInvite" hover-class="invite-active">
+      <view class="invite-icon"><text class="invite-icon-glyph">+</text></view>
+      <view class="invite-body">
+        <text class="invite-title">邀请家人</text>
+        <text class="invite-desc">生成一次性邀请码 · 24 小时有效</text>
+      </view>
+      <text class="arrow">›</text>
+    </view>
+
+    <!-- 权限说明 -->
+    <view class="perm-explain">
+      <text class="explain-title">关于权限</text>
+      <view class="explain-row"><text class="explain-tag">管理员</text><text class="explain-desc">邀请/移除成员 · 修改档案 · 处理报警</text></view>
+      <view class="explain-row"><text class="explain-tag">照护人</text><text class="explain-desc">查看数据 · 接收报警 · 记录症状</text></view>
+      <view class="explain-row"><text class="explain-tag">仅查看</text><text class="explain-desc">仅可查看数据 · 无法修改</text></view>
+    </view>
+
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+type Member = { id: string; name: string; role: string; phone: string; color: string;
+  permission: string; isOwner: boolean; isMe: boolean };
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      familyName: '陈家',
+      kidsCount: 2,
+      members: [
+        { id: 'm1', name: '妈妈', role: '陈静', phone: '138 XXXX 8623', color: '#F58F32',
+          permission: '管理员', isOwner: true, isMe: true },
+        { id: 'm2', name: '爸爸', role: '陈永康', phone: '139 XXXX 1122', color: '#5A94BF',
+          permission: '照护人', isOwner: false, isMe: false },
+        { id: 'm3', name: '奶奶', role: '王秀兰', phone: '135 XXXX 0088', color: '#6BB280',
+          permission: '仅查看', isOwner: false, isMe: false },
+      ] as Member[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleInvite() {
+      uni.showModal({
+        title: '生成邀请码',
+        content: '将生成一次性 6 位数邀请码 · 24 小时内有效',
+        confirmText: '生成',
+        confirmColor: '#F58F32',
+        success: (res) => {
+          if (res.confirm) uni.showToast({ title: '邀请码：138-624', icon: 'none' });
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.family-hero { padding: 12px 24px 0; align-items: center; display: flex; flex-direction: column; }
+.family-icon { width: 66px; height: 66px; border-radius: 22px; background-image: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; box-shadow: 0 8px 20px rgba(245, 143, 50, 0.35); }
+.family-icon-glyph { color: #FFFFFF; font-size: 30px; font-weight: 700; }
+.family-name { margin-top: 14px; font-size: 20px; font-weight: 700; color: $ink; letter-spacing: -0.02em; }
+.family-meta { font-size: 12px; color: $ink-2; margin-top: 4px; }
+
+.sec-title { padding: 20px $sp-6 8px; font-size: 11px; color: $sun-2; letter-spacing: 0.14em; font-weight: 700; }
+
+.member-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.member-item { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.member-item:last-child { border-bottom-width: 0; }
+.member-avatar { width: 40px; height: 40px; border-radius: 14px; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.member-avatar-text { color: #FFFFFF; font-weight: 700; font-size: 16px; }
+.member-body { flex: 1; }
+.member-name-row { display: flex; flex-direction: row; align-items: center; }
+.member-name { font-size: 14px; font-weight: 700; color: $ink; letter-spacing: -0.01em; margin-right: 6px; }
+.owner-tag, .me-tag { padding: 1px 6px; border-radius: 6px; margin-right: 4px; }
+.owner-tag { background: $sun-wash; }
+.me-tag { background: $sky-wash; }
+.owner-text { color: $sun-2; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; }
+.me-text { color: $sky; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; }
+.member-role { font-size: 11px; color: $ink-2; margin-top: 2px; }
+.member-perm { font-size: 12px; color: $ink-2; font-weight: 500; margin-right: 6px; }
+.arrow { color: $ink-3; font-size: 18px; }
+
+.invite-card { margin: 12px $sp-6 0; padding: 14px 16px; background: $card; border-width: 1.5px; border-style: dashed; border-color: $sun-1; border-radius: $r-md; display: flex; flex-direction: row; align-items: center; }
+.invite-active { opacity: 0.85; }
+.invite-icon { width: 40px; height: 40px; border-radius: 14px; background: $sun-wash; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.invite-icon-glyph { color: $sun-2; font-size: 20px; font-weight: 700; }
+.invite-body { flex: 1; }
+.invite-title { font-size: 14px; font-weight: 700; color: $sun-2; letter-spacing: -0.01em; }
+.invite-desc { font-size: 11px; color: $ink-2; margin-top: 2px; }
+
+.perm-explain { margin: 20px $sp-6 0; padding: 16px 18px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; }
+.explain-title { font-size: 12px; color: $ink; font-weight: 700; margin-bottom: 8px; }
+.explain-row { display: flex; flex-direction: row; align-items: flex-start; padding: 4px 0; }
+.explain-tag { padding: 2px 8px; background: $sun-wash; color: $sun-2; font-size: 10px; font-weight: 700; border-radius: 6px; margin-right: 10px; }
+.explain-desc { flex: 1; font-size: 11px; color: $ink-2; line-height: 16px; }
+</style>

@@ -1,0 +1,391 @@
+<template>
+  <view class="page">
+    <!-- 全屏 map -->
+    <map
+      class="map"
+      :latitude="latitude"
+      :longitude="longitude"
+      :scale="scale"
+      :markers="markers"
+      :show-location="false"
+    ></map>
+
+    <!-- 顶部浮动头 -->
+    <view class="float-header" :style="{ top: `${statusBarHeight + 12}px` }">
+      <view class="kid-mini" @tap="openChildrenList">
+        <view class="kid-av" :style="{ backgroundColor: kid.avatarColor }">
+          <text class="kid-av-text">{{ kid.name.charAt(0) }}</text>
+        </view>
+        <view class="kid-info">
+          <text class="kid-n">{{ kid.name }} · {{ kid.age }} 岁</text>
+          <view class="live-row">
+            <view class="live-dot"></view>
+            <text class="live-text">实时位置 · 12 秒前更新</text>
+          </view>
+        </view>
+      </view>
+      <view class="icon-btn" @tap="openSafeZones" hover-class="icon-btn-active">
+        <text class="icon-btn-glyph">☰</text>
+      </view>
+    </view>
+
+    <!-- 右侧地图控制 -->
+    <view class="map-controls" :style="{ top: `${statusBarHeight + 100}px` }">
+      <view class="ctl-btn" @tap="zoomIn" hover-class="ctl-btn-active">
+        <text class="ctl-btn-glyph">+</text>
+      </view>
+      <view class="ctl-btn" @tap="zoomOut" hover-class="ctl-btn-active">
+        <text class="ctl-btn-glyph">−</text>
+      </view>
+      <view class="ctl-btn ctl-btn-locate" @tap="locate" hover-class="ctl-btn-active">
+        <text class="ctl-btn-glyph ctl-btn-glyph-locate">◉</text>
+      </view>
+    </view>
+
+    <!-- 底部信息面板 -->
+    <view class="bottom-sheet">
+      <view class="location-row">
+        <view class="loc-icon">
+          <text class="loc-icon-glyph">◉</text>
+        </view>
+        <view class="loc-info">
+          <text class="loc-place">向阳花幼儿园</text>
+          <text class="loc-addr">杭州市西湖区文二西路 88 号 · 教室 3</text>
+        </view>
+        <view class="loc-time">
+          <view class="loc-live-tag">
+            <view class="loc-live-dot"></view>
+            <text class="loc-live-text">实时</text>
+          </view>
+          <text class="loc-stay">停留 2h 14m</text>
+        </view>
+      </view>
+
+      <view class="stats">
+        <view class="stat">
+          <text class="stat-l">今日活动</text>
+          <view class="stat-v-row">
+            <text class="stat-v">1.2</text>
+            <text class="stat-u">km</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">环境空气</text>
+          <view class="stat-v-row">
+            <text class="stat-v">38</text>
+            <text class="stat-u">AQI</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">安全区</text>
+          <text class="stat-v stat-v-safe">在区域内</text>
+        </view>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+
+type Marker = {
+  id: number;
+  latitude: number;
+  longitude: number;
+  title: string;
+  iconPath: string;
+  width: number;
+  height: number;
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      // 杭州西湖区中心坐标 (mock)
+      latitude: 30.2741 as number,
+      longitude: 120.1551 as number,
+      scale: 15 as number,
+      markers: [
+        {
+          id: 1,
+          latitude: 30.2741,
+          longitude: 120.1551,
+          title: '朵朵',
+          iconPath: '/static/brand/mark-64.png',
+          width: 44,
+          height: 44,
+        },
+        {
+          id: 2,
+          latitude: 30.2721,
+          longitude: 120.1521,
+          title: '家',
+          iconPath: '/static/brand/mark-64.png',
+          width: 32,
+          height: 32,
+        },
+      ] as Marker[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    zoomIn() { this.scale = Math.min(this.scale + 1, 20); },
+    zoomOut() { this.scale = Math.max(this.scale - 1, 5); },
+    locate() { uni.showToast({ title: '定位中', icon: 'loading' }); },
+    openSafeZones() { uni.showToast({ title: '安全区域管理', icon: 'none' }); },
+    openChildrenList() { uni.navigateTo({ url: '/pages/children/children' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  width: 100%;
+  height: 100vh;
+  background: #E8EBE0;
+  position: relative;
+}
+.map {
+  width: 100%;
+  height: 100vh;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* 顶部浮动头 */
+.float-header {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: $r-lg;
+  box-shadow: 0 4px 20px rgba(60, 40, 20, 0.15);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  z-index: 20;
+}
+.kid-mini {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.kid-av {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 10px;
+}
+.kid-av-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 14px;
+}
+.kid-info { flex: 1; }
+.kid-n {
+  font-size: 15px;
+  font-weight: 700;
+  color: $ink;
+}
+.live-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 2px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 6px;
+}
+.live-text {
+  font-size: 11px;
+  color: $ink-2;
+}
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
+  background: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.icon-btn-glyph {
+  color: $sun-2;
+  font-size: 16px;
+  font-weight: 700;
+}
+.icon-btn-active { opacity: 0.7; }
+
+/* Map controls */
+.map-controls {
+  position: absolute;
+  right: 18px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+}
+.ctl-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 4px 12px rgba(60, 40, 20, 0.15);
+  margin-bottom: 8px;
+}
+.ctl-btn:last-child { margin-bottom: 0; }
+.ctl-btn-active { opacity: 0.7; }
+.ctl-btn-glyph {
+  color: $ink;
+  font-size: 18px;
+  font-weight: 700;
+}
+.ctl-btn-glyph-locate {
+  color: $sun-2;
+}
+
+/* Bottom sheet */
+.bottom-sheet {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 96px;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: $r-xl;
+  box-shadow: 0 8px 30px rgba(60, 40, 20, 0.2);
+  z-index: 30;
+}
+.location-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.loc-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, $sun-3, $sun-2);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.loc-icon-glyph {
+  color: #FFFFFF;
+  font-size: 18px;
+}
+.loc-info { flex: 1; }
+.loc-place {
+  font-size: 15px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.loc-addr {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.loc-time {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+}
+.loc-live-tag {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  background: $leaf-wash;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-bottom: 3px;
+}
+.loc-live-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 2px;
+  background: $leaf;
+  margin-right: 4px;
+}
+.loc-live-text {
+  font-size: 9px;
+  color: $leaf;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.loc-stay {
+  font-size: 10px;
+  color: $ink-3;
+}
+
+/* Stats */
+.stats {
+  padding-top: 14px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  display: flex;
+  flex-direction: row;
+}
+.stat {
+  flex: 1;
+  padding: 10px 12px;
+  background: $card-2;
+  border-radius: 12px;
+  margin-right: 8px;
+}
+.stat:last-child { margin-right: 0; }
+.stat-l {
+  font-size: 10px;
+  color: $ink-3;
+}
+.stat-v-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 3px;
+}
+.stat-v {
+  font-family: $font-num;
+  font-size: 15px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 15px;
+}
+.stat-v-safe {
+  color: $leaf;
+  font-size: 13px;
+  font-family: $font-body;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.stat-u {
+  font-size: 10px;
+  color: $ink-2;
+  margin-left: 2px;
+}
+</style>

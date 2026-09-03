@@ -1,0 +1,511 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">导出就诊报告</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 报告预览卡（模拟 PDF 封面）-->
+    <view class="report-card">
+      <view class="report-halo"></view>
+      <view class="report-head">
+        <text class="report-lbl">AsthmaGuard · Medical Report</text>
+        <text class="report-title">{{ kid.name }} · 哮喘监测报告</text>
+        <text class="report-range">2026 年 6 月 1 日 – 2026 年 9 月 3 日 · 共 94 天</text>
+      </view>
+      <view class="report-info-grid">
+        <view class="info-cell">
+          <text class="info-l">姓名 · 性别 · 年龄</text>
+          <text class="info-v">{{ kid.name }} · {{ kid.gender == 'F' ? '女' : '男' }} · {{ kid.age }} 岁</text>
+        </view>
+        <view class="info-cell">
+          <text class="info-l">哮喘类型</text>
+          <text class="info-v">{{ kid.asthmaType }}</text>
+        </view>
+        <view class="info-cell">
+          <text class="info-l">监测总天数</text>
+          <text class="info-v info-v-mono">94 天</text>
+        </view>
+        <view class="info-cell">
+          <text class="info-l">关注事件</text>
+          <view class="info-v-row">
+            <text class="info-v-red">1</text>
+            <text class="info-v-text"> 红 · </text>
+            <text class="info-v-warn">3</text>
+            <text class="info-v-text"> 黄</text>
+          </view>
+        </view>
+      </view>
+      <view class="report-metrics">
+        <text class="report-metrics-title">数值摘要</text>
+        <view class="report-metrics-row">
+          <view class="metric-mini">
+            <text class="metric-mini-n">24</text>
+            <text class="metric-mini-l">呼吸均值 · 次/分</text>
+          </view>
+          <view class="metric-mini">
+            <text class="metric-mini-n">97.8</text>
+            <text class="metric-mini-l">血氧均值 · %</text>
+          </view>
+          <view class="metric-mini">
+            <text class="metric-mini-n">98</text>
+            <text class="metric-mini-l">心率均值 · bpm</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 包含内容 -->
+    <text class="sec-title">包含内容</text>
+    <view class="list">
+      <view class="list-item" v-for="(opt, idx) in includeOpts" :key="opt.key">
+        <view class="list-icon"><text class="list-icon-glyph">{{ opt.icon }}</text></view>
+        <view class="list-body">
+          <text class="list-name">{{ opt.name }}</text>
+          <text class="list-desc">{{ opt.desc }}</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !opt.on }" @tap="opt.on = !opt.on">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 时间范围 + 格式 -->
+    <text class="sec-title">时间范围</text>
+    <view class="list">
+      <view class="list-item">
+        <view class="list-body">
+          <text class="list-name">最近</text>
+        </view>
+        <text class="list-val">3 个月</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item">
+        <view class="list-body">
+          <text class="list-name">格式</text>
+        </view>
+        <text class="list-val">PDF · 打印友好</text>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 建议 -->
+    <view class="tip-card">
+      <text class="tip-text">
+        <text class="tip-bold">建议</text>：就诊时打印 PDF 或 AirDrop 给医生 · 帮助医生了解居家监测情况
+      </text>
+    </view>
+
+    <view style="height: 120px;"></view>
+  </scroll-view>
+
+  <!-- 底部导出按钮 -->
+  <view class="bottom-action" :style="{ paddingBottom: `${safeBottom}px` }">
+    <view class="cta-primary" @tap="handleExport" hover-class="cta-primary-active">
+      <view class="cta-ic">
+        <text class="cta-ic-glyph">↓</text>
+      </view>
+      <view class="cta-body">
+        <text class="cta-t">生成并导出报告</text>
+        <text class="cta-s">大约 5 秒 · 约 320 KB</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+
+type IncludeOpt = {
+  key: string;
+  icon: string;
+  name: string;
+  desc: string;
+  on: boolean;
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      kid: getCurrentKid(),
+      includeOpts: [
+        { key: 'trend',  icon: '≣', name: '监测数值趋势', desc: '呼吸 · 心率 · 血氧 · HRV 全时段', on: true },
+        { key: 'alert',  icon: '!', name: '关注等级事件', desc: '全部红/黄色关注 · 触发时间 · 处理记录', on: true },
+        { key: 'med',    icon: '◐', name: '用药记录',    desc: '缓解 · 维持 · 控制药物使用日志',   on: true },
+        { key: 'symp',   icon: '✎', name: '症状手动记录', desc: '咳嗽、喘息、发作诱因等',        on: false },
+      ] as IncludeOpt[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleExport() {
+      uni.showLoading({ title: '生成报告中...' });
+      setTimeout(() => {
+        uni.hideLoading();
+        uni.showToast({ title: '已导出到相册', icon: 'success' });
+      }, 2000);
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Report card */
+.report-card {
+  margin: 20px $sp-6 0;
+  padding: 24px 22px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 30px -8px rgba(60, 40, 20, 0.15);
+}
+.report-halo {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 100px;
+  height: 100px;
+  border-radius: 50px;
+  background: radial-gradient(circle, rgba(245, 143, 50, 0.35) 0%, transparent 65%);
+}
+.report-head {
+  padding-bottom: 14px;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.report-lbl {
+  font-size: 10px;
+  color: $sun-2;
+  letter-spacing: 0.24em;
+  font-weight: 700;
+}
+.report-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: $ink;
+  margin-top: 6px;
+  letter-spacing: -0.01em;
+}
+.report-range {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+.report-info-grid {
+  padding: 16px 0;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.info-cell {
+  width: 48%;
+  margin-right: 4%;
+  margin-bottom: 14px;
+}
+.info-cell:nth-child(2n) { margin-right: 0; }
+.info-l {
+  font-size: 10px;
+  color: $ink-3;
+  letter-spacing: 0.06em;
+}
+.info-v {
+  font-size: 12px;
+  color: $ink;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.info-v-mono {
+  font-family: $font-num;
+  font-weight: 700;
+}
+.info-v-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 3px;
+}
+.info-v-red {
+  font-family: $font-num;
+  font-size: 14px;
+  font-weight: 700;
+  color: $zone-red;
+}
+.info-v-warn {
+  font-family: $font-num;
+  font-size: 14px;
+  font-weight: 700;
+  color: $sun-2;
+}
+.info-v-text {
+  font-size: 12px;
+  color: $ink;
+}
+
+.report-metrics {
+  padding-top: 14px;
+}
+.report-metrics-title {
+  font-size: 11px;
+  color: $sun-2;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.report-metrics-row {
+  display: flex;
+  flex-direction: row;
+}
+.metric-mini {
+  flex: 1;
+  padding: 10px;
+  background: $card-2;
+  border-radius: 10px;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 8px;
+}
+.metric-mini:last-child { margin-right: 0; }
+.metric-mini-n {
+  font-family: $font-num;
+  font-size: 18px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 18px;
+}
+.metric-mini-l {
+  font-size: 9px;
+  color: $ink-3;
+  margin-top: 3px;
+}
+
+/* Section title */
+.sec-title {
+  padding: 22px $sp-6 10px;
+  font-size: 11px;
+  color: $sun-2;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+
+/* List */
+.list {
+  margin: 0 $sp-6;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  overflow: hidden;
+}
+.list-item {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.list-item:last-child { border-bottom-width: 0; }
+.list-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.list-icon-glyph {
+  color: $sun-2;
+  font-size: 16px;
+  font-weight: 700;
+}
+.list-body { flex: 1; }
+.list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.list-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.list-val {
+  font-size: 13px;
+  color: $ink;
+  font-weight: 600;
+  margin-right: 6px;
+}
+.list-arrow {
+  color: $ink-3;
+  font-size: 18px;
+}
+
+.toggle {
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: $sun-1;
+  position: relative;
+}
+.toggle-off { background: $card-3; }
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.toggle-off .toggle-thumb {
+  right: auto;
+  left: 2px;
+}
+
+/* Tip */
+.tip-card {
+  margin: 16px $sp-6 0;
+  padding: 12px 16px;
+  background: rgba(255, 143, 50, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.22);
+  border-radius: 12px;
+}
+.tip-text {
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 18px;
+}
+.tip-bold {
+  color: $sun-2;
+  font-weight: 600;
+}
+
+/* Bottom action */
+.bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px $sp-5 0;
+  background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%);
+}
+.cta-primary {
+  padding: 16px 20px;
+  background-image: linear-gradient(135deg, $sun-1, $sun-2);
+  border-radius: $r-xl;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  box-shadow: 0 12px 30px -8px rgba(245, 143, 50, 0.45);
+}
+.cta-primary-active { opacity: 0.9; }
+.cta-ic {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.22);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.35);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 14px;
+}
+.cta-ic-glyph {
+  color: #FFFFFF;
+  font-size: 20px;
+  font-weight: 700;
+}
+.cta-body { flex: 1; }
+.cta-t {
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.cta-s {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  margin-top: 2px;
+}
+</style>

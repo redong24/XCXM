@@ -1,0 +1,156 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">帮助与反馈</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 常见问题快捷入口 -->
+    <text class="sec-title">常见问题</text>
+    <view class="faq-list">
+      <view v-for="q in faqs" :key="q.id" class="faq-item">
+        <view class="faq-icon"><text class="faq-icon-glyph">?</text></view>
+        <text class="faq-title">{{ q.title }}</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 反馈类型 -->
+    <text class="sec-title">反馈类型</text>
+    <view class="type-row">
+      <view v-for="t in types" :key="t.key" class="type-cell" :class="{ 'type-cell-active': fbType == t.key }" @tap="fbType = t.key">
+        <view class="type-icon"><text class="type-icon-glyph">{{ t.icon }}</text></view>
+        <text class="type-label" :class="{ 'type-label-active': fbType == t.key }">{{ t.label }}</text>
+      </view>
+    </view>
+
+    <!-- 详细描述 -->
+    <text class="sec-title">详细描述</text>
+    <view class="textarea-wrap">
+      <textarea class="textarea" v-model="content" placeholder="请描述你遇到的问题或建议 · 越详细越好..." :maxlength="500"/>
+      <text class="counter">{{ content.length }} / 500</text>
+    </view>
+
+    <!-- 联系方式 -->
+    <text class="sec-title">联系方式（可选）</text>
+    <view class="form-list">
+      <view class="form-row">
+        <text class="form-lbl">手机</text>
+        <input class="form-input" v-model="phone" placeholder="用于回复"/>
+      </view>
+    </view>
+
+    <!-- 客服 -->
+    <view class="contact-card">
+      <view class="contact-icon"><text class="contact-icon-glyph">☎</text></view>
+      <view class="contact-body">
+        <text class="contact-title">紧急问题</text>
+        <text class="contact-desc">工作日 9:00-18:00 客服热线</text>
+      </view>
+      <text class="contact-phone">400-6280-000</text>
+    </view>
+
+    <view style="height: 130px;"></view>
+  </scroll-view>
+
+  <view class="bottom-action" :style="{ paddingBottom: `${safeBottom}px` }">
+    <ag-button label="提交反馈" type="primary" @tap="handleSubmit"/>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+type FaqItem = { id: string; title: string };
+type FbType = { key: string; icon: string; label: string };
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      fbType: 'bug' as string,
+      content: '' as string,
+      phone: '' as string,
+      faqs: [
+        { id: '1', title: '戒指频繁断线怎么办？' },
+        { id: '2', title: '如何修改关注等级阈值？' },
+        { id: '3', title: '如何邀请家人共同守护？' },
+        { id: '4', title: '数据可以导出给医生吗？' },
+      ] as FaqItem[],
+      types: [
+        { key: 'bug',     icon: '!', label: '问题反馈' },
+        { key: 'feature', icon: '+', label: '功能建议' },
+        { key: 'other',   icon: '◐', label: '其他' },
+      ] as FbType[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleSubmit() {
+      if (this.content.trim().length < 5) {
+        uni.showToast({ title: '请详细描述至少 5 个字', icon: 'none' });
+        return;
+      }
+      uni.showToast({ title: '反馈已提交 · 谢谢！', icon: 'success' });
+      setTimeout(() => uni.navigateBack({}), 1200);
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.sec-title { padding: 16px $sp-6 8px; font-size: 11px; color: $sun-2; letter-spacing: 0.14em; font-weight: 700; }
+.faq-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.faq-item { padding: 12px 14px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.faq-item:last-child { border-bottom-width: 0; }
+.faq-icon { width: 28px; height: 28px; border-radius: 8px; background: $sun-wash; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.faq-icon-glyph { color: $sun-2; font-size: 14px; font-weight: 700; }
+.faq-title { flex: 1; font-size: 13px; color: $ink; }
+.arrow { color: $ink-3; font-size: 18px; }
+
+.type-row { padding: 0 $sp-6; display: flex; flex-direction: row; }
+.type-cell { flex: 1; padding: 14px 10px; margin-right: 8px; background: $card; border-width: 1.5px; border-style: solid; border-color: $hairline; border-radius: $r-md; align-items: center; display: flex; flex-direction: column; }
+.type-cell:last-child { margin-right: 0; }
+.type-cell-active { border-color: $sun-2; background: $sun-wash; }
+.type-icon { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; margin-bottom: 6px; }
+.type-icon-glyph { color: #FFFFFF; font-size: 15px; font-weight: 700; }
+.type-label { font-size: 12px; color: $ink; }
+.type-label-active { color: $sun-2; font-weight: 700; }
+
+.textarea-wrap { margin: 0 $sp-6; padding: 14px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; }
+.textarea { width: 100%; min-height: 100px; font-size: 13px; color: $ink; line-height: 20px; }
+.counter { text-align: right; font-family: $font-num; font-size: 10px; color: $ink-3; margin-top: 6px; }
+
+.form-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.form-row { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; }
+.form-lbl { font-size: 13px; color: $ink-2; width: 60px; }
+.form-input { flex: 1; font-size: 14px; color: $ink; text-align: right; }
+
+.contact-card { margin: 20px $sp-6 0; padding: 14px 16px; background: $sky-wash; border-width: 1px; border-style: solid; border-color: rgba(90, 148, 191, 0.25); border-radius: $r-md; display: flex; flex-direction: row; align-items: center; }
+.contact-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #A2CCE8, $sky); align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.contact-icon-glyph { color: #FFFFFF; font-size: 18px; font-weight: 700; }
+.contact-body { flex: 1; }
+.contact-title { font-size: 13px; font-weight: 700; color: $sky; }
+.contact-desc { font-size: 11px; color: $ink-2; margin-top: 2px; }
+.contact-phone { color: $sky; font-family: $font-num; font-weight: 700; font-size: 14px; }
+
+.bottom-action { position: fixed; left: 0; right: 0; bottom: 0; padding: 20px $sp-5 0; background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%); }
+</style>

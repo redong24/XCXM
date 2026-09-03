@@ -1,0 +1,180 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">配对 RWFit</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <view class="content">
+      <view class="ring-stage">
+        <view class="wave wave-1" :style="{ transform: `scale(${wave1})`, opacity: op1 }"></view>
+        <view class="wave wave-2" :style="{ transform: `scale(${wave2})`, opacity: op2 }"></view>
+        <view class="ring-icon">
+          <image class="ring-img" src="/static/icons/ring-lg.png" mode="aspectFit"/>
+        </view>
+      </view>
+
+      <view class="status-tag" :class="`status-tag-${status}`">
+        <view class="status-dot"></view>
+        <text class="status-tag-text">{{ statusLabels[status] }}</text>
+      </view>
+
+      <text class="scanning-title">{{ titles[status] }}</text>
+      <text class="scanning-desc">{{ descs[status] }}</text>
+
+      <!-- 发现的设备列表 -->
+      <view v-if="status == 'scanning' || status == 'found'" class="devices">
+        <view class="device-card" v-for="d in foundDevices" :key="d.id" @tap="selectDevice(d.id)" hover-class="device-active">
+          <view class="dev-icon"><text class="dev-icon-glyph">◐</text></view>
+          <view class="dev-info">
+            <text class="dev-name">{{ d.name }}</text>
+            <text class="dev-mac">{{ d.mac }}</text>
+          </view>
+          <view class="dev-signal">
+            <text class="dev-signal-text">{{ d.rssi }} dBm</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="status == 'success'" class="bottom-area" :style="{ paddingBottom: `${safeBottom}px` }">
+      <ag-button label="完成" type="primary" @tap="handleDone"/>
+    </view>
+    <view v-else class="bottom-area" :style="{ paddingBottom: `${safeBottom}px` }">
+      <view class="skip-btn" @tap="handleBack" hover-class="btn-active">
+        <text class="skip-text">取消</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+type Device = { id: string; name: string; mac: string; rssi: number };
+type PairStatus = 'scanning' | 'found' | 'connecting' | 'success';
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      status: 'scanning' as PairStatus,
+      statusLabels: { scanning: '搜索中', found: '已发现', connecting: '连接中', success: '配对成功' },
+      titles: {
+        scanning: '正在搜索附近的 RWFit',
+        found: '发现 1 个设备',
+        connecting: '正在建立安全连接',
+        success: '配对成功',
+      },
+      descs: {
+        scanning: '请确保戒指已开机 · 距离手机不超过 3 米',
+        found: '点击设备开始配对',
+        connecting: '请勿关闭 App · 大约需要 5 秒',
+        success: '哨兵已上岗 · 开始持续守护',
+      },
+      wave1: 1.0 as number, op1: 0.5 as number,
+      wave2: 1.0 as number, op2: 0.3 as number,
+      animTimer: null as number | null,
+      foundDevices: [] as Device[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  onReady() {
+    this.startAnim();
+    // 3s 后发现设备
+    setTimeout(() => {
+      this.status = 'found';
+      this.foundDevices = [
+        { id: 'r1', name: 'RWFit R2 · 朵朵', mac: 'A4:C1:38:XX:XX:2F', rssi: -52 },
+      ];
+    }, 2500);
+  },
+  onUnload() {
+    if (this.animTimer != null) clearInterval(this.animTimer);
+  },
+  methods: {
+    startAnim() {
+      const start = Date.now();
+      this.animTimer = setInterval(() => {
+        const elapsed = (Date.now() - start) / 1000;
+        const t1 = (elapsed % 2) / 2;
+        this.wave1 = 0.9 + t1 * 0.5;
+        this.op1 = 0.55 * (1 - t1) + 0.05;
+        const t2 = ((elapsed + 0.8) % 2) / 2;
+        this.wave2 = 0.9 + t2 * 0.5;
+        this.op2 = 0.4 * (1 - t2) + 0.05;
+      }, 33);
+    },
+    selectDevice(id: string) {
+      this.status = 'connecting';
+      setTimeout(() => {
+        this.status = 'success';
+        if (this.animTimer != null) { clearInterval(this.animTimer); this.animTimer = null; }
+      }, 2000);
+    },
+    handleDone() { uni.reLaunch({ url: '/pages/home/home' }); },
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { width: 100%; height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 25%, rgba(255, 181, 71, 0.22) 0%, transparent 60%);
+  display: flex; flex-direction: column; }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 0; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.content { flex: 1; padding: 20px 24px 0; align-items: center; display: flex; flex-direction: column; }
+
+.ring-stage { width: 220px; height: 220px; align-items: center; justify-content: center; display: flex; flex-direction: row; position: relative; margin-bottom: 24px; }
+.wave { position: absolute; border-radius: 110px; border-width: 1.5px; border-style: solid; border-color: $sun-1; }
+.wave-1 { width: 220px; height: 220px; }
+.wave-2 { width: 220px; height: 220px; }
+.ring-icon { width: 130px; height: 130px; border-radius: 65px; background: $card; align-items: center; justify-content: center; display: flex; flex-direction: row; z-index: 5; box-shadow: 0 8px 20px rgba(245, 143, 50, 0.2); }
+.ring-img { width: 90px; height: 90px; }
+
+.status-tag { padding: 6px 14px; border-radius: 20px; display: flex; flex-direction: row; align-items: center; }
+.status-tag-scanning { background: $sun-wash; }
+.status-tag-found { background: $sky-wash; }
+.status-tag-connecting { background: $sun-wash; }
+.status-tag-success { background: $leaf-wash; }
+.status-dot { width: 6px; height: 6px; border-radius: 3px; margin-right: 6px; background: $sun-2; }
+.status-tag-success .status-dot { background: $leaf; }
+.status-tag-found .status-dot { background: $sky; }
+.status-tag-text { color: $sun-2; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; }
+.status-tag-success .status-tag-text { color: $leaf; }
+.status-tag-found .status-tag-text { color: $sky; }
+
+.scanning-title { margin-top: 14px; font-size: 20px; font-weight: 700; color: $ink; letter-spacing: -0.02em; text-align: center; }
+.scanning-desc { font-size: 12px; color: $ink-2; margin-top: 6px; line-height: 20px; text-align: center; }
+
+.devices { margin-top: 20px; width: 100%; }
+.device-card { padding: 14px 16px; background: $card; border-width: 1.5px; border-style: solid; border-color: $sun-1; border-radius: $r-md; display: flex; flex-direction: row; align-items: center; box-shadow: 0 4px 12px -4px rgba(245, 143, 50, 0.3); }
+.device-active { opacity: 0.85; }
+.dev-icon { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.dev-icon-glyph { color: #FFFFFF; font-size: 18px; font-weight: 700; }
+.dev-info { flex: 1; }
+.dev-name { font-size: 14px; font-weight: 700; color: $ink; letter-spacing: -0.01em; }
+.dev-mac { font-family: $font-num; font-size: 10px; color: $ink-2; margin-top: 3px; }
+.dev-signal { padding: 4px 8px; background: $leaf-wash; border-radius: 6px; }
+.dev-signal-text { color: $leaf; font-family: $font-num; font-size: 10px; font-weight: 700; }
+
+.bottom-area { padding: 20px 24px 0; }
+.skip-btn { padding: 12px 0; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.skip-text { color: $ink-3; font-size: 12px; }
+</style>

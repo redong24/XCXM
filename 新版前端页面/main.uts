@@ -1,0 +1,13 @@
+/**
+ * AsthmaGuard · Entry
+ * uni-app x 入口文件
+ */
+import App from './App.uvue';
+import { createSSRApp } from 'vue';
+
+export function createApp() {
+  const app = createSSRApp(App);
+  return {
+    app,
+  };
+}

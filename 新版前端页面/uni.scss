@@ -1,0 +1,166 @@
+/**
+ * AsthmaGuard · Design Tokens (SCSS side)
+ * ─────────────────────────────────────────────────────
+ * 依据 Phase 1 视觉设计 · V4 暖阳守护方案
+ * 与 mockups/v4/shared/tokens.css 保持 1:1 对应
+ *
+ * 约束：
+ *   1. $sun-1 是唯一强调色（品牌暖阳橙）
+ *   2. 分区 3 色（$zone-green/amber/red）只用于关注等级语义
+ *   3. 应用同时支持明暗双模式（.light / .dark class）
+ *   4. 报警详情页整屏 reskin 到 $alert-bg（唯一深色场景外的深色）
+ *   5. 禁止在页面里写裸十六进制，一律用变量
+ */
+
+// ═══════════════════════════════════════════════════════
+// PALETTE — 通用色彩（明暗共享的品牌色）
+// ═══════════════════════════════════════════════════════
+
+// Sunbeam Primary（品牌主色）
+$sun-1:    #FFB547; // 主色
+$sun-2:    #F58F32; // 深色（渐变尾）
+$sun-3:    #FFCF7A; // 浅色（渐变头）
+$sun-glow: rgba(255, 143, 50, 0.35);
+
+// Coral（次要 · 珊瑚温暖）
+$coral:   #FF8367;
+$coral-2: #E5574A; // = zone-red
+
+// Support
+$leaf:      #6BB280; // 明色下的健康绿
+$leaf-dark: #7ED397; // 暗色下的健康绿
+$sky:       #6FA6D4;
+
+// Zone triad（关注等级 · 严格保留语义）
+$zone-green: #6BB280;
+$zone-amber: #FFB547;
+$zone-red:   #E5574A;
+
+// Alert reskin（唯一深色 · 报警详情页专用）
+$alert-bg:       #2A1210;
+$alert-fg:       #FFF4F2;
+$alert-fg-2:     #E6C4BF;
+$alert-hairline: #4A2320;
+
+// ═══════════════════════════════════════════════════════
+// LIGHT MODE
+// ═══════════════════════════════════════════════════════
+
+$paper:      #FBF6EE;
+$paper-2:    #F5EDDF;
+$card:       #FFFFFF;
+$card-2:     #FDF9F1;
+$card-3:     #F5EDDF;
+$hairline:   #EFE5D0;
+$hairline-2: #E5D8BE;
+$ink:        #2B1E10;
+$ink-2:      #6B5A44;
+$ink-3:      #9C8B72;
+$ink-4:      #C8B896;
+$sun-wash:   #FFEDD1;
+$coral-wash: #FFDDD1;
+$leaf-wash:  #DFEEDF;
+
+// ═══════════════════════════════════════════════════════
+// DARK MODE — 通过 uni.scss 无法直接切换，需用 :root class
+// 页面用 SCSS mixin @include dark { ... } 处理
+// ═══════════════════════════════════════════════════════
+
+@mixin dark {
+  --paper:      #1A1410;
+  --paper-2:    #221C16;
+  --card:       #262019;
+  --card-2:     #2E2721;
+  --card-3:     #3A312A;
+  --hairline:   #3A312A;
+  --hairline-2: #4A3F35;
+  --ink:        #F5EDDD;
+  --ink-2:      #B8A896;
+  --ink-3:      #8A7A68;
+  --ink-4:      #5A4E42;
+  --sun-wash:      rgba(255, 181, 71, 0.14);
+  --coral-wash:    rgba(255, 131, 103, 0.15);
+  --leaf-wash:     rgba(126, 211, 151, 0.14);
+  --leaf-active:   #7ED397;
+}
+
+@mixin light {
+  --paper:      #FBF6EE;
+  --paper-2:    #F5EDDF;
+  --card:       #FFFFFF;
+  --card-2:     #FDF9F1;
+  --card-3:     #F5EDDF;
+  --hairline:   #EFE5D0;
+  --hairline-2: #E5D8BE;
+  --ink:        #2B1E10;
+  --ink-2:      #6B5A44;
+  --ink-3:      #9C8B72;
+  --ink-4:      #C8B896;
+  --sun-wash:      #FFEDD1;
+  --coral-wash:    #FFDDD1;
+  --leaf-wash:     #DFEEDF;
+  --leaf-active:   #6BB280;
+}
+
+// ═══════════════════════════════════════════════════════
+// TYPOGRAPHY
+// ═══════════════════════════════════════════════════════
+
+$font-body: 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC',
+  'Microsoft Yahei', sans-serif;
+$font-num: 'SF Pro Display', -apple-system, sans-serif;
+
+// Type scale
+$fs-h1: 22px;
+$fs-h2: 17px;
+$fs-body: 14px;
+$fs-label: 11px;
+$fs-utility: 10px;
+$fs-metric-xl: 46px;
+$fs-metric: 26px;
+$fs-metric-sm: 20px;
+
+// ═══════════════════════════════════════════════════════
+// SPACING (4-multiple)
+// ═══════════════════════════════════════════════════════
+
+$sp-1: 4px;
+$sp-2: 8px;
+$sp-3: 12px;
+$sp-4: 16px;
+$sp-5: 20px;
+$sp-6: 22px;
+$sp-7: 28px;
+$sp-8: 40px;
+
+// ═══════════════════════════════════════════════════════
+// RADII
+// ═══════════════════════════════════════════════════════
+
+$r-sm: 8px;
+$r-md: 14px;
+$r-lg: 18px;
+$r-xl: 22px;
+$r-round: 999px;
+
+// ═══════════════════════════════════════════════════════
+// TAP TARGETS (家长可能在慌乱中点击，加大)
+// ═══════════════════════════════════════════════════════
+
+$tap-min: 44px;
+$tap-primary: 56px;
+
+// ═══════════════════════════════════════════════════════
+// LEGACY ALIASES（过渡期兼容，页面全部改造后删除）
+// ═══════════════════════════════════════════════════════
+
+$accent: $sun-1;
+$brand-primary: $sun-1;
+$brand-success: $zone-green;
+$brand-warning: $zone-amber;
+$brand-danger: $zone-red;
+$text-main: $ink;
+$text-sub: $ink-2;
+$bg-page: $paper;
+$bg-card: $card;
+$hair-w: 1px;

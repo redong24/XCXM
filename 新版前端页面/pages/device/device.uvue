@@ -1,0 +1,509 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="page-h">
+      <text class="page-title">戒指设备</text>
+    </view>
+
+    <!-- 戒指展示 -->
+    <view class="device-hero">
+      <view class="device-halo"></view>
+      <image
+        class="device-img"
+        :src="ringStatus.connected ? '/static/icons/ring-lg.png' : '/static/icons/ring-lg-idle.png'"
+        mode="aspectFit"
+      />
+      <text class="device-model">{{ ringStatus.model }}</text>
+      <text class="device-sub">{{ kid.name }} 的戒指 · SN {{ ringStatus.serialNumber }}</text>
+      <view class="conn-tag" :class="{ 'conn-tag-off': !ringStatus.connected }">
+        <view class="conn-tag-dot"></view>
+        <text class="conn-tag-text">{{ ringStatus.connected ? '已连接' : '未连接' }}</text>
+      </view>
+    </view>
+
+    <!-- 电量卡 -->
+    <view class="battery-card">
+      <view class="battery-top">
+        <text class="battery-label">电量</text>
+        <view class="battery-value-row">
+          <text class="battery-value">{{ ringStatus.battery }}</text>
+          <text class="battery-unit">%</text>
+        </view>
+      </view>
+      <view class="battery-bar">
+        <view class="battery-fill" :style="{ width: `${ringStatus.battery}%` }"></view>
+      </view>
+      <text class="battery-est">预计续航 · 约 1 天 8 小时 · 上次充电 9 月 2 日</text>
+    </view>
+
+    <!-- 信号 + 同步 -->
+    <view class="status-row">
+      <view class="status-cell">
+        <view class="status-cell-top">
+          <view class="status-icon status-icon-signal">
+            <text class="status-icon-glyph">≣</text>
+          </view>
+          <text class="status-cell-label">信号</text>
+        </view>
+        <text class="status-cell-value status-cell-value-ok">信号强</text>
+        <text class="status-cell-sub">{{ ringStatus.signalDbm }} dBm · 蓝牙 5.0</text>
+      </view>
+      <view class="status-cell">
+        <view class="status-cell-top">
+          <view class="status-icon status-icon-sync">
+            <text class="status-icon-glyph">↻</text>
+          </view>
+          <text class="status-cell-label">同步</text>
+        </view>
+        <text class="status-cell-value">{{ lastSyncText }}</text>
+        <text class="status-cell-sub">数据实时上传中</text>
+      </view>
+    </view>
+
+    <!-- 设置列表 -->
+    <text class="sec-title">设备设置</text>
+
+    <view class="list">
+      <view class="list-item" @tap="openSampling" hover-class="list-item-active">
+        <view class="list-icon">
+          <text class="list-icon-glyph">⏱</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">数据采样频率</text>
+          <text class="list-desc">每分钟一次 · 更频繁将增加电量消耗</text>
+        </view>
+        <text class="list-val">1 次/分</text>
+        <text class="list-arrow">›</text>
+      </view>
+
+      <view class="list-item">
+        <view class="list-icon">
+          <text class="list-icon-glyph">◐</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">震动提醒</text>
+          <text class="list-desc">数值超出参考区间时震动腕间</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !vibrate }" @tap="vibrate = !vibrate">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+
+      <view class="list-item" @tap="openThreshold" hover-class="list-item-active">
+        <view class="list-icon">
+          <text class="list-icon-glyph">⚡</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">心率上限阈值</text>
+          <text class="list-desc">超过后触发关注等级提升</text>
+        </view>
+        <text class="list-val">140 bpm</text>
+        <text class="list-arrow">›</text>
+      </view>
+
+      <view class="list-item">
+        <view class="list-icon">
+          <text class="list-icon-glyph">↑</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">固件版本</text>
+          <text class="list-desc">最新版本 v2.4.1 已就绪</text>
+        </view>
+        <text class="list-val">v2.4.0</text>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 手动测量 CTA -->
+    <view class="cta-wrap">
+      <ag-button label="开始手动测量" type="primary" @tap="startMeasure" />
+    </view>
+
+    <!-- 解绑按钮 -->
+    <view class="disconnect-wrap" @tap="handleDisconnect" hover-class="disconnect-wrap-active">
+      <text class="disconnect-text">解除设备绑定</text>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 90px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { getRingStatus } from '@/composables/useRing';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+import { fmtRelativeTime } from '@/utils/format';
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      ringStatus: getRingStatus(),
+      vibrate: true as boolean,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  computed: {
+    lastSyncText(): string {
+      return fmtRelativeTime(this.ringStatus.lastSyncAt);
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    startMeasure() {
+      uni.navigateTo({ url: '/pages/measure/measuring' });
+    },
+    openThreshold() {
+      uni.navigateTo({ url: '/pages/threshold/threshold' });
+    },
+    openSampling() {
+      uni.showToast({ title: '采样频率设置', icon: 'none' });
+    },
+    handleDisconnect() {
+      uni.showModal({
+        title: '解除设备绑定',
+        content: '解除后哨兵将无法接收戒指数据。确定继续吗？',
+        confirmText: '解除',
+        confirmColor: '#E5574A',
+        success: (res) => {
+          if (res.confirm) {
+            uni.showToast({ title: '已解除绑定', icon: 'success' });
+          }
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.20) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.page-h {
+  padding: 6px $sp-6 12px;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+
+/* 戒指展示 */
+.device-hero {
+  align-items: center;
+  padding: 20px 0 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.device-halo {
+  position: absolute;
+  top: 0;
+  width: 240px;
+  height: 240px;
+  border-radius: 120px;
+  background: radial-gradient(circle,
+    rgba(255, 143, 50, 0.28) 0%,
+    transparent 65%);
+}
+.device-img {
+  width: 200px;
+  height: 200px;
+  z-index: 2;
+}
+.device-model {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  margin-top: 8px;
+}
+.device-sub {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 3px;
+}
+.conn-tag {
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: $leaf-wash;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.conn-tag-off {
+  background: rgba(156, 139, 114, 0.14);
+}
+.conn-tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 5px;
+}
+.conn-tag-off .conn-tag-dot { background: $ink-3; }
+.conn-tag-text {
+  font-size: 10px;
+  color: $leaf;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+.conn-tag-off .conn-tag-text { color: $ink-3; }
+
+/* Battery */
+.battery-card {
+  margin: 22px $sp-6 0;
+  padding: 18px 20px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+}
+.battery-top {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.battery-label {
+  font-size: 11px;
+  color: $ink-2;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.battery-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.battery-value {
+  font-family: $font-num;
+  font-size: 22px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 22px;
+}
+.battery-unit {
+  font-size: 12px;
+  color: $ink-2;
+  margin-left: 3px;
+}
+.battery-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: $card-3;
+  overflow: hidden;
+}
+.battery-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, $sun-3, $sun-1, $sun-2);
+}
+.battery-est {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 8px;
+}
+
+/* Status row */
+.status-row {
+  margin: 12px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+}
+.status-cell {
+  flex: 1;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  padding: 14px;
+  margin-right: 10px;
+}
+.status-cell:last-child { margin-right: 0; }
+.status-cell-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.status-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 8px;
+}
+.status-icon-glyph {
+  font-size: 14px;
+  color: $sun-2;
+  font-weight: 700;
+}
+.status-cell-label {
+  font-size: 11px;
+  color: $ink-2;
+}
+.status-cell-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  margin-top: 4px;
+}
+.status-cell-value-ok { color: $leaf; }
+.status-cell-sub {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 3px;
+}
+
+/* Section title */
+.sec-title {
+  padding: 22px $sp-6 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+
+/* List */
+.list {
+  margin: 0 $sp-6;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  overflow: hidden;
+}
+.list-item {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.list-item:last-child { border-bottom-width: 0; }
+.list-item-active { opacity: 0.7; }
+.list-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.list-icon-glyph {
+  color: $sun-2;
+  font-size: 18px;
+  font-weight: 700;
+}
+.list-body {
+  flex: 1;
+}
+.list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.list-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.list-val {
+  font-size: 12px;
+  color: $ink-2;
+  font-family: $font-num;
+  margin-right: 6px;
+}
+.list-arrow {
+  color: $ink-3;
+  font-size: 18px;
+}
+
+/* Toggle */
+.toggle {
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: $sun-1;
+  position: relative;
+}
+.toggle-off { background: $card-3; }
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.toggle-off .toggle-thumb {
+  right: auto;
+  left: 2px;
+}
+
+/* CTA & disconnect */
+.cta-wrap {
+  padding: 18px $sp-6 0;
+}
+.disconnect-wrap {
+  margin: 12px $sp-6 0;
+  padding: 14px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-xl;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.disconnect-wrap-active { opacity: 0.7; }
+.disconnect-text {
+  color: $zone-red;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

@@ -1,0 +1,432 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- Header -->
+    <view class="header">
+      <view class="back-btn" @tap="handleCancel" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <view class="header-center">
+        <text class="header-title">手动测量</text>
+        <text class="header-sub">{{ kid.name }} · RWFit R2</text>
+      </view>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 中央测量圈 -->
+    <view class="stage">
+      <!-- 三层波纹脉冲 -->
+      <view class="wave wave-1" :style="{ transform: `scale(${wave1Scale})`, opacity: wave1Opacity }"></view>
+      <view class="wave wave-2" :style="{ transform: `scale(${wave2Scale})`, opacity: wave2Opacity }"></view>
+      <view class="wave wave-3" :style="{ transform: `scale(${wave3Scale})`, opacity: wave3Opacity }"></view>
+
+      <!-- 进度圆环 (SVG) -->
+      <view class="progress-outer">
+        <view class="progress-bg"></view>
+        <view class="progress-inner">
+          <text class="step-label">READING</text>
+          <text class="countdown">{{ remainingSecs }}</text>
+          <text class="countdown-unit">s</text>
+          <text class="metric-tag">剩余时间</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 已读取的指标 chips -->
+    <view class="reading-chips">
+      <view class="chip" :class="{ 'chip-done': hrDone, 'chip-pending': !hrDone }">
+        <text class="chip-label">HR</text>
+        <view class="chip-value-row">
+          <text class="chip-value">{{ hrDone ? currentReading.hr : '—' }}</text>
+          <text v-if="hrDone" class="chip-unit">bpm</text>
+        </view>
+      </view>
+      <view class="chip" :class="{ 'chip-done': spo2Done, 'chip-pending': !spo2Done }">
+        <text class="chip-label">SpO₂</text>
+        <view class="chip-value-row">
+          <text class="chip-value">{{ spo2Done ? currentReading.spo2 : '—' }}</text>
+          <text v-if="spo2Done" class="chip-unit">%</text>
+        </view>
+      </view>
+      <view class="chip" :class="{ 'chip-done': breathDone, 'chip-pending': !breathDone }">
+        <text class="chip-label">呼吸</text>
+        <view class="chip-value-row">
+          <text class="chip-value">{{ breathDone ? currentReading.breath : '—' }}</text>
+          <text v-if="breathDone" class="chip-unit">次/分</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 说明卡 -->
+    <view class="instruction">
+      <text class="instruction-head">保持佩戴 · 请勿移动</text>
+      <text class="instruction-body">
+        戒指正在采集数据。<text class="instruction-bold">让{{ kid.name }}坐好，深呼吸</text>。{{ '\n' }}
+        30 秒后完成一次完整读数。
+      </text>
+    </view>
+
+    <!-- 底部取消 -->
+    <view class="bottom-action" :style="{ paddingBottom: `${safeBottom}px` }">
+      <view class="cancel-btn" @tap="handleCancel" hover-class="cancel-btn-active">
+        <text class="cancel-text">取消测量</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { getLatestReading, type RingReading } from '@/composables/useRing';
+
+const TOTAL_SECS = 30;
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      kid: getCurrentKid(),
+      // 倒计时
+      remainingSecs: TOTAL_SECS as number,
+      // Wave 动画状态
+      wave1Scale: 0.9 as number, wave1Opacity: 0.6 as number,
+      wave2Scale: 0.95 as number, wave2Opacity: 0.5 as number,
+      wave3Scale: 1.0 as number, wave3Opacity: 0.4 as number,
+      // 读取到的数据
+      currentReading: getLatestReading() as RingReading,
+      hrDone: false as boolean,
+      spo2Done: false as boolean,
+      breathDone: false as boolean,
+      // Timer
+      countdownTimer: null as number | null,
+      animTimer: null as number | null,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 20;
+  },
+  onReady() {
+    this.startMeasurement();
+  },
+  onUnload() {
+    this.stopMeasurement();
+  },
+  methods: {
+    startMeasurement() {
+      const startTime = Date.now();
+
+      // 动画 timer (60fps 脉冲)
+      this.animTimer = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        // 3 层脉冲，2s 一循环
+        const phase = (elapsed % 2) / 2 * 2 * Math.PI;
+        this.wave1Scale = 0.85 + 0.15 * (Math.sin(phase) + 1) / 2;
+        this.wave1Opacity = 0.6 * (1 - (Math.sin(phase) + 1) / 2) + 0.1;
+        const phase2 = ((elapsed + 0.5) % 2) / 2 * 2 * Math.PI;
+        this.wave2Scale = 0.85 + 0.15 * (Math.sin(phase2) + 1) / 2;
+        this.wave2Opacity = 0.5 * (1 - (Math.sin(phase2) + 1) / 2) + 0.1;
+        const phase3 = ((elapsed + 1) % 2) / 2 * 2 * Math.PI;
+        this.wave3Scale = 0.85 + 0.15 * (Math.sin(phase3) + 1) / 2;
+        this.wave3Opacity = 0.4 * (1 - (Math.sin(phase3) + 1) / 2) + 0.1;
+      }, 33);
+
+      // 倒计时 + 分阶段完成指标
+      this.countdownTimer = setInterval(() => {
+        this.remainingSecs -= 1;
+        // 到 20s 时 HR 完成
+        if (this.remainingSecs == 20 && !this.hrDone) {
+          this.hrDone = true;
+          this.currentReading = getLatestReading();
+        }
+        // 到 12s 时 SpO2 完成
+        if (this.remainingSecs == 12 && !this.spo2Done) {
+          this.spo2Done = true;
+          this.currentReading = getLatestReading();
+        }
+        // 到 0s 时呼吸完成，跳转到结果页
+        if (this.remainingSecs <= 0) {
+          this.breathDone = true;
+          this.currentReading = getLatestReading();
+          this.stopMeasurement();
+          setTimeout(() => {
+            uni.redirectTo({ url: '/pages/measure/result' });
+          }, 500);
+        }
+      }, 1000);
+    },
+    stopMeasurement() {
+      if (this.countdownTimer != null) {
+        clearInterval(this.countdownTimer);
+        this.countdownTimer = null;
+      }
+      if (this.animTimer != null) {
+        clearInterval(this.animTimer);
+        this.animTimer = null;
+      }
+    },
+    handleCancel() {
+      uni.showModal({
+        title: '取消测量？',
+        content: '当前测量数据将丢失',
+        confirmText: '取消测量',
+        confirmColor: '#E5574A',
+        success: (res) => {
+          if (res.confirm) {
+            this.stopMeasurement();
+            uni.navigateBack({});
+          }
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  width: 100%;
+  height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 20%, rgba(255, 181, 71, 0.25) 0%, transparent 60%);
+  position: relative;
+}
+.status-bar { width: 100%; }
+
+/* Header */
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-center {
+  flex: 1;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+}
+.header-title {
+  color: $ink;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.header-sub {
+  color: $ink-2;
+  font-size: 11px;
+  margin-top: 3px;
+}
+.placeholder-40 { width: 40px; }
+
+/* Stage */
+.stage {
+  margin-top: 40px;
+  height: 300px;
+  position: relative;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.wave {
+  position: absolute;
+  border-radius: 150px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $sun-1;
+}
+.wave-1 { width: 280px; height: 280px; }
+.wave-2 { width: 240px; height: 240px; }
+.wave-3 { width: 200px; height: 200px; }
+
+.progress-outer {
+  width: 200px;
+  height: 200px;
+  border-radius: 100px;
+  background-image: linear-gradient(135deg, $sun-3 0%, $sun-1 50%, $sun-2 100%);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 12px 30px rgba(245, 143, 50, 0.35);
+  position: relative;
+}
+.progress-bg {
+  position: absolute;
+  inset: 4px;
+  border-radius: 96px;
+  background: $card-2;
+}
+.progress-inner {
+  width: 170px;
+  height: 170px;
+  border-radius: 85px;
+  background: $card;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+  box-shadow: inset 0 -3px 8px rgba(245, 143, 50, 0.1);
+}
+.step-label {
+  font-size: 10px;
+  color: $sun-2;
+  letter-spacing: 0.24em;
+  font-weight: 700;
+}
+.countdown {
+  font-family: $font-num;
+  font-size: 66px;
+  font-weight: 300;
+  letter-spacing: -0.05em;
+  color: $ink;
+  line-height: 66px;
+  margin-top: 4px;
+}
+.countdown-unit {
+  font-size: 14px;
+  color: $ink-2;
+  margin-top: -6px;
+}
+.metric-tag {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+/* Reading chips */
+.reading-chips {
+  margin: 20px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+}
+.chip {
+  flex: 1;
+  padding: 12px 8px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 12px;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 10px;
+}
+.chip:last-child { margin-right: 0; }
+.chip-done {
+  border-color: $sun-1;
+  background: $sun-wash;
+}
+.chip-label {
+  font-size: 9px;
+  color: $ink-3;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+}
+.chip-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 4px;
+}
+.chip-value {
+  font-family: $font-num;
+  font-size: 18px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+}
+.chip-done .chip-value { color: $sun-2; }
+.chip-pending .chip-value { color: $ink-3; }
+.chip-unit {
+  font-size: 10px;
+  color: $ink-2;
+  margin-left: 2px;
+}
+
+/* Instruction card */
+.instruction {
+  margin: 20px $sp-6 0;
+  padding: 16px 20px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.instruction-head {
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.instruction-body {
+  font-size: 12px;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: 6px;
+  text-align: center;
+}
+.instruction-bold {
+  color: $sun-2;
+  font-weight: 600;
+}
+
+/* Bottom cancel */
+.bottom-action {
+  position: absolute;
+  left: $sp-5;
+  right: $sp-5;
+  bottom: 0;
+}
+.cancel-btn {
+  padding: 16px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-xl;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.cancel-btn-active { opacity: 0.7; }
+.cancel-text {
+  color: $ink-2;
+  font-size: 14px;
+  font-weight: 600;
+}
+</style>

@@ -1,0 +1,370 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">戒指离线</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 警示 icon + 呼吸波纹 -->
+    <view class="warn-hero">
+      <view class="warn-icon-wrap">
+        <view class="warn-ripple warn-ripple-1"></view>
+        <view class="warn-ripple warn-ripple-2"></view>
+        <view class="warn-icon">
+          <text class="warn-icon-glyph">◐</text>
+        </view>
+      </view>
+
+      <view class="warn-tag">
+        <view class="warn-tag-dot"></view>
+        <text class="warn-tag-text">哨兵已离岗</text>
+      </view>
+
+      <text class="warn-title">戒指已断开连接</text>
+      <text class="warn-desc">
+        {{ kid.name }}的 RWFit R2 已<text class="warn-highlight">离线 {{ offlineDuration }}</text>{{ '\n' }}重新连接以恢复守护
+      </text>
+    </view>
+
+    <!-- 状态详情卡 -->
+    <view class="status-card">
+      <view class="status-row">
+        <text class="status-label">设备</text>
+        <text class="status-value">RWFit R2 · {{ kid.name }}</text>
+      </view>
+      <view class="status-row status-row-divider">
+        <text class="status-label">最后信号</text>
+        <text class="status-value status-value-mono">{{ lastSignalTime }} · {{ offlineDuration }}前</text>
+      </view>
+      <view class="status-row status-row-divider">
+        <text class="status-label">最后位置</text>
+        <text class="status-value">向阳花幼儿园附近</text>
+      </view>
+      <view class="status-row status-row-divider">
+        <text class="status-label">最后电量</text>
+        <view class="status-value-row">
+          <view class="status-dot"></view>
+          <text class="status-value-warn">18% · 电量不足</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 可能原因 -->
+    <view class="tips-card">
+      <text class="tips-head">可能原因</text>
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text class="tip-text">戒指电量耗尽，需要充电</text>
+      </view>
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text class="tip-text">与手机距离超过 10 米</text>
+      </view>
+      <view class="tip-item">
+        <view class="tip-dot"></view>
+        <text class="tip-text">戒指被摘下或脱落</text>
+      </view>
+    </view>
+
+    <view style="height: 130px;"></view>
+  </scroll-view>
+
+  <!-- 底部按钮 -->
+  <view class="bottom-actions" :style="{ paddingBottom: `${safeBottom}px` }">
+    <ag-button label="重新连接" type="primary" @tap="handleReconnect" />
+    <view class="cancel-btn" @tap="handleBack" hover-class="cancel-btn-active">
+      <text class="cancel-text">我知道了 · 稍后再连</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      kid: getCurrentKid(),
+      lastSignalTime: '09:29' as string,
+      offlineDuration: '12 分钟' as string,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleReconnect() {
+      uni.showLoading({ title: '连接中...' });
+      setTimeout(() => {
+        uni.hideLoading();
+        uni.showToast({ title: '已重新连接', icon: 'success' });
+        setTimeout(() => uni.navigateBack({}), 800);
+      }, 2000);
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+/* 暖橙警示背景 · 非红色 · 属于第二类告警 */
+.page {
+  min-height: 100vh;
+  background: #F5EDE0;
+  background-image:
+    radial-gradient(60% 40% at 50% 10%, rgba(245, 143, 50, 0.35) 0%, transparent 65%),
+    linear-gradient(180deg, #F5EDE0 0%, #EDD8A8 100%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Warn hero */
+.warn-hero {
+  align-items: center;
+  padding: 40px 30px 0;
+  display: flex;
+  flex-direction: column;
+}
+.warn-icon-wrap {
+  width: 168px;
+  height: 168px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+.warn-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  background: radial-gradient(circle at 45% 30%, #FFB98A 0%, #F58F32 60%, #B85E1E 100%);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 0 60px rgba(245, 143, 50, 0.55);
+  z-index: 3;
+}
+.warn-icon-glyph {
+  color: #FFFFFF;
+  font-size: 60px;
+  font-weight: 700;
+  line-height: 60px;
+}
+.warn-ripple {
+  position: absolute;
+  border-radius: 100px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: rgba(245, 143, 50, 0.5);
+}
+.warn-ripple-1 { width: 144px; height: 144px; }
+.warn-ripple-2 {
+  width: 168px; height: 168px;
+  border-color: rgba(245, 143, 50, 0.3);
+}
+
+.warn-tag {
+  margin-top: 24px;
+  padding: 5px 14px;
+  background: rgba(245, 143, 50, 0.15);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(245, 143, 50, 0.4);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.warn-tag-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: $sun-2;
+  margin-right: 6px;
+}
+.warn-tag-text {
+  color: $sun-2;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+
+.warn-title {
+  color: $ink;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 14px;
+  text-align: center;
+}
+.warn-desc {
+  color: $ink-2;
+  font-size: 13px;
+  line-height: 20px;
+  margin-top: 10px;
+  text-align: center;
+}
+.warn-highlight {
+  color: $sun-2;
+  font-weight: 700;
+  font-family: $font-num;
+}
+
+/* Status card */
+.status-card {
+  margin: 24px $sp-5 0;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+}
+.status-row {
+  padding: 10px 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+.status-row-divider {
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+.status-label {
+  color: $ink-2;
+  font-size: 12px;
+}
+.status-value {
+  color: $ink;
+  font-size: 13px;
+  font-weight: 600;
+}
+.status-value-mono {
+  font-family: $font-num;
+}
+.status-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: $sun-2;
+  margin-right: 6px;
+}
+.status-value-warn {
+  color: $sun-2;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Tips card */
+.tips-card {
+  margin: 16px $sp-5 0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(245, 143, 50, 0.22);
+  border-radius: 12px;
+}
+.tips-head {
+  color: $sun-2;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.tip-item {
+  padding: 4px 0;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+.tip-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: $sun-2;
+  margin-right: 10px;
+  margin-top: 8px;
+}
+.tip-text {
+  flex: 1;
+  color: $ink;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* Bottom actions */
+.bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px $sp-5 0;
+  background: linear-gradient(180deg, rgba(245, 237, 224, 0) 0%, #EDD8A8 40%);
+}
+.cancel-btn {
+  padding: 12px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.cancel-btn-active { opacity: 0.7; }
+.cancel-text {
+  color: $ink-3;
+  font-size: 12px;
+}
+</style>

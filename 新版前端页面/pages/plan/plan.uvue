@@ -1,0 +1,388 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">哮喘行动计划</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 顶部 · 品牌 mark（三色卡）+ 当前区间 -->
+    <view class="plan-hero">
+      <view class="plan-mark">
+        <view class="band band-g">
+          <view class="marker"></view>
+        </view>
+        <view class="band band-y"></view>
+        <view class="band band-r"></view>
+      </view>
+      <view class="hero-title-row">
+        <text class="hero-name">{{ kid.name }}</text>
+        <text class="hero-rest">· 当前在</text>
+        <text class="hero-zone">绿色区</text>
+      </view>
+      <text class="hero-doctor">由张医生（浙大儿童医院）于 2026 年 6 月定制</text>
+    </view>
+
+    <!-- 三区卡 -->
+    <view class="zone-card zone-card-g">
+      <view class="zone-halo"></view>
+      <view class="zone-head-row">
+        <view>
+          <text class="zone-name">绿色区 · 稳定</text>
+          <text class="zone-desc">日常控制良好，坚持维持治疗</text>
+        </view>
+        <view class="zone-badge">
+          <view class="zone-badge-dot"></view>
+          <text class="zone-badge-text">现在</text>
+        </view>
+      </view>
+      <view class="criteria">
+        <text class="criteria-text">
+          呼吸频率 <text class="criteria-bold">20-30</text> 次/分 · 血氧 <text class="criteria-bold">≥ 95%</text> · 无咳嗽/喘息
+        </text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">1</text></view>
+        <text class="action-text">每日早晚 <text class="action-bold">吸入布地奈德 1 泵</text>，坚持维持治疗</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">2</text></view>
+        <text class="action-text">日常活动可正常进行，运动前 15 分钟可预防性使用沙丁胺醇</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">3</text></view>
+        <text class="action-text">避免接触已知过敏原（花粉、宠物、烟雾）</text>
+      </view>
+    </view>
+
+    <view class="zone-card zone-card-y">
+      <view class="zone-halo"></view>
+      <view class="zone-head-row">
+        <view>
+          <text class="zone-name">黄色区 · 需关注</text>
+          <text class="zone-desc">数值波动，需要立刻干预</text>
+        </view>
+      </view>
+      <view class="criteria">
+        <text class="criteria-text">
+          呼吸频率 <text class="criteria-bold">30-35</text> 次/分 · 血氧 <text class="criteria-bold">92-94%</text> · 或出现夜间咳嗽
+        </text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">1</text></view>
+        <text class="action-text">立即使用<text class="action-bold">沙丁胺醇 2 喷</text>，20 分钟后重新测量</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">2</text></view>
+        <text class="action-text">继续常规维持治疗，同时增加观察频率</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">3</text></view>
+        <text class="action-text">如 4 小时后数值未回到绿色区，联系医生</text>
+      </view>
+    </view>
+
+    <view class="zone-card zone-card-r">
+      <view class="zone-halo"></view>
+      <view class="zone-head-row">
+        <view>
+          <text class="zone-name">红色区 · 立即处理</text>
+          <text class="zone-desc">紧急情况，需要立刻行动</text>
+        </view>
+      </view>
+      <view class="criteria">
+        <text class="criteria-text">
+          呼吸频率 <text class="criteria-bold">&gt; 35</text> 次/分 · 血氧 <text class="criteria-bold">&lt; 92%</text> · 或严重喘息/发绀
+        </text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">1</text></view>
+        <text class="action-text">立即使用<text class="action-bold">沙丁胺醇 4-6 喷</text>，间隔 20 分钟</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">2</text></view>
+        <text class="action-text">保持孩子坐位，鼓励深呼吸，避免平躺</text>
+      </view>
+      <view class="action-item">
+        <view class="action-num"><text class="action-num-text">3</text></view>
+        <text class="action-text">如症状未改善或加重，请<text class="action-bold">立即前往医院急诊</text></text>
+      </view>
+    </view>
+
+    <text class="disclaimer">{{ disclaimerPlan }}</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { DISCLAIMER_PLAN } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      disclaimerPlan: DISCLAIMER_PLAN,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Plan hero */
+.plan-hero {
+  align-items: center;
+  padding: 20px 22px 8px;
+  display: flex;
+  flex-direction: column;
+}
+.plan-mark {
+  width: 80px;
+  height: 96px;
+  border-radius: 16px;
+  background: $card;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 30px -8px rgba(60, 40, 20, 0.15);
+}
+.band {
+  flex: 1;
+  border-radius: 6px;
+  margin-bottom: 4px;
+  position: relative;
+}
+.band:last-child { margin-bottom: 0; }
+.band-g { background: linear-gradient(135deg, #8DD5A5, $leaf); }
+.band-y { background: linear-gradient(135deg, #FFD68C, $sun-1); }
+.band-r { background: linear-gradient(135deg, #FF9E8D, $zone-red); }
+.marker {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  margin-top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: #FFFFFF;
+}
+.hero-title-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 18px;
+}
+.hero-name {
+  font-size: 15px;
+  color: $ink;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.hero-rest {
+  font-size: 15px;
+  color: $ink;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.hero-zone {
+  font-size: 15px;
+  color: $leaf;
+  font-weight: 700;
+  margin-left: 4px;
+}
+.hero-doctor {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+/* Zone card */
+.zone-card {
+  margin: 12px $sp-6 0;
+  padding: 20px;
+  border-radius: $r-md;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 8px 20px -6px rgba(60, 40, 20, 0.2);
+}
+.zone-halo {
+  position: absolute;
+  top: -30px;
+  right: -20px;
+  width: 140px;
+  height: 140px;
+  border-radius: 70px;
+  background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, transparent 55%);
+}
+.zone-card-g {
+  background: linear-gradient(135deg, #8DD5A5, #4A8F65);
+}
+.zone-card-y {
+  background: linear-gradient(135deg, #FFD68C, #D67F1E);
+}
+.zone-card-r {
+  background: linear-gradient(135deg, #FF9E8D, #C43A2F);
+}
+.zone-head-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.zone-name {
+  color: #FFFFFF;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.zone-desc {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  margin-top: 3px;
+}
+.zone-badge {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.25);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.zone-badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: #FFFFFF;
+  margin-right: 5px;
+}
+.zone-badge-text {
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+/* Criteria */
+.criteria {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+.criteria-text {
+  color: #FFFFFF;
+  font-size: 12px;
+  line-height: 18px;
+}
+.criteria-bold {
+  font-family: $font-num;
+  font-weight: 700;
+  color: #FFFFFF;
+}
+
+/* Action item */
+.action-item {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 4px 0;
+}
+.action-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.28);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.4);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 10px;
+  margin-top: 1px;
+}
+.action-num-text {
+  color: #FFFFFF;
+  font-family: $font-num;
+  font-size: 11px;
+  font-weight: 700;
+}
+.action-text {
+  flex: 1;
+  color: #FFFFFF;
+  font-size: 13px;
+  line-height: 19px;
+}
+.action-bold {
+  font-weight: 700;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 11px;
+  color: $ink-3;
+  margin: 24px $sp-6 0;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+</style>

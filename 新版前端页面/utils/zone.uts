@@ -1,0 +1,64 @@
+/**
+ * AsthmaGuard · Zone judgement
+ * 根据监测数值判定关注等级（绿 / 黄 / 红）
+ *
+ * 参考区间来源于用户在 pages/threshold/ 中的自定义配置
+ * （默认值遵循儿科哮喘指南通用参考范围）
+ */
+
+export type Zone = 'green' | 'amber' | 'red';
+
+export type Thresholds = {
+  breath: { greenMin: number; greenMax: number; amberMax: number };
+  spo2:   { greenMin: number; amberMin: number };
+  hr:     { max: number };
+};
+
+// 6 岁儿童默认阈值（可在 pages/threshold/ 覆盖）
+export const DEFAULT_THRESHOLDS: Thresholds = {
+  breath: { greenMin: 20, greenMax: 30, amberMax: 35 },
+  spo2:   { greenMin: 95, amberMin: 92 },
+  hr:     { max: 140 },
+};
+
+export function zoneOfBreath(value: number, t: Thresholds = DEFAULT_THRESHOLDS): Zone {
+  if (value >= t.breath.greenMin && value <= t.breath.greenMax) return 'green';
+  if (value > t.breath.greenMax && value <= t.breath.amberMax) return 'amber';
+  return 'red';
+}
+
+export function zoneOfSpo2(value: number, t: Thresholds = DEFAULT_THRESHOLDS): Zone {
+  if (value >= t.spo2.greenMin) return 'green';
+  if (value >= t.spo2.amberMin) return 'amber';
+  return 'red';
+}
+
+export function zoneOfHr(value: number, t: Thresholds = DEFAULT_THRESHOLDS): Zone {
+  if (value >= t.hr.max) return 'red';
+  return 'green';
+}
+
+// 综合：任何一项红 = 整体红；任何一项黄 = 整体黄；否则绿
+export function zoneOverall(
+  breath: number, spo2: number, hr: number,
+  t: Thresholds = DEFAULT_THRESHOLDS,
+): Zone {
+  const zones = [zoneOfBreath(breath, t), zoneOfSpo2(spo2, t), zoneOfHr(hr, t)];
+  if (zones.includes('red')) return 'red';
+  if (zones.includes('amber')) return 'amber';
+  return 'green';
+}
+
+// Zone → 颜色
+export function zoneColor(zone: Zone): string {
+  if (zone == 'red') return '#E5574A';
+  if (zone == 'amber') return '#FFB547';
+  return '#6BB280';
+}
+
+// Zone → 中文标签
+export function zoneLabel(zone: Zone): string {
+  if (zone == 'red') return '红色关注';
+  if (zone == 'amber') return '黄色关注';
+  return '绿色区';
+}

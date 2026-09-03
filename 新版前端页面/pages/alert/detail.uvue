@@ -1,0 +1,534 @@
+<template>
+  <!-- 整屏 reskin 到深红色 · 是全应用唯一的深色页面 -->
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 头部 · 返回 + 关注等级标题 -->
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">关注等级 · 提升</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 警示图 + 呼吸波纹 -->
+    <view class="alert-hero">
+      <view class="alert-icon-wrap">
+        <view class="alert-ripple alert-ripple-1"></view>
+        <view class="alert-ripple alert-ripple-2"></view>
+        <view class="alert-icon">
+          <text class="alert-icon-glyph">!</text>
+        </view>
+      </view>
+
+      <view class="alert-zone-tag">
+        <view class="zone-dot"></view>
+        <text class="zone-tag-text">红色关注区</text>
+      </view>
+
+      <text class="alert-title">
+        {{ kid.name }}的呼吸数值超出参考区间
+      </text>
+      <text class="alert-subtitle">
+        触发于 <text class="alert-time">{{ triggerTime }}</text> · 已持续 {{ duration }}
+      </text>
+    </view>
+
+    <!-- 触发时的监测数值 -->
+    <view class="trigger-card">
+      <text class="trigger-label">当前监测数值</text>
+      <view class="trigger-row">
+        <view class="metric-block">
+          <text class="m-name">呼吸频率</text>
+          <view class="m-val-row">
+            <text class="m-val">36</text>
+            <text class="m-unit">次/分</text>
+          </view>
+          <text class="m-cmp m-cmp-warn">↑ 参考区间 20-30</text>
+        </view>
+        <view class="metric-block metric-block-divider">
+          <text class="m-name">血氧</text>
+          <view class="m-val-row">
+            <text class="m-val">92</text>
+            <text class="m-unit">%</text>
+          </view>
+          <text class="m-cmp m-cmp-warn">↓ 参考区间 ≥ 95</text>
+        </view>
+        <view class="metric-block metric-block-divider">
+          <text class="m-name">心率</text>
+          <view class="m-val-row">
+            <text class="m-val">128</text>
+            <text class="m-unit">bpm</text>
+          </view>
+          <text class="m-cmp m-cmp-ok">— 参考区间</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 现在要做的（三步骤）-->
+    <text class="steps-title">现在要做的</text>
+
+    <view class="step step-done">
+      <view class="step-num step-num-done">
+        <text class="step-num-glyph">✓</text>
+      </view>
+      <view class="step-body">
+        <text class="step-action step-action-done">检查{{ kid.name }}是否清醒 · 观察呼吸</text>
+        <text class="step-detail">你已在 03:13 完成</text>
+      </view>
+      <text class="step-status step-status-done">已完成</text>
+    </view>
+
+    <view class="step step-active">
+      <view class="step-num step-num-active">
+        <text class="step-num-text">2</text>
+      </view>
+      <view class="step-body">
+        <text class="step-action">按行动计划服用缓解药物</text>
+        <text class="step-detail">沙丁胺醇气雾剂 · 2 喷 · 间隔 20 分钟可再次使用</text>
+      </view>
+      <text class="step-status step-status-active">进行中</text>
+    </view>
+
+    <view class="step">
+      <view class="step-num">
+        <text class="step-num-text">3</text>
+      </view>
+      <view class="step-body">
+        <text class="step-action">10 分钟后重新测量</text>
+        <text class="step-detail">{{ disclaimerStep3 }}</text>
+      </view>
+    </view>
+
+    <!-- 合规声明 -->
+    <view class="disclosure-card">
+      <text class="disclosure-text">{{ disclaimerTop }}</text>
+    </view>
+
+    <view style="height: 120px;"></view>
+  </scroll-view>
+
+  <!-- 底部固定 CTA -->
+  <view class="bottom-actions" :style="{ paddingBottom: `${safeBottom}px` }">
+    <view class="cta-secondary" @tap="logMedication" hover-class="cta-secondary-active">
+      <text class="cta-secondary-text">记录用药</text>
+    </view>
+    <view class="cta-primary" @tap="handleAcknowledge" hover-class="cta-primary-active">
+      <text class="cta-primary-text">我知道了 · 已处理</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { DISCLAIMER_ALERT_TOP, DISCLAIMER_ALERT_STEP3 } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      kid: getCurrentKid(),
+      triggerTime: '03:12:47' as string,
+      duration: '2 分 13 秒' as string,
+      disclaimerTop: DISCLAIMER_ALERT_TOP,
+      disclaimerStep3: DISCLAIMER_ALERT_STEP3,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() {
+      uni.navigateBack({});
+    },
+    logMedication() {
+      uni.navigateTo({ url: '/pages/symptom/symptom' });
+    },
+    handleAcknowledge() {
+      uni.showModal({
+        title: '确认已处理',
+        content: '标记为已处理后，此提醒将进入历史记录。',
+        confirmText: '已处理',
+        success: (res) => {
+          if (res.confirm) {
+            uni.showToast({ title: '已标记处理', icon: 'success' });
+            setTimeout(() => uni.navigateBack({}), 800);
+          }
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+/* 整屏警示深红重皮 · 全应用唯一的深色页面 */
+.page {
+  min-height: 100vh;
+  background: $alert-bg;
+  background-image:
+    radial-gradient(60% 45% at 50% 8%, rgba(255, 100, 80, 0.35) 0%, transparent 65%);
+}
+.status-bar { width: 100%; }
+
+/* Header */
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: rgba(255, 244, 242, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 244, 242, 0.15);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $alert-fg;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $alert-fg;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Alert hero */
+.alert-hero {
+  align-items: center;
+  padding: 24px 20px 0;
+  display: flex;
+  flex-direction: column;
+}
+.alert-icon-wrap {
+  width: 160px;
+  height: 160px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+}
+.alert-icon {
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  background: radial-gradient(circle at 45% 30%, #FF8878 0%, #E5574A 60%, #A82F26 100%);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 0 60px rgba(229, 87, 74, 0.55);
+  z-index: 3;
+}
+.alert-icon-glyph {
+  color: $alert-fg;
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 52px;
+}
+.alert-ripple {
+  position: absolute;
+  border-radius: 100px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: rgba(255, 100, 80, 0.5);
+}
+.alert-ripple-1 {
+  width: 144px;
+  height: 144px;
+}
+.alert-ripple-2 {
+  width: 168px;
+  height: 168px;
+  border-color: rgba(255, 100, 80, 0.3);
+}
+
+.alert-zone-tag {
+  margin-top: 24px;
+  padding: 5px 14px;
+  background: rgba(255, 100, 80, 0.2);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 100, 80, 0.4);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.zone-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: #FF8878;
+  margin-right: 6px;
+}
+.zone-tag-text {
+  color: #FF8878;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+}
+
+.alert-title {
+  color: $alert-fg;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 32px;
+  margin-top: 14px;
+  text-align: center;
+}
+.alert-subtitle {
+  color: $alert-fg-2;
+  font-size: 13px;
+  margin-top: 8px;
+  text-align: center;
+}
+.alert-time {
+  color: #FF8878;
+  font-weight: 600;
+  font-family: $font-num;
+}
+
+/* Trigger card */
+.trigger-card {
+  margin: 22px $sp-5 0;
+  padding: 18px 20px;
+  background: rgba(20, 6, 5, 0.5);
+  border-width: 1px;
+  border-style: solid;
+  border-color: $alert-hairline;
+  border-radius: $r-md;
+}
+.trigger-label {
+  color: $alert-fg-2;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.trigger-row {
+  display: flex;
+  flex-direction: row;
+}
+.metric-block {
+  flex: 1;
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+.metric-block-divider {
+  padding-left: 12px;
+  border-left-width: 1px;
+  border-left-style: solid;
+  border-left-color: $alert-hairline;
+}
+.m-name {
+  color: $alert-fg-2;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.m-val-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.m-val {
+  color: $alert-fg;
+  font-family: $font-num;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 30px;
+}
+.m-unit {
+  color: $alert-fg-2;
+  font-size: 12px;
+  margin-left: 3px;
+}
+.m-cmp {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 5px;
+  letter-spacing: 0.02em;
+}
+.m-cmp-warn { color: #FF8878; }
+.m-cmp-ok { color: #A5D6A7; }
+
+/* Steps */
+.steps-title {
+  color: $alert-fg;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 24px $sp-5 12px;
+}
+.step {
+  margin: 0 $sp-5 10px;
+  padding: 14px 16px;
+  background: rgba(20, 6, 5, 0.4);
+  border-width: 1px;
+  border-style: solid;
+  border-color: $alert-hairline;
+  border-radius: $r-md;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+.step-done {
+  background: rgba(107, 178, 128, 0.08);
+  border-color: rgba(107, 178, 128, 0.3);
+}
+.step-active {
+  background: rgba(255, 143, 50, 0.15);
+  border-color: rgba(255, 181, 71, 0.5);
+}
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: rgba(255, 244, 242, 0.1);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 244, 242, 0.2);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 14px;
+}
+.step-num-done {
+  background: $leaf;
+  border-color: $leaf;
+}
+.step-num-active {
+  background: $sun-1;
+  border-color: $sun-3;
+}
+.step-num-text {
+  color: $alert-fg;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: $font-num;
+}
+.step-num-done .step-num-text,
+.step-num-active .step-num-text { color: #FFFFFF; }
+.step-num-glyph {
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 700;
+}
+.step-num-active .step-num-text {
+  color: #2B1E10;
+}
+.step-body { flex: 1; }
+.step-action {
+  color: $alert-fg;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.step-action-done {
+  color: $alert-fg-2;
+}
+.step-detail {
+  color: $alert-fg-2;
+  font-size: 11px;
+  line-height: 17px;
+  margin-top: 4px;
+}
+.step-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  align-self: center;
+}
+.step-status-done { color: #A5D6A7; }
+.step-status-active { color: $sun-1; }
+
+/* Disclosure card */
+.disclosure-card {
+  margin: 20px $sp-5 0;
+  padding: 12px 16px;
+  background: rgba(230, 196, 191, 0.06);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(230, 196, 191, 0.15);
+  border-radius: 12px;
+}
+.disclosure-text {
+  color: $alert-fg-2;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+}
+
+/* Bottom fixed actions */
+.bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 $sp-5;
+  display: flex;
+  flex-direction: row;
+  background: linear-gradient(180deg, rgba(42, 18, 16, 0) 0%, $alert-bg 30%);
+  padding-top: 20px;
+}
+.cta-secondary {
+  padding: 16px 18px;
+  background: rgba(255, 244, 242, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 244, 242, 0.15);
+  border-radius: $r-xl;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 10px;
+}
+.cta-secondary-active { opacity: 0.85; }
+.cta-secondary-text {
+  color: $alert-fg;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cta-primary {
+  flex: 1;
+  padding: 16px 20px;
+  background-image: linear-gradient(135deg, $sun-1 0%, $sun-2 100%);
+  border-radius: $r-xl;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 12px 30px -8px rgba(255, 143, 50, 0.55);
+}
+.cta-primary-active { opacity: 0.9; }
+.cta-primary-text {
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+</style>

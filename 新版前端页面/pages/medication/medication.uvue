@@ -1,0 +1,421 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">药品库</text>
+      <view class="add-btn" @tap="handleAdd" hover-class="add-btn-active">
+        <text class="add-icon">+</text>
+      </view>
+    </view>
+
+    <!-- 顶部统计 -->
+    <view class="summary-row">
+      <view class="summary-cell">
+        <text class="summary-n">3</text>
+        <text class="summary-l">在用药品</text>
+      </view>
+      <view class="summary-cell">
+        <text class="summary-n summary-n-warn">4</text>
+        <text class="summary-l">本周用药次数</text>
+      </view>
+      <view class="summary-cell">
+        <text class="summary-n summary-n-red">12</text>
+        <text class="summary-l">天后过期</text>
+      </view>
+    </view>
+
+    <!-- 药品卡列表 -->
+    <view
+      v-for="med in medications"
+      :key="med.id"
+      class="med-card"
+      :class="{ 'med-card-active': med.active }"
+    >
+      <view class="med-top">
+        <view class="pill-icon" :class="`pill-icon-${med.type}`">
+          <text class="pill-icon-glyph">{{ med.icon }}</text>
+        </view>
+        <view class="med-info">
+          <view class="med-name-row">
+            <text class="med-name">{{ med.name }}</text>
+            <view class="type-tag" :class="`type-tag-${med.type}`">
+              <text class="type-tag-text" :class="`type-tag-text-${med.type}`">{{ med.typeLabel }}</text>
+            </view>
+          </view>
+          <text class="med-brand">{{ med.brand }}</text>
+        </view>
+      </view>
+      <view class="med-details">
+        <view class="detail-cell">
+          <text class="detail-l">单次剂量</text>
+          <view class="detail-v-row">
+            <text class="detail-v">{{ med.dose }}</text>
+            <text class="detail-vu">{{ med.doseUnit }}</text>
+          </view>
+        </view>
+        <view class="detail-cell">
+          <text class="detail-l">{{ med.freqLabel }}</text>
+          <text class="detail-v-text">{{ med.freq }}</text>
+        </view>
+        <view class="detail-cell">
+          <text class="detail-l">剩余</text>
+          <view class="detail-v-row">
+            <text class="detail-v" :class="{ 'detail-v-warn': med.remainingLow }">{{ med.remaining }}</text>
+            <text class="detail-vu">{{ med.remainingUnit }}</text>
+          </view>
+        </view>
+      </view>
+      <view v-if="med.lastUsed != ''" class="med-last-used">
+        <text class="med-last-icon">⏱</text>
+        <text class="med-last-text">{{ med.lastUsed }}</text>
+      </view>
+    </view>
+
+    <text class="disclaimer">药品剂量请严格遵医嘱 · 本记录仅供参考</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+type Medication = {
+  id: string;
+  name: string;
+  brand: string;
+  type: 'rescue' | 'maintain' | 'controller';
+  typeLabel: string;
+  icon: string;
+  dose: string;
+  doseUnit: string;
+  freqLabel: string;
+  freq: string;
+  remaining: string;
+  remainingUnit: string;
+  remainingLow: boolean;
+  active: boolean;
+  lastUsed: string;
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      medications: [
+        {
+          id: 'm1',
+          name: '沙丁胺醇气雾剂',
+          brand: 'Salbutamol · 100μg / 喷 · 万托林',
+          type: 'rescue',
+          typeLabel: '缓解',
+          icon: '↯',
+          dose: '2',
+          doseUnit: '喷',
+          freqLabel: '最小间隔',
+          freq: '20 分钟',
+          remaining: '156',
+          remainingUnit: '喷',
+          remainingLow: false,
+          active: true,
+          lastUsed: '最近使用 · 9 月 1 日 03:15 · 关注等级触发 · 2 喷',
+        },
+        {
+          id: 'm2',
+          name: '布地奈德吸入剂',
+          brand: 'Budesonide · 100μg / 泵 · 普米克令舒',
+          type: 'maintain',
+          typeLabel: '维持',
+          icon: '◐',
+          dose: '1',
+          doseUnit: '泵',
+          freqLabel: '使用频率',
+          freq: '每日 2 次',
+          remaining: '42',
+          remainingUnit: '泵',
+          remainingLow: false,
+          active: false,
+          lastUsed: '今晚 20:00 · 下次维持治疗',
+        },
+        {
+          id: 'm3',
+          name: '孟鲁司特钠',
+          brand: 'Montelukast · 4mg / 片 · 顺尔宁',
+          type: 'controller',
+          typeLabel: '控制',
+          icon: '✓',
+          dose: '1',
+          doseUnit: '片',
+          freqLabel: '使用频率',
+          freq: '睡前',
+          remaining: '6',
+          remainingUnit: '天',
+          remainingLow: true,
+          active: false,
+          lastUsed: '',
+        },
+      ] as Medication[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleAdd() { uni.showToast({ title: '添加药品', icon: 'none' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.add-btn {
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.add-btn-active { opacity: 0.7; }
+.add-icon {
+  color: $sun-2;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+/* Summary strip */
+.summary-row {
+  margin: 8px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+}
+.summary-cell {
+  flex: 1;
+  padding: 12px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 8px;
+}
+.summary-cell:last-child { margin-right: 0; }
+.summary-n {
+  font-family: $font-num;
+  font-size: 20px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+}
+.summary-n-warn { color: $sun-2; }
+.summary-n-red { color: $zone-red; }
+.summary-l {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* Med card */
+.med-card {
+  margin: 12px $sp-6 0;
+  padding: 18px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+}
+.med-card-active {
+  border-width: 2px;
+  border-color: $sun-1;
+  padding: 17px;
+  box-shadow: 0 8px 20px -6px rgba(245, 143, 50, 0.35);
+}
+.med-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.pill-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 14px;
+}
+.pill-icon-rescue {
+  background: linear-gradient(135deg, #A2CCE8, $sky);
+  box-shadow: 0 4px 10px rgba(90, 148, 191, 0.3);
+}
+.pill-icon-maintain {
+  background: linear-gradient(135deg, $sun-3, $sun-2);
+  box-shadow: 0 4px 10px rgba(245, 143, 50, 0.3);
+}
+.pill-icon-controller {
+  background: linear-gradient(135deg, #B9DFC7, $leaf);
+  box-shadow: 0 4px 10px rgba(107, 178, 128, 0.3);
+}
+.pill-icon-glyph {
+  color: #FFFFFF;
+  font-size: 22px;
+  font-weight: 700;
+}
+.med-info { flex: 1; }
+.med-name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.med-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+  margin-right: 8px;
+}
+.type-tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.type-tag-rescue { background: rgba(90, 148, 191, 0.14); }
+.type-tag-maintain { background: $sun-wash; }
+.type-tag-controller { background: $leaf-wash; }
+.type-tag-text {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.type-tag-text-rescue { color: $sky; }
+.type-tag-text-maintain { color: $sun-2; }
+.type-tag-text-controller { color: $leaf; }
+.med-brand {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 3px;
+}
+
+.med-details {
+  padding-top: 14px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  display: flex;
+  flex-direction: row;
+}
+.detail-cell {
+  flex: 1;
+  padding-right: 8px;
+}
+.detail-l {
+  font-size: 10px;
+  color: $ink-3;
+  letter-spacing: 0.04em;
+}
+.detail-v-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 3px;
+}
+.detail-v {
+  font-family: $font-num;
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+  line-height: 14px;
+}
+.detail-v-warn { color: $zone-red; }
+.detail-vu {
+  font-size: 10px;
+  color: $ink-2;
+  margin-left: 2px;
+}
+.detail-v-text {
+  font-size: 12px;
+  color: $ink;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.med-last-used {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: $card-2;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.med-last-icon {
+  color: $ink-3;
+  font-size: 12px;
+  margin-right: 6px;
+}
+.med-last-text {
+  flex: 1;
+  font-size: 11px;
+  color: $ink-2;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin: 20px $sp-6 0;
+  letter-spacing: 0.04em;
+}
+</style>

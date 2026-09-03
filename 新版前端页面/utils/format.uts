@@ -1,0 +1,48 @@
+/**
+ * AsthmaGuard · Formatters
+ * 数字、时间的格式化工具
+ */
+
+// 数字加单位（用于监测数值展示）
+export function fmtMetric(value: number, unit: string): string {
+  return `${value}${unit}`;
+}
+
+// 时间戳 → "12 秒前 / 3 分钟前 / 昨天 14:32"
+export function fmtRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = Math.floor((now - timestamp) / 1000);
+
+  if (diff < 60) return `${diff} 秒前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  if (diff < 172800) return '昨天';
+
+  const date = new Date(timestamp);
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+// 时长（秒）→ "6 小时 24 分"
+export function fmtDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h} 小时 ${m} 分`;
+  return `${m} 分`;
+}
+
+// 电池百分比 → 颜色 hex
+export function fmtBatteryColor(percent: number): string {
+  if (percent >= 30) return '#6BB280';  // leaf
+  if (percent >= 15) return '#FFB547';  // sun
+  return '#E5574A';                     // coral / red
+}
+
+// 时间戳 → "9 月 3 日 09:41"
+export function fmtDateTime(timestamp: number): string {
+  const d = new Date(timestamp);
+  const mo = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${mo} 月 ${day} 日 ${h}:${m}`;
+}

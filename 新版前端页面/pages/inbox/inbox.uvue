@@ -1,0 +1,133 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">消息中心</text>
+      <view class="mark-btn" @tap="handleMarkAll" hover-class="btn-active">
+        <text class="mark-text">全部已读</text>
+      </view>
+    </view>
+
+    <!-- 分类 tabs -->
+    <view class="tabs">
+      <view v-for="t in tabs" :key="t.key" class="tab-cell" :class="{ 'tab-active': tab == t.key }" @tap="tab = t.key">
+        <text class="tab-text" :class="{ 'tab-text-active': tab == t.key }">{{ t.label }}</text>
+        <view v-if="t.unread > 0" class="tab-badge"><text class="tab-badge-text">{{ t.unread }}</text></view>
+      </view>
+    </view>
+
+    <!-- 消息列表 -->
+    <view v-for="msg in filteredMsgs" :key="msg.id" class="msg-item" @tap="openMsg(msg)" hover-class="msg-active">
+      <view class="msg-icon" :class="`msg-icon-${msg.type}`">
+        <text class="msg-icon-glyph">{{ msg.icon }}</text>
+      </view>
+      <view class="msg-body">
+        <view class="msg-head">
+          <text class="msg-title" :class="{ 'msg-title-unread': !msg.read }">{{ msg.title }}</text>
+          <text class="msg-time">{{ msg.time }}</text>
+        </view>
+        <text class="msg-preview">{{ msg.preview }}</text>
+      </view>
+      <view v-if="!msg.read" class="unread-dot"></view>
+    </view>
+
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+type MsgTab = { key: string; label: string; unread: number };
+type Message = { id: string; type: 'alert' | 'system' | 'family' | 'promo';
+  icon: string; title: string; preview: string; time: string; read: boolean };
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      tab: 'all' as string,
+      tabs: [
+        { key: 'all',    label: '全部',   unread: 5 },
+        { key: 'alert',  label: '关注',   unread: 2 },
+        { key: 'system', label: '系统',   unread: 2 },
+        { key: 'family', label: '家庭',   unread: 1 },
+      ] as MsgTab[],
+      allMsgs: [
+        { id: '1', type: 'alert', icon: '!', title: '关注等级红色 · 呼吸 36 次/分',
+          preview: '9/3 03:12 · 已用药 · 已恢复', time: '9/3 03:12', read: false },
+        { id: '2', type: 'family', icon: '⌂', title: '妈妈刚刚查看了朵朵的档案',
+          preview: '家庭成员操作提醒', time: '30 分钟前', read: false },
+        { id: '3', type: 'system', icon: '↑', title: 'AsthmaGuard v1.2.0 已发布',
+          preview: '新增语音提醒 · 优化图表性能', time: '今天 09:00', read: false },
+        { id: '4', type: 'alert', icon: '⚠', title: '关注等级黄色 · SpO₂ 93%',
+          preview: '9/2 22:45 · 已缓解 · 无需操作', time: '9/2 22:45', read: false },
+        { id: '5', type: 'system', icon: 'i', title: '每周数据摘要',
+          preview: '朵朵本周共 12 天数据平稳 · 1 次关注', time: '昨天', read: false },
+        { id: '6', type: 'family', icon: '⌂', title: '爸爸接受了家庭邀请',
+          preview: '现在可以共同查看朵朵的数据', time: '3 天前', read: true },
+      ] as Message[],
+    };
+  },
+  computed: {
+    filteredMsgs(): Message[] {
+      if (this.tab == 'all') return this.allMsgs;
+      return this.allMsgs.filter((m): boolean => m.type == this.tab);
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleMarkAll() {
+      this.allMsgs.forEach((m): void => { m.read = true; });
+      this.tabs.forEach((t): void => { t.unread = 0; });
+      uni.showToast({ title: '全部已读', icon: 'success' });
+    },
+    openMsg(msg: Message) {
+      msg.read = true;
+      if (msg.type == 'alert') uni.navigateTo({ url: '/pages/alert/detail' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 8px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.mark-btn { padding: 8px 12px; }
+.mark-text { color: $sun-2; font-size: 12px; font-weight: 600; }
+.btn-active { opacity: 0.7; }
+
+.tabs { padding: 6px $sp-6; display: flex; flex-direction: row; }
+.tab-cell { padding: 8px 14px; margin-right: 6px; border-radius: 20px; background: $card-2; display: flex; flex-direction: row; align-items: center; }
+.tab-active { background-image: linear-gradient(135deg, $sun-1, $sun-2); box-shadow: 0 3px 8px rgba(245, 143, 50, 0.3); }
+.tab-text { font-size: 12px; color: $ink; font-weight: 500; }
+.tab-text-active { color: #FFFFFF; font-weight: 700; }
+.tab-badge { margin-left: 6px; padding: 1px 6px; background: $zone-red; border-radius: 8px; }
+.tab-active .tab-badge { background: rgba(255,255,255,0.3); }
+.tab-badge-text { color: #FFFFFF; font-size: 9px; font-weight: 700; font-family: $font-num; }
+
+.msg-item { margin: 8px $sp-6 0; padding: 14px 16px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; display: flex; flex-direction: row; align-items: flex-start; }
+.msg-active { opacity: 0.9; }
+.msg-icon { width: 36px; height: 36px; border-radius: 10px; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.msg-icon-alert { background: linear-gradient(135deg, $coral, $zone-red); }
+.msg-icon-system { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.msg-icon-family { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.msg-icon-promo { background: linear-gradient(135deg, #B9DFC7, $leaf); }
+.msg-icon-glyph { color: #FFFFFF; font-size: 14px; font-weight: 700; }
+.msg-body { flex: 1; }
+.msg-head { display: flex; flex-direction: row; align-items: baseline; justify-content: space-between; }
+.msg-title { font-size: 14px; color: $ink; font-weight: 500; letter-spacing: -0.01em; flex: 1; }
+.msg-title-unread { font-weight: 700; }
+.msg-time { font-family: $font-num; font-size: 10px; color: $ink-3; margin-left: 8px; }
+.msg-preview { font-size: 12px; color: $ink-2; margin-top: 3px; line-height: 18px; }
+.unread-dot { width: 8px; height: 8px; border-radius: 4px; background: $sun-2; margin-left: 8px; align-self: center; }
+</style>
