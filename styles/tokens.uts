@@ -41,6 +41,18 @@ export const ALERT_HAIRLINE: string = '#4A2320'
  */
 export type Zone = 'green' | 'amber' | 'red'
 
+/**
+ * 行动计划的来源。可信度的关键：界面必须标出来源与日期。
+ * 'doctor' 医生录入（优先并覆盖默认） | 'default' 内置通用非药物安抚措施
+ *
+ * 为什么定义在这里而不是 types/display.uts：
+ *   planDisclaimer() 要按来源给出责任口径文案，而依赖方向是
+ *   display.uts -> tokens.uts（单向）。若 tokens 反过来 import PlanSource
+ *   就会形成循环依赖。PlanSource 与 Zone / SentinelState 同属值域枚举，
+ *   本来就该和它们放在一起。
+ */
+export type PlanSource = 'doctor' | 'default'
+
 /** 分区 -> 主色 */
 export function zoneColor(z: Zone): string {
   if (z == 'red') { return ZONE_RED }
@@ -134,5 +146,20 @@ export const DISCLAIMER_LONG: string =
   '本应用提供健康参考，不构成医疗建议。本应用不是医疗器械，不用于疾病的诊断或治疗。'
 export const DISCLAIMER_ALERT: string = '以下为设备监测到的数值变化，供参考'
 export const DISCLAIMER_SEEK_CARE: string = '如症状持续请及时就医'
-export const DISCLAIMER_PLAN: string = '本内容由您的医生录入'
+/** 医生录入的行动计划专用。只有确实存在医生录入的内容时才允许出现这句。 */
+export const DISCLAIMER_PLAN_DOCTOR: string = '本内容由您的医生录入'
+/** 内置通用安抚措施专用。
+ * 为什么必须有这一条：§5 规定默认来源是内置文案，医生 AAP 只是可选覆盖，
+ * 而后端 B6（action_plans 表）本批不做，所以首个版本里所有用户看到的都是内置内容。
+ * 此时若沿用「本内容由您的医生录入」，就是把本应用自己写的内容伪装成医嘱，
+ * 这比没有免责声明更糟，正是 §11.1 要防的事。 */
+export const DISCLAIMER_PLAN_DEFAULT: string =
+  '通用参考内容，非医生医嘱。请让医生把行动计划录入本应用'
 export const DISCLAIMER_THRESHOLD: string = '阈值为参考区间，请以医生意见为准'
+
+/** 按来源返回行动计划的责任口径文案。
+ * 收在 tokens 里而不是写在页面上：预警详情页与行动计划页都要用同一句，
+ * 分开写就会漂移，而这一页的全部可信度都建立在来源标注的准确上。 */
+export function planDisclaimer(src: PlanSource): string {
+  return src == 'doctor' ? DISCLAIMER_PLAN_DOCTOR : DISCLAIMER_PLAN_DEFAULT
+}

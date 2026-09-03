@@ -1,0 +1,171 @@
+/**
+ * 行动计划：内置通用安抚措施 + 医生录入的 AAP（优先覆盖）。
+ *
+ * 为什么是本地存储而不是后端表：
+ *   计划书 §6 B6 明确「本批不做」，行动计划持久化（新表 action_plans）
+ *   排在第二批，先落 uni.getStorage 避免单批改动过大。
+ *   所以这里的读写接口刻意做成与后端无关的形状，将来接 B6 只需换掉
+ *   loadDoctorPlan / saveDoctorPlan 的实现，页面与预警详情页不用动。
+ *
+ * 医学内容的边界（写死在本文件，不允许其他地方另写一份）：
+ *   内置文案**只包含非药物、非剂量、纯行为性**的措施。
+ *   不出现任何药名、剂量、吸入次数、用药时机判断。
+ *   涉及药物的一律指向「按医生给的行动计划」，由医生的 AAP 承担这部分。
+ *   理由：§11.1 禁止医疗建议与治疗方案，而剂量与用药时机正是治疗方案本身。
+ */
+
+import type { PlanStep, PlanZone } from '../types/display.uts'
+import type { PlanSource, Zone } from '../styles/tokens.uts'
+import { zoneColor, zoneLabel } from '../styles/tokens.uts'
+import { asObject, asObjectArray } from '../common/request.uts'
+
+/** 医生行动计划在本地存储中的键。 */
+const PLAN_KEY = 'doctorActionPlan'
+
+/**
+ * 内置通用安抚措施。
+ *
+ * 三个分区的 criteria 刻意只描述**家长能直接观察到的外在表现**
+ * （能不能说话、能不能平躺、嘴唇颜色），不写任何数值区间。
+ * 数值判断归 alert_engine 与报警设置页，两处各写一套阈值必然漂移。
+ */
+function defaultZones(): PlanZone[] {
+  const green: PlanStep[] = [
+    { order: 1, text: '照常活动、上学、运动' } as PlanStep,
+    { order: 2, text: '按医生安排继续使用日常维持用药，不要自行停药' } as PlanStep,
+    { order: 3, text: '留意近期的诱因：换季、灰尘、宠物、烟味、剧烈运动' } as PlanStep
+  ]
+  const amber: PlanStep[] = [
+    { order: 1, text: '停下正在做的活动，找个安静的地方坐下' } as PlanStep,
+    { order: 2, text: '让孩子坐直，身体略向前倾，不要躺平' } as PlanStep,
+    { order: 3, text: '离开可能的诱因：烟味、冷空气、灰尘、动物' } as PlanStep,
+    { order: 4, text: '陪在旁边，用平缓的语气说话，帮助孩子放松' } as PlanStep,
+    { order: 5, text: '按医生给的行动计划处理用药，本应用不提供用药建议' } as PlanStep,
+    { order: 6, text: '观察是否好转，记录开始的时间' } as PlanStep
+  ]
+  const red: PlanStep[] = [
+    { order: 1, text: '让孩子坐直，不要躺下，不要独自留他一个人' } as PlanStep,
+    { order: 2, text: '解开衣领、腰带等收紧的衣物，保持空气流通' } as PlanStep,
+    { order: 3, text: '按医生给的行动计划处理用药，本应用不提供用药建议' } as PlanStep,
+    { order: 4, text: '如症状持续请及时就医；出现说话困难、嘴唇发青、无法平躺时尽快就医' } as PlanStep
+  ]
+
+  return [
+    {
+      zone: 'green',
+      zoneColor: zoneColor('green'),
+      zoneText: zoneLabel('green'),
+      criteria: '能正常说话和活动，夜里不因咳嗽或气促醒来',
+      steps: green
+    } as PlanZone,
+    {
+      zone: 'amber',
+      zoneColor: zoneColor('amber'),
+      zoneText: zoneLabel('amber'),
+      criteria: '咳嗽或气促比平时明显，活动后加重，夜里被憋醒',
+      steps: amber
+    } as PlanZone,
+    {
+      zone: 'red',
+      zoneColor: zoneColor('red'),
+      zoneText: zoneLabel('red'),
+      criteria: '说话只能说短句，无法平躺，安静时也费力',
+      steps: red
+    } as PlanZone
+  ]
+}
+
+/**
+ * 医生录入的行动计划（本地）。返回 null 表示没有录入过。
+ *
+ * 解析失败一律当作「没有」，而不是抛错：
+ * 这一页在红区预警时也要能打开，宁可回落到内置文案，也不能因为
+ * 一段坏掉的本地 JSON 让家长看到一个空白页面。
+ */
+function loadDoctorRaw(): UTSJSONObject | null {
+  const s = uni.getStorageSync(PLAN_KEY) as string
+  if (s == null || s == '') { return null }
+  try {
+    // 必须走 asObject 而不是 JSON.parse(s) as UTSJSONObject。
+    // 注意（勿回退）：JSON.parse 在 Android/Kotlin 侧返回的是 UTSJSONObject，
+    // 裸强转就是 Phase A 那个登录崩溃（UTSJSONObject cannot be cast to X）
+    // 的同一个 CCE 隐患。asObject 内部带 try/catch 兜底。
+    return asObject(JSON.parse(s))
+  } catch (e) {
+    return null
+  }
+}
+
+/** 当前生效的来源。医生录入存在即为 'doctor'。 */
+export function currentPlanSource(): PlanSource {
+  return loadDoctorRaw() != null ? 'doctor' : 'default'
+}
+
+/** 医生录入的日期（形如 '2026-08-12'）。无则空串。 */
+export function doctorPlanDate(): string {
+  const o = loadDoctorRaw()
+  if (o == null) { return '' }
+  const d = o!['date']
+  if (d == null) { return '' }
+  return `${d}`
+}
+
+/**
+ * 当前生效的三个分区。
+ * 医生录入优先并整体覆盖，不做逐分区合并：
+ * 半份医生计划 + 半份内置文案会产出一份谁都没批准过的东西。
+ */
+export function currentPlanZones(): PlanZone[] {
+  const o = loadDoctorRaw()
+  if (o == null) { return defaultZones() }
+
+  const list = asObjectArray(o!['zones'])
+  if (list.length == 0) { return defaultZones() }
+
+  const out: PlanZone[] = []
+  for (let i = 0; i < list.length; i++) {
+    const z = list[i]
+    const zn = `${z['zone']}`
+    // 值域收窄：本地存储可能被写坏，非法分区名一律丢弃而不是硬转成 Zone
+    if (zn != 'green' && zn != 'amber' && zn != 'red') { continue }
+    // 必须显式标注 Zone。三元表达式会被推导成 string，
+    // 而下面要把它传给 zoneColor(z: Zone) / zoneLabel(z: Zone)，
+    // string 传 Zone 在 Kotlin 严格类型下直接编译失败。
+    const zz: Zone = zn == 'red' ? 'red' : (zn == 'amber' ? 'amber' : 'green')
+
+    const steps: PlanStep[] = []
+    const sl = asObjectArray(z['steps'])
+    for (let j = 0; j < sl.length; j++) {
+      const st = sl[j]['text']
+      if (st == null) { continue }
+      // order 用遍历序号而不读存储里的值：存储被写坏时序号可能重复，
+      // 而模板拿它做 :key，重复 key 会让列表渲染错位。
+      steps.push({ order: steps.length + 1, text: `${st}` } as PlanStep)
+    }
+
+    out.push({
+      zone: zz,
+      zoneColor: zoneColor(zz),
+      zoneText: zoneLabel(zz),
+      criteria: z['criteria'] != null ? `${z['criteria']}` : '',
+      steps: steps
+    } as PlanZone)
+  }
+
+  return out.length > 0 ? out : defaultZones()
+}
+
+/**
+ * 取某个分区的步骤，供预警详情页的 B 段使用。
+ * 预警详情只展示当前分区的那一组，不展示全部三组。
+ */
+export function planStepsFor(z: Zone): PlanStep[] {
+  // 形参收紧为 Zone 而不是 string：内部要做 zones[i].zone == z 比较，
+  // 而 zone 字段本身就是 Zone。用 string 会变成跨类型比较，
+  // 在 Kotlin 严格类型下是不必要的风险，且会放过非法分区名。
+  const zones = currentPlanZones()
+  for (let i = 0; i < zones.length; i++) {
+    if (zones[i].zone == z) { return zones[i].steps }
+  }
+  return []
+}

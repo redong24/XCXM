@@ -1,7 +1,12 @@
 <template>
   <!-- 全应用唯一的深色界面。换肤本身即报警语义（Theme Lock 的唯一例外），
-       不得复用到任何非报警场景。 -->
-  <view class="alert-page">
+       不得复用到任何非报警场景。
+
+       根节点是 scroll-view 而不是 view：App 端 vdom 页面默认不可滚动
+       （doc.dcloud.net.cn/uni-app-x/page.html）。本页 A + B + D 三段共同存在，
+       光 B 段红区就有 4 步，D 段还有四个表单字段，必然超一屏。
+       用 view 的后果是「记录这次发作」永远触达不到，D 整段失效。 -->
+  <scroll-view class="alert-page" :scroll-y="true">
     <view class="topbar">
       <text class="back" @click="goBack">返回</text>
       <text class="clock">{{ timeText }}</text>
@@ -10,31 +15,43 @@
     <!-- 顶部口径：说清这是监测数值，不是诊断 -->
     <text class="notice">{{ DISCLAIMER_ALERT }}</text>
 
-    <view class="head">
+    <text v-if="loading" class="hint">正在读取这条预警…</text>
+    <text v-if="loadErr != ''" class="hint">{{ loadErr }}</text>
+
+    <view v-if="!loading && loadErr == ''" class="head">
       <text class="zone">{{ zoneText }}</text>
-      <text class="who">{{ subjectText }}</text>
+      <text v-if="subjectText != ''" class="who">{{ subjectText }}</text>
       <text class="reading">{{ readingText }}</text>
+      <!-- alerts 表无持续时长列，本轮恒为空串故整行不渲染，见 script 注释 -->
       <text v-if="durationText != ''" class="dur">{{ durationText }}</text>
     </view>
 
-    <!-- A：知道并消除。唯一主按钮，最大命中区 -->
-    <view class="ack" @click="acknowledge">
-      <text class="ack-text">我知道了，消除警报</text>
+    <!-- A：知道并消除。唯一主按钮，最大命中区。
+         已消除后换成静态确认块，不再是可点的按钮：
+         留着一个点了没反应的大红按钮，会让人怀疑是不是没消除成功。 -->
+    <view v-if="!loading && loadErr == '' && !acked" class="ack" @click="acknowledge">
+      <text class="ack-text">{{ acking ? '正在消除…' : '我知道了，消除警报' }}</text>
+    </view>
+    <view v-if="acked" class="acked">
+      <text class="acked-text">已消除</text>
     </view>
 
     <!-- B：动作指引。编号步骤 + 来源标注 -->
-    <view class="block">
+    <view v-if="!loading && loadErr == ''" class="block">
       <text class="block-title">现在要做的</text>
       <view v-for="s in steps" :key="s.order" class="step">
         <text class="step-no">{{ s.order }}</text>
         <text class="step-text">{{ s.text }}</text>
       </view>
       <text class="source">{{ sourceText }}</text>
+      <!-- 来源口径：内置文案与医生医嘱必须区分，否则等于把本应用写的内容
+           伪装成医嘱。文案按来源从 tokens.planDisclaimer() 取，不在此写死。 -->
+      <text class="source">{{ planNote }}</text>
       <text class="seek">{{ DISCLAIMER_SEEK_CARE }}</text>
     </view>
 
     <!-- D：记录这次发作 -->
-    <view class="block">
+    <view v-if="!loading && loadErr == ''" class="block">
       <text class="block-title">记录这次发作</text>
 
       <text class="field-label">严重程度</text>
@@ -64,32 +81,47 @@
       <input class="remark" v-model="remark" type="text" placeholder="可不填" />
 
       <view class="save" @click="saveLog">
-        <text class="save-text">保存日志</text>
+        <!-- 保存后文案改为「再记录一次」而不是「可修改」：
+             feedbackApi.submit 是 POST，再点是新增第二条记录而不是修改那一条。
+             后端没有 PUT /api/feedbacks/{id}，写「可修改」就是骗人。 -->
+        <text class="save-text">{{ saving ? '正在保存…' : (logged ? '再记录一次' : '保存日志') }}</text>
       </view>
     </view>
-  </view>
+    <!-- 尾部留白：滚到底时保存按钮不贴在屏幕最下沿 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
-import { DISCLAIMER_ALERT, DISCLAIMER_SEEK_CARE } from '../../styles/tokens.uts'
+import {
+  DISCLAIMER_ALERT, DISCLAIMER_SEEK_CARE,
+  zoneFromLevel, zoneLabel, planDisclaimer
+} from '../../styles/tokens.uts'
 import type { PlanStep } from '../../types/display.uts'
+import { alertApi, feedbackApi, childApi } from '../../api/index.uts'
+import type { AlertInfo, FeedbackPayload } from '../../api/index.uts'
+import { planStepsFor, currentPlanSource, doctorPlanDate } from '../../store/plan.uts'
 
-// 骨架说明（C5 实现时删除）：
-//   这一页要跑通 A + B + D 闭环，依赖三件事：
-//     1. 路由参数 alert_id（从推送点击或日志列表进来）
-//     2. 后端 B4：feedbacks 增加 alert_id 外键，才能把发作日志挂到这条预警上
-//     3. 行动计划：医生录入的 AAP 优先，否则用内置通用非药物安抚措施
-//   在 B4 落地前不接 API，避免写出一份将来必然要推翻的提交逻辑。
+const alertId = ref<number>(0)
+const loading = ref<boolean>(true)
+const loadErr = ref<string>('')
 
 const timeText = ref<string>('')
-const zoneText = ref<string>('红区预警')
+// 初值刻意留空而不是「红区预警」：在真实分区取回来之前，
+// 预填「红区」会让一条黄区预警在加载的那一瞬间显示成红区，
+// 而这一页的整个存在意义就是告诉家长「严重到什么程度」。
+const zoneText = ref<string>('')
 const subjectText = ref<string>('')
 const readingText = ref<string>('')
+// alerts 表没有任何持续时长字段（只有 created_at），去抖逻辑要等 C6 的后端 B5。
+// 所以本轮这一行不渲染，而不是显示「持续 0 秒」。线框图 §4.4 里的
+// 「持续 45 秒」在本轮无数据源，编一个数字出来比不显示更糟。
 const durationText = ref<string>('')
 
 const steps = ref<PlanStep[]>([])
 const sourceText = ref<string>('')
+const planNote = ref<string>('')
 
 // 严重程度 1 到 4，与后端 feedbacks.feedback_level 对齐。
 // 模板不能调用带参数的函数，所以候选值预先摊平成数组。
@@ -97,6 +129,14 @@ const levelOptions = ref<number[]>([1, 2, 3, 4])
 const level = ref<number>(0)
 const saba = ref<number>(-1)
 const remark = ref<string>('')
+
+const acking = ref<boolean>(false)
+const saving = ref<boolean>(false)
+const acked = ref<boolean>(false)
+const logged = ref<boolean>(false)
+// D 段挂到哪个看护对象名下。取自预警本身的 user_id，
+// 而不是当前登录用户：家长看孩子的预警时，记录必须记在孩子名下。
+const subjectId = ref<number>(0)
 
 function pickLevel(n: number) {
   level.value = n
@@ -110,18 +150,153 @@ function goBack() {
   uni.navigateBack()
 }
 
-function acknowledge() {
-  // TODO(C5): PUT /api/alerts/{id} 置为已处理，然后回到哨兵页
-  uni.showToast({ title: '消除警报随预警闭环一并上线', icon: 'none' })
+/** 指标中文名。与 history.uvue 的映射保持一致。 */
+function alertTypeLabel(type: string): string {
+  const map = new Map<string, string>()
+  map.set('hr_high', '心率过高')
+  map.set('hr_low', '心率过低')
+  map.set('bo_low', '血氧过低')
+  map.set('cv_hr', '心率互验告警')
+  map.set('cv_bo', '血氧互验告警')
+  map.set('cv_hrv', 'HRV互验告警')
+  return map.get(type) ?? type
 }
 
-function saveLog() {
-  // TODO(C5): POST /api/feedbacks/ 带 alert_id（依赖后端 B4）
-  uni.showToast({ title: '发作日志随后端 alert_id 一并上线', icon: 'none' })
+function formatClock(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const h = d.getHours()
+    const m = d.getMinutes()
+    const hh = h < 10 ? `0${h}` : `${h}`
+    const mm = m < 10 ? `0${m}` : `${m}`
+    return `${hh}:${mm}`
+  } catch (e) {
+    return ''
+  }
 }
 
-onMounted(() => {
-  // TODO(C5): 读路由参数 alert_id 并拉取这条预警
+/** 把一条预警铺进界面。 */
+function apply(a: AlertInfo, nameOf: Map<number, string>) {
+  const z = zoneFromLevel(a.level)
+  // 「红区预警」而不是「风险等级 3」：§11.1 术语表禁用「风险等级」
+  zoneText.value = `${zoneLabel(z)}预警`
+  timeText.value = formatClock(a.created_at)
+  subjectId.value = a.user_id
+  acked.value = a.status != '待处理'
+
+  const metric = alertTypeLabel(a.alert_type)
+  // 数值与阈值都可能为 null（后端 value/threshold 是可空列），
+  // 缺失时只显示指标名，不显示「null」也不显示「--」。
+  // Math.round 取整：这两列在库里是 float，85.0 直接内插在 Kotlin 侧
+  // 会渲染成「85.0」。心率血氧都是整数语义，小数点纯属噪音。
+  // 这与 C4 的 relativeTimeText 渲染出「3.5166 分钟前」是同一类问题。
+  const v = a.value
+  const th = a.threshold
+  let reading = metric
+  if (v != null) {
+    reading = `${metric} ${Math.round(v!)}`
+    if (th != null) {
+      reading = `${reading}（阈值 ${Math.round(th!)}）`
+    }
+  }
+  readingText.value = reading
+  // 名单里查不到时置空串，模板对应的那一行用 v-if 整行不渲染。
+  // 不写成 who != '' ? who : '' 那种同义反复（C4 已犯过一次同类错误）。
+  subjectText.value = nameOf.get(a.user_id) ?? ''
+
+  // B 段：只取当前分区的那一组步骤
+  steps.value = planStepsFor(z)
+  const src = currentPlanSource()
+  planNote.value = planDisclaimer(src)
+  if (src == 'doctor') {
+    const d = doctorPlanDate()
+    sourceText.value = d != '' ? `医生行动计划 · ${d}` : '医生行动计划'
+  } else {
+    sourceText.value = '内置通用安抚措施'
+  }
+}
+
+async function load() {
+  loading.value = true
+  loadErr.value = ''
+  try {
+    // 串行两个请求：详情给内容，名单给「是谁」。
+    // 这里确实多花一个 RTT。没有改成并发，是因为项目里还没有任何
+    // Promise.all 的先例，而三批客户端代码至今没在 HBuilderX 编译过；
+    // 在这种页面引入未验证的新机制，风险大于省下的那一个 RTT。
+    // TODO(编译验证通过后): 若 Promise.all 在本项目可用，改为并发。
+    const a = await alertApi.detail(alertId.value)
+    const kids = await childApi.mine()
+    const nameOf = new Map<number, string>()
+    for (let i = 0; i < kids.length; i++) {
+      nameOf.set(kids[i].id, kids[i].name)
+    }
+    apply(a, nameOf)
+  } catch (e) {
+    loadErr.value = `${e}`
+  }
+  loading.value = false
+}
+
+/** A：知道并消除。 */
+async function acknowledge() {
+  if (acking.value || acked.value) { return }
+  acking.value = true
+  try {
+    await alertApi.resolve(alertId.value)
+    acked.value = true
+    uni.showToast({ title: '已消除', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: `消除失败：${e}`, icon: 'none' })
+  }
+  acking.value = false
+}
+
+/** D：记录这次发作。 */
+async function saveLog() {
+  if (saving.value) { return }
+  if (level.value == 0) {
+    uni.showToast({ title: '请先选择严重程度', icon: 'none' })
+    return
+  }
+  saving.value = true
+  try {
+    const payload: FeedbackPayload = {
+      // 记到预警所属的看护对象名下，不是记到当前登录账号名下
+      user_id: subjectId.value,
+      feedback_level: level.value,
+      saba_usage: saba.value >= 0 ? saba.value : null,
+      remark: remark.value != '' ? remark.value : null,
+      alert_id: alertId.value
+    }
+    await feedbackApi.submit(payload)
+    logged.value = true
+    uni.showToast({ title: '已记录', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: `记录失败：${e}`, icon: 'none' })
+  }
+  saving.value = false
+}
+
+onLoad((options) => {
+  // 官方写法是下标取值（见 doc.dcloud.net.cn/uni-app-x/page.html 的 props 示例）。
+  // 下标返回 any | null，直接 as string 在缺参时会抛异常
+  // （见 uts/keywords.html「值为 null 时强制转换为 string 会引发异常」），
+  // 所以先判空再用模板字符串取字面量，最后走 parseInt。
+  const raw = options['id']
+  if (raw == null) {
+    loading.value = false
+    loadErr.value = '缺少预警编号'
+    return
+  }
+  const n = parseInt(`${raw}`)
+  if (isNaN(n) || n <= 0) {
+    loading.value = false
+    loadErr.value = '预警编号无效'
+    return
+  }
+  alertId.value = n
+  load()
 })
 </script>
 
@@ -159,6 +334,16 @@ onMounted(() => {
   font-size: $fs-utility;
   color: $alert-fg-2;
   margin-bottom: $sp-4;
+}
+
+.hint {
+  font-size: $fs-body;
+  color: $alert-fg-2;
+  margin-top: $sp-5;
+}
+
+.tail {
+  height: $sp-6;
 }
 
 .head {
@@ -203,6 +388,23 @@ onMounted(() => {
   font-size: $fs-title;
   color: $alert-fg;
   font-weight: 600;
+}
+
+/* 已消除态：描边而非实色填充。
+ * 保持与主按钮相同的高度，避免消除后整页内容上跳。 */
+.acked {
+  min-height: $tap-primary;
+  border-radius: $r-md;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $alert-hairline;
+  align-items: center;
+  justify-content: center;
+}
+
+.acked-text {
+  font-size: $fs-body;
+  color: $alert-fg-2;
 }
 
 .block {

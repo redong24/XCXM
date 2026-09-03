@@ -109,8 +109,6 @@ export type PlanZone = {
   steps: PlanStep[]
 }
 
-/**
- * 行动计划的来源。可信度的关键：界面必须标出来源与日期。
- * 'doctor' 医生录入（优先并覆盖默认） | 'default' 内置通用非药物安抚措施
- */
-export type PlanSource = 'doctor' | 'default'
+// PlanSource 已移至 styles/tokens.uts：planDisclaimer() 需要它，
+// 而依赖方向是 display.uts -> tokens.uts，反向 import 会形成循环依赖。
+// 页面请从 tokens.uts 导入 PlanSource。
