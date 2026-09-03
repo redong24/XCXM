@@ -41,6 +41,43 @@ export type ChildDisplay = {
 }
 
 /**
+ * 首页哨兵条的完整渲染状态。
+ *
+ * 为什么把它整个打包成一个 type，而不是在页面里散着放 ref：
+ *   哨兵条要同时回答三个问题（有事吗 / 数据新不新 / 哨兵在不在岗），
+ *   这三者必须**同一时刻一致**。分开放会出现「风险已更新但时间戳还是旧的」
+ *   这种半更新状态，而哨兵条恰恰是靠一致性建立可信度的。
+ */
+export type SentinelView = {
+  /** 当前看护对象 */
+  personId: number
+  personName: string
+
+  /** 风险分区（由未处理预警的最高 level 折算） */
+  zone: Zone
+  zoneColor: string
+  /** 分区文案。无预警时为「无预警」而不是「安全区」，见 §11.1 */
+  zoneText: string
+  /** 是否真有未处理预警。false 时哨兵条标记停在左端且不上色 */
+  hasPending: boolean
+
+  /** 填充比例 0-100，整数。模板里按它算宽度，绝不用百分比数学以外的写法 */
+  fillPercent: number
+
+  /** 「12 秒前」。无任何读数时为空串，界面据此隐藏整行而不是显示「--」 */
+  freshText: string
+  /** 数据是否已过期（超过阈值），过期时文案本身要变，不能只靠颜色 */
+  stale: boolean
+
+  /** 心率与血氧的显示值，已含单位处理；无数据为 '--' */
+  hrText: string
+  boText: string
+
+  /** 是否绑了戒指。未绑时哨兵条整体降级，因为压根没有数据源 */
+  hasRing: boolean
+}
+
+/**
  * switch 组件 change 事件的事件值。
  * 与 api/index.uts 里的 UniInputEventDetail 同一套做法：
  * type 声明内不允许嵌套对象字面量（UTS110111101），

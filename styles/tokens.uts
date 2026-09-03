@@ -95,6 +95,36 @@ export function sentinelColor(s: SentinelState): string {
   return INK_2
 }
 
+/* ── 数据新鲜度（哨兵条的活性证明，§4.5）─────────────
+ *
+ * 放在 token 层而不是各页面里，因为首页哨兵条与看护对象页
+ * 都要显示「上次上传 N 秒前」。两处若各写一版，迟早出现
+ * 同一时刻两个页面显示不同时间的情况，而哨兵条的可信度
+ * 恰恰建立在这种一致性上。
+ */
+
+/** 超过这个秒数就认为数据不新鲜。5 分钟 = 计划书里最慢的上传档位。 */
+export const STALE_AFTER_SEC: number = 300
+
+/**
+ * 把「距今多少秒」渲染成中文相对时间。
+ *
+ * 刻意不显示「0 秒前」：读数落库与客户端取值之间必然有间隔，
+ * 显示 0 会让人以为界面卡住了。小于 5 秒统一说「刚刚」。
+ */
+export function relativeTimeText(secAgo: number): string {
+  if (secAgo < 5) { return '刚刚' }   // 含负数：本机时钟快于服务器时也走这里
+  // 全程 Math.floor 取整：UTS 的 number 是浮点，
+  // 直接内插 secAgo / 60 会渲染出「3.5166 分钟前」这种东西。
+  const s = Math.floor(secAgo)
+  if (s < 60) { return `${s} 秒前` }
+  const min = Math.floor(s / 60)
+  if (min < 60) { return `${min} 分钟前` }
+  const hour = Math.floor(min / 60)
+  if (hour < 24) { return `${hour} 小时前` }
+  return `${Math.floor(hour / 24)} 天前`
+}
+
 /* ── 责任口径文案（§11.1，6 处硬约束的单一来源）───────
  * 集中在这里，避免各页面各写一版导致口径漂移。
  * 禁止改成「已保护 / 守护中 / 安心睡」这类过度承诺的说法。

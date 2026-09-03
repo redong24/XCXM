@@ -105,6 +105,24 @@ export type ChildResp = {
   device_id: number | null
 }
 
+/**
+ * 某人某项指标的最新读数（B10 GET /api/data/latest 的元素）。
+ *
+ * 只有事实，没有判断：后端刻意不返回「是否偏高」或分区颜色，
+ * 阈值归 alert_engine，颜色归 styles/tokens.uts。
+ * 注意返回集合里不含 hrv（alert_engine 的 hrv 分支直接返回不触发），
+ * 这与「删掉首页 HRV 卡」是同一个决定的两侧。
+ */
+export type LatestReadingResp = {
+  user_id: number
+  device_id: number
+  /** 'hr' | 'bo'（'hrv' 不参与预警，界面已删） */
+  type: string
+  value: number
+  /** ISO 时间串，客户端据此算「N 秒前」 */
+  timestamp: string
+}
+
 // ---------- 请求体类型（用 type，UTS 对象字面量需 as type 而非 interface） ----------
 
 // 注册载荷
@@ -322,6 +340,16 @@ function toChildResp(o: UTSJSONObject): ChildResp {
   } as ChildResp
 }
 
+function toLatestReadingResp(o: UTSJSONObject): LatestReadingResp {
+  return {
+    user_id: o.getNumber('user_id') ?? 0,
+    device_id: o.getNumber('device_id') ?? 0,
+    type: o.getString('type') ?? '',
+    value: o.getNumber('value') ?? 0,
+    timestamp: o.getString('timestamp') ?? ''
+  } as LatestReadingResp
+}
+
 // ============================================================
 // 本地存储解析入口（供 store 使用）
 // ------------------------------------------------------------
@@ -421,6 +449,17 @@ async function doUploadHardwareResult(payload: HardwareResultPayload): Promise<H
 async function doUploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
   const raw = await post('/api/data/raw-ppg', payload)
   return toRawPPGResp(mustObject(raw, '上报波形'))
+}
+
+/** 可见范围内每人每指标的最新读数（一次取全，客户端本地按人切换，避免 N+1）。 */
+async function doLatestReadings(): Promise<LatestReadingResp[]> {
+  const raw = await get('/api/data/latest')
+  const arr = asObjectArray(raw)
+  const out: LatestReadingResp[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toLatestReadingResp(arr[i]))
+  }
+  return out
 }
 
 /** 预警列表。userId 为 null 时后端返回「自己 + 名下孩子」的全部预警。 */
@@ -609,6 +648,11 @@ export class DataApi {
   /** 上报原始 PPG 波形 */
   uploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
     return doUploadRawPPG(payload)
+  }
+
+  /** 最新读数（哨兵条的数据新鲜度来源） */
+  latest(): Promise<LatestReadingResp[]> {
+    return doLatestReadings()
   }
 }
 
