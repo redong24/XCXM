@@ -96,6 +96,9 @@ app/
 
 > 📄 完整分析（含 AAR 反编译验证的字节级协议、四平台 API 对照、数据结构）见
 > [`docs/RWFIT_SDK_RAW_PPG_ANALYSIS.md`](docs/RWFIT_SDK_RAW_PPG_ANALYSIS.md)
+>
+> 📄 SDK **全量**数据能力清单（健康指标/全天历史/运动/设备事件五类、12 条易踩坑）见
+> [`docs/RWFIT_SDK_DATA_INVENTORY.md`](docs/RWFIT_SDK_DATA_INVENTORY.md)
 
 ## 五、后端对接配置
 

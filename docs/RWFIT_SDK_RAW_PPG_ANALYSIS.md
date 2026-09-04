@@ -3,6 +3,9 @@
 > 分析对象：https://github.com/RWFitSDK 组织下各平台 SDK
 > 分析方法：源码通读 + 官方文档 + **AAR 二进制反编译验证**（CFR 0.152）
 > 分析日期：2026-09-04
+>
+> 📄 配套文档：[`RWFIT_SDK_DATA_INVENTORY.md`](RWFIT_SDK_DATA_INVENTORY.md) —— SDK **全量**数据能力清单
+> （健康指标 / 全天历史 / 运动 Workout / 设备事件，共五类）
 
 ---
 
