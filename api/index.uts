@@ -149,6 +149,17 @@ export type HardwareResultPayload = {
   timestamp?: string
 }
 
+// 自助登记设备的请求体。
+//
+// 只带 MAC 是必需项；model/firmware 是「读到了就一起报」——
+// 手机端不一定每次都能从功能菜单读到版本号，读不到就传 null，
+// 后端不会用 null 覆盖已有值。
+export type DeviceClaimPayload = {
+  mac: string
+  model: string | null
+  firmware: string | null
+}
+
 export type RawPPGPayload = {
   device_id: number
   channel: number
@@ -431,6 +442,11 @@ async function doDeviceDetail(deviceId: number): Promise<DeviceInfo> {
   return toDeviceInfo(mustObject(raw, '设备详情'))
 }
 
+async function doDeviceClaim(payload: DeviceClaimPayload): Promise<DeviceInfo> {
+  const raw = await post('/api/devices/claim', payload)
+  return toDeviceInfo(mustObject(raw, '登记设备'))
+}
+
 async function doDeviceBind(deviceId: number, userId: number): Promise<DeviceInfo> {
   const raw = await post(`/api/devices/${deviceId}/bind`, { user_id: userId })
   return toDeviceInfo(mustObject(raw, '绑定设备'))
@@ -622,6 +638,20 @@ export class DeviceApi {
   /** 设备详情 */
   detail(deviceId: number): Promise<DeviceInfo> {
     return doDeviceDetail(deviceId)
+  }
+
+  /**
+   * 自助登记设备：把刚连上的手环登记到当前账号名下。
+   *
+   * 后端 POST /api/devices/ 是 admin 专属，手机端调不动；没有这个
+   * 接口时，连上的设备在 /mine 里查不到，只能退化成 device_id=0，
+   * 所有上报都拿 404「设备不存在」。
+   *
+   * 幂等：同一 MAC 重复调用返回同一条记录，可在每次连接后无脑调用。
+   * 若该 MAC 已绑定他人，后端返回 409，此处会抛错，调用方须提示用户。
+   */
+  claim(payload: DeviceClaimPayload): Promise<DeviceInfo> {
+    return doDeviceClaim(payload)
   }
 
   /** 绑定设备到用户（user/guardian 绑定自己或孩子，admin/doctor 绑定任意） */

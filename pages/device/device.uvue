@@ -68,7 +68,7 @@
 // 注意：uni-app x 会自动引入 vue 公开 API（ref/onMounted 等），无需 import
 import { deviceState, setCurrentDevice, setScanning, setNearbyDevices, restore as restoreDevice } from '../../store/device.uts'
 import { userId } from '../../store/user.uts'
-import { deviceApi, type DeviceInfo } from '../../api/index.uts'
+import { deviceApi, type DeviceInfo, type DeviceClaimPayload } from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 import {
   initSDK,
@@ -147,7 +147,25 @@ async function resolveDeviceId(mac: string): Promise<DeviceInfo | null> {
 
 // 蓝牙连接成功后的处理（前置 async 函数；UTS 无声明提升，须先定义后使用）
 async function onConnected(mac: string): Promise<boolean> {
-  const bound = await resolveDeviceId(mac)
+  let bound = await resolveDeviceId(mac)
+  if (bound == null) {
+    // /mine 里没有 -> 自助登记（幂等）。
+    //
+    // 【为什么不再直接弹「联系管理员」】
+    //   那是一条死路：普通用户买到手环连上，却要等管理员在后台
+    //   录入 MAC 才能用。后端已开放 POST /api/devices/claim，
+    //   任何登录用户都能把设备登记到自己名下。
+    clearApiError()
+    try {
+      bound = await deviceApi.claim({
+        mac: mac,
+        model: null,
+        firmware: null
+      } as DeviceClaimPayload)
+    } catch (e) {
+      bound = null
+    }
+  }
   if (bound == null) {
     // 后端查不到该 MAC 的绑定记录：仍记录本地连接态（MAC 可见），
     // 但必须明确告知用户，避免其以为「已连上就能上传数据」
@@ -160,12 +178,18 @@ async function onConnected(mac: string): Promise<boolean> {
       created_at: ''
     } as DeviceInfo)
     const reason = takeApiErrorText('')
+    // 走到这里说明「查询 + 自助登记」都失败了。最常见的两种原因：
+    //   1) 该 MAC 已绑定其他账号（后端 409）—— 改绑必须走管理端，
+    //      否则任何人报个 MAC 就能抢走别人的设备和历史数据；
+    //   2) 网络不通。
+    // 无论哪种，都必须明确告知：此刻 device_id 仍是 0，上报一定失败。
+    // 静默放过就是这个函数注释里记着的那个历史教训。
     uni.showModal({
-      title: '设备未登记',
+      title: '设备登记失败',
       content:
         reason != ''
-          ? `蓝牙已连接，但该戒指尚未登记到当前账号。\n\n后端提示：${reason}\n\n请联系管理员在后台登记设备 MAC：${mac}`
-          : `蓝牙已连接，但该戒指尚未登记到当前账号，上报数据会失败。\n\n请联系管理员在后台登记设备 MAC：${mac}`,
+          ? `蓝牙已连接，但设备登记未成功，上报数据会失败。\n\n后端提示：${reason}\n\n设备 MAC：${mac}\n\n若提示已被其他账号绑定，请联系管理员改绑。`
+          : `蓝牙已连接，但设备登记未成功，上报数据会失败。\n\n设备 MAC：${mac}\n\n请检查网络后重连；若该设备已绑定其他账号，请联系管理员改绑。`,
       showCancel: false
     })
     return false

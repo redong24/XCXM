@@ -159,6 +159,60 @@ function pickDetail(data: any | null): string {
 // 现在底层原样传出 res.data，由 api/index.uts 用 asObject / asObjectArray
 // 取出 UTSJSONObject，再由手写 mapper 逐字段 get 出来构造具名 type。
 // 全程没有跨类型强转，从原理上不可能再出 ClassCastException。
+// 把请求体归一化成 uni.request 在 app-android 端唯一接受的类型。
+//
+// 【为什么必须有这一步（22:07 真机实证）】
+//   官方文档 api/request.html 明写：
+//     data —— 「在 app-android 端，参数类型只能为 UTSJSONObject
+//              或者 string 类型」
+//   错误码表：600008 = data参数类型不合法。
+//
+//   而 api/index.uts 里有 6 处 post/put 传的是具名 type（
+//   HardwareResultPayload / RegisterPayload / FeedbackPayload /
+//   ChildCreatePayload / RawPPGPayload）。具名 type 是编译期产物，
+//   跨到原生层不成立，于是 uni.request 在发送前同步拒收 ——
+//   表现就是 status=0（根本没上网）+ errCode=600008。
+//
+//   对照：登录传的是对象字面量 { phone, password }，被推导为
+//   UTSJSONObject，所以一直能用。这也解释了为什么此前只有登录
+//   这条路走得通。
+//
+// 【为什么在底层收口，而不是逐个调用点改成字面量】
+//   6 处重复、日后新增端点必漏。上次修 TokenResp 的 CCE 时只改了
+//   「响应」方向，没管「请求」方向，就是「只改一半」的代价 ——
+//   同一个错误不能犯第二次。
+//
+// 【为什么用 stringify + parse】
+//   JSON.parse 在 Android 侧返回的正是 UTSJSONObject —— 这一点由
+//   本项目的历史 bug 反证：当初 `JSON.parse(x) as UserInfo` 抛
+//   ClassCastException，就是因为它给的是 UTSJSONObject。
+//   那个坑在这里正好是解法。
+function normalizeBody(data: any | null): any | null {
+  if (data == null) {
+    return null
+  }
+  // string 是官方允许的另一种类型，原样放过（也避免被二次转义）。
+  if (typeof data === 'string') {
+    return data
+  }
+  // 已经是 UTSJSONObject 的（对象字面量走这条），不做无谓的绕行。
+  if (data instanceof UTSJSONObject) {
+    return data
+  }
+  try {
+    const text = JSON.stringify(data)
+    if (text == null) {
+      return null
+    }
+    return JSON.parse(text!)
+  } catch (e) {
+    // 转换失败也要留痕：静默返回 null 会让请求体凭空消失，
+    // 那比报错更难查（后端会收到空 body 报 422）。
+    console.error(`[api] 请求体归一化失败，已按原样发送: ${e}`)
+    return data
+  }
+}
+
 export function request(
   path: string,
   method: string,
@@ -185,7 +239,8 @@ export function request(
       uni.request({
         url: resolveUrl(path),
         method: method,
-        data: data,
+        // 归一化：具名 type 直传会被原生层拒收（600008），详见 normalizeBody
+        data: normalizeBody(data),
         header: header,
         timeout: REQUEST_TIMEOUT,
         // 不再设置 sslVerify：现在走 DigiCert 可信证书通道，标准校验即可通过。
@@ -356,7 +411,8 @@ function probe(
       uni.request({
         url: url,
         method: method,
-        data: data,
+        // 同上：统一走归一化，否则该路径同样 600008
+        data: normalizeBody(data),
         header: { 'Content-Type': 'application/json' },
         timeout: 8000,
         sslVerify: !skipSsl,
