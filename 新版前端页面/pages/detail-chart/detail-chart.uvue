@@ -1,0 +1,551 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">呼吸频率</text>
+      <view class="more-btn">
+        <text class="more-icon">⋮</text>
+      </view>
+    </view>
+
+    <!-- 大号当前值 -->
+    <view class="hero-metric">
+      <text class="hero-label">CURRENT · 当前</text>
+      <view class="hero-num-row">
+        <text class="hero-num">{{ currentReading.breath }}</text>
+        <text class="hero-unit">次/分</text>
+      </view>
+      <view class="hero-caption">
+        <view class="live-dot"></view>
+        <text class="hero-caption-text">实时 · 12 秒前 · 平稳</text>
+      </view>
+    </view>
+
+    <!-- 时段 tabs -->
+    <view class="period-tabs">
+      <view
+        v-for="p in periods"
+        :key="p"
+        class="period-seg"
+        :class="{ 'period-seg-active': period == p }"
+        @tap="period = p"
+      >
+        <text class="period-text" :class="{ 'period-text-active': period == p }">{{ p }}</text>
+      </view>
+    </view>
+
+    <!-- 图表卡 -->
+    <view class="chart-card">
+      <view class="stats-row">
+        <view class="stat">
+          <text class="stat-l">最低</text>
+          <view class="stat-v-row">
+            <text class="stat-v stat-v-ok">18</text>
+            <text class="stat-unit">次/分</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">平均</text>
+          <view class="stat-v-row">
+            <text class="stat-v">24</text>
+            <text class="stat-unit">次/分</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">最高</text>
+          <view class="stat-v-row">
+            <text class="stat-v stat-v-warn">36</text>
+            <text class="stat-unit">次/分</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">时段</text>
+          <text class="stat-v">03:12</text>
+        </view>
+      </view>
+
+      <!-- 图表主体（柱状图版本，模仿曲线趋势）-->
+      <view class="chart-area">
+        <view class="chart-ref-band"></view>
+
+        <!-- Y 轴 label -->
+        <view class="chart-y-labels">
+          <text class="y-label">40</text>
+          <text class="y-label">30</text>
+          <text class="y-label">20</text>
+        </view>
+
+        <!-- 数据柱 -->
+        <view class="chart-bars">
+          <view v-for="(pt, idx) in dataPoints" :key="idx" class="bar-col">
+            <view class="bar-space"></view>
+            <view
+              class="bar"
+              :class="{ 'bar-warn': pt.value > 30, 'bar-med': pt.hasMed }"
+              :style="{ height: `${(pt.value / 45) * 100}%` }"
+            >
+              <text v-if="pt.value > 30" class="bar-peak-label">{{ pt.value }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="chart-x-labels">
+        <text class="x-label">00</text>
+        <text class="x-label">06</text>
+        <text class="x-label">12</text>
+        <text class="x-label">18</text>
+        <text class="x-label">现在</text>
+      </view>
+
+      <!-- 图例 -->
+      <view class="legend">
+        <view class="legend-item">
+          <view class="legend-dot legend-dot-red"></view>
+          <text class="legend-text">关注等级</text>
+        </view>
+        <view class="legend-item">
+          <view class="legend-dot legend-dot-med"></view>
+          <text class="legend-text">用药</text>
+        </view>
+        <view class="legend-item">
+          <view class="legend-dot legend-dot-ref"></view>
+          <text class="legend-text">参考区间</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 观察建议 -->
+    <view class="insight-card">
+      <view class="insight-icon">
+        <text class="insight-icon-glyph">i</text>
+      </view>
+      <view class="insight-body">
+        <text class="insight-title">今日观察</text>
+        <text class="insight-desc">
+          03:12 呼吸频率短时升高至 36 次/分 · 用药后 15 分钟回落至参考区间 · 其余时段平稳
+        </text>
+      </view>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getLatestReading, type RingReading } from '@/composables/useRing';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+type DataPoint = {
+  value: number;
+  hasMed: boolean;
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      periods: ['1H', '24H', '7D', '30D', '全部'] as string[],
+      period: '24H' as string,
+      currentReading: getLatestReading() as RingReading,
+      disclaimerShort: DISCLAIMER_SHORT,
+      dataPoints: [
+        { value: 22, hasMed: false },
+        { value: 21, hasMed: false },
+        { value: 20, hasMed: false },
+        { value: 22, hasMed: false },
+        { value: 23, hasMed: false },
+        { value: 22, hasMed: false },
+        { value: 25, hasMed: false },
+        { value: 28, hasMed: false },
+        { value: 36, hasMed: false },  // 峰值 · 03:12
+        { value: 30, hasMed: true },   // 用药
+        { value: 25, hasMed: false },
+        { value: 22, hasMed: false },
+        { value: 23, hasMed: false },
+        { value: 24, hasMed: false },
+        { value: 22, hasMed: false },
+        { value: 23, hasMed: false },
+      ] as DataPoint[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.more-btn {
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.more-icon {
+  color: $sun-2;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+/* Hero metric */
+.hero-metric {
+  padding: 20px $sp-6 0;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.hero-label {
+  font-size: 10px;
+  color: $sun-2;
+  letter-spacing: 0.28em;
+  font-weight: 700;
+}
+.hero-num-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 6px;
+}
+.hero-num {
+  font-family: $font-num;
+  font-size: 76px;
+  font-weight: 300;
+  color: $ink;
+  letter-spacing: -0.05em;
+  line-height: 76px;
+}
+.hero-unit {
+  font-size: 20px;
+  font-weight: 400;
+  color: $ink-2;
+  margin-left: 4px;
+}
+.hero-caption {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 8px;
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 5px;
+}
+.hero-caption-text {
+  font-size: 12px;
+  color: $ink-2;
+}
+
+/* Period tabs */
+.period-tabs {
+  margin: 20px $sp-6 0;
+  padding: 4px;
+  background: $card-2;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: row;
+}
+.period-seg {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.period-seg-active {
+  background: $card;
+  box-shadow: 0 2px 6px rgba(60, 40, 20, 0.08);
+}
+.period-text {
+  font-size: 12px;
+  color: $ink-2;
+  font-weight: 500;
+}
+.period-text-active {
+  color: $sun-2;
+  font-weight: 700;
+}
+
+/* Chart card */
+.chart-card {
+  margin: 20px $sp-6 0;
+  padding: 20px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+}
+.stats-row {
+  display: flex;
+  flex-direction: row;
+  padding-bottom: 14px;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.stat { flex: 1; }
+.stat-l {
+  font-size: 10px;
+  color: $ink-3;
+  letter-spacing: 0.04em;
+}
+.stat-v-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 3px;
+}
+.stat-v {
+  font-family: $font-num;
+  font-size: 18px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 18px;
+}
+.stat-v-ok { color: $leaf; }
+.stat-v-warn { color: $zone-red; }
+.stat-unit {
+  font-size: 10px;
+  color: $ink-2;
+  margin-left: 2px;
+  font-weight: 400;
+}
+
+/* Chart area */
+.chart-area {
+  height: 200px;
+  margin-top: 14px;
+  position: relative;
+}
+.chart-ref-band {
+  position: absolute;
+  left: 30px;
+  right: 0;
+  top: 40%;
+  height: 30%;
+  background: rgba(245, 143, 50, 0.06);
+}
+.chart-y-labels {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 20px;
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.y-label {
+  font-family: $font-num;
+  font-size: 10px;
+  color: $ink-3;
+}
+.chart-bars {
+  position: absolute;
+  left: 30px;
+  right: 0;
+  top: 0;
+  bottom: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+}
+.bar-col {
+  flex: 1;
+  align-items: center;
+  justify-content: flex-end;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0 2px;
+}
+.bar-space { flex: 1; }
+.bar {
+  width: 100%;
+  border-radius: 4px;
+  background-image: linear-gradient(180deg, $sun-1, $sun-2);
+  align-items: center;
+  justify-content: flex-start;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  min-height: 4px;
+}
+.bar-warn {
+  background-image: linear-gradient(180deg, $coral, $zone-red);
+}
+.bar-med {
+  background-image: linear-gradient(180deg, $sun-3, $sun-1);
+}
+.bar-peak-label {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: $font-num;
+  font-size: 10px;
+  font-weight: 700;
+  color: $zone-red;
+}
+
+.chart-x-labels {
+  padding-left: 30px;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.x-label {
+  font-family: $font-num;
+  font-size: 10px;
+  color: $ink-3;
+}
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+.legend-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-right: 14px;
+}
+.legend-item:last-child { margin-right: 0; }
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  margin-right: 5px;
+}
+.legend-dot-red { background: $zone-red; }
+.legend-dot-med { background: $sun-2; }
+.legend-dot-ref {
+  background: rgba(245, 143, 50, 0.15);
+  border-width: 1px;
+  border-style: solid;
+  border-color: $sun-1;
+}
+.legend-text {
+  font-size: 11px;
+  color: $ink-2;
+}
+
+/* Insight card */
+.insight-card {
+  margin: 12px $sp-6 0;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, $sun-wash 0%, rgba(255, 143, 50, 0.02) 100%);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.2);
+  border-radius: $r-md;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+.insight-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: $card;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+  box-shadow: 0 2px 6px rgba(245, 143, 50, 0.15);
+}
+.insight-icon-glyph {
+  color: $sun-2;
+  font-size: 14px;
+  font-weight: 700;
+}
+.insight-body { flex: 1; }
+.insight-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: $sun-2;
+  letter-spacing: 0.02em;
+}
+.insight-desc {
+  font-size: 12px;
+  color: $ink;
+  margin-top: 4px;
+  line-height: 18px;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

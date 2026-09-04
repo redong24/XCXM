@@ -1,0 +1,28 @@
+/**
+ * AsthmaGuard · Theme
+ * 明色 / 暗色 / 跟随系统
+ */
+
+export type Theme = 'light' | 'dark' | 'auto';
+
+export function getTheme(): Theme {
+  const stored = uni.getStorageSync('ag_theme') as string | null;
+  if (stored == 'light' || stored == 'dark' || stored == 'auto') {
+    return stored as Theme;
+  }
+  return 'auto';
+}
+
+export function setTheme(theme: Theme): void {
+  uni.setStorageSync('ag_theme', theme);
+}
+
+// 判断当前是否应用暗色
+export function isDark(): boolean {
+  const theme = getTheme();
+  if (theme == 'dark') return true;
+  if (theme == 'light') return false;
+  // auto — 判断系统深色
+  const info = uni.getSystemInfoSync();
+  return info.osTheme == 'dark';
+}

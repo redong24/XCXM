@@ -1,0 +1,35 @@
+<template>
+  <view class="ag-card" :class="{ 'ag-card-flat': flat }">
+    <slot />
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGCard · 通用卡片容器
+ * 使用示例：<ag-card>...</ag-card>
+ * 参数：
+ *   flat: 无阴影模式（默认 false）
+ */
+export default {
+  props: {
+    flat: { type: Boolean, default: false },
+  },
+};
+</script>
+
+<style lang="scss">
+.ag-card {
+  background: $card;
+  border-radius: $r-lg;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  padding: $sp-4;
+  /* 卡片阴影 */
+  box-shadow: 0 2px 10px rgba(60, 40, 20, 0.04);
+}
+.ag-card-flat {
+  box-shadow: none;
+}
+</style>

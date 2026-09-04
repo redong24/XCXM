@@ -1,0 +1,176 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">注销账户</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 警告 hero -->
+    <view class="warn-hero">
+      <view class="warn-icon"><text class="warn-icon-glyph">!</text></view>
+      <text class="warn-title">此操作不可撤销</text>
+      <text class="warn-desc">注销后你将无法恢复账户和数据</text>
+    </view>
+
+    <!-- 数据清单 -->
+    <text class="sec-title">将被永久删除的数据</text>
+    <view class="del-list">
+      <view v-for="d in delItems" :key="d.key" class="del-item">
+        <view class="del-icon"><text class="del-icon-glyph">×</text></view>
+        <view class="del-body">
+          <text class="del-name">{{ d.name }}</text>
+          <text class="del-desc">{{ d.desc }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 建议 -->
+    <text class="sec-title">建议在注销前</text>
+    <view class="suggest-list">
+      <view v-for="s in suggests" :key="s.key" class="sug-item" @tap="s.action" hover-class="sug-active">
+        <view class="sug-icon"><text class="sug-icon-glyph">{{ s.icon }}</text></view>
+        <text class="sug-name">{{ s.name }}</text>
+        <text class="arrow">›</text>
+      </view>
+    </view>
+
+    <!-- Confirm 输入 -->
+    <text class="sec-title">确认注销</text>
+    <view class="confirm-card">
+      <text class="confirm-tip">请输入 <text class="confirm-code">删除账户</text> 以确认</text>
+      <input class="confirm-input" v-model="confirmText" placeholder="删除账户"/>
+      <view class="checkbox-row" @tap="agreed = !agreed">
+        <view class="checkbox" :class="{ 'checkbox-active': agreed }">
+          <text v-if="agreed" class="check-glyph">✓</text>
+        </view>
+        <text class="check-text">我已了解此操作不可撤销，所有数据将被永久删除</text>
+      </view>
+    </view>
+
+    <view style="height: 130px;"></view>
+  </scroll-view>
+
+  <view class="bottom-action" :style="{ paddingBottom: `${safeBottom}px` }">
+    <view class="del-btn" :class="{ 'del-btn-disabled': !canDelete }" @tap="handleDelete" hover-class="del-active">
+      <text class="del-btn-text">{{ canDelete ? '确认注销账户' : '请先确认' }}</text>
+    </view>
+    <view class="cancel-btn" @tap="handleBack" hover-class="btn-active">
+      <text class="cancel-text">取消</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+type DelItem = { key: string; name: string; desc: string };
+type Suggest = { key: string; icon: string; name: string; action: () => void };
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      confirmText: '' as string,
+      agreed: false as boolean,
+      delItems: [
+        { key: '1', name: '所有孩子档案',   desc: '姓名 · 生日 · 医疗信息 · 过敏原' },
+        { key: '2', name: '94 天监测数据',   desc: '呼吸 · 心率 · 血氧 · HRV' },
+        { key: '3', name: '关注等级记录',   desc: '4 条历史关注事件' },
+        { key: '4', name: '药品与症状记录', desc: '3 种在用药品 · 12 条症状记录' },
+        { key: '5', name: '家庭成员关联',   desc: '3 位成员将失去数据访问权限' },
+      ] as DelItem[],
+      suggests: [
+        { key: '1', icon: '↓', name: '导出所有历史数据', action: () => { uni.navigateTo({ url: '/pages/export/export' }); } },
+        { key: '2', icon: '→', name: '移交家庭管理权', action: () => { uni.navigateTo({ url: '/pages/family/family' }); } },
+      ] as Suggest[],
+    };
+  },
+  computed: {
+    canDelete(): boolean {
+      return this.confirmText == '删除账户' && this.agreed;
+    },
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleDelete() {
+      if (!this.canDelete) return;
+      uni.showModal({
+        title: '最终确认',
+        content: '真的要注销吗？此操作 30 秒后开始执行。',
+        confirmText: '确认注销',
+        confirmColor: '#E5574A',
+        success: (res) => {
+          if (res.confirm) {
+            uni.showLoading({ title: '正在注销...' });
+            setTimeout(() => {
+              uni.hideLoading();
+              uni.reLaunch({ url: '/pages/login/login' });
+            }, 1500);
+          }
+        },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper; }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.warn-hero { padding: 12px 24px 20px; align-items: center; display: flex; flex-direction: column; }
+.warn-icon { width: 66px; height: 66px; border-radius: 22px; background: linear-gradient(135deg, $coral, $zone-red); align-items: center; justify-content: center; display: flex; flex-direction: row; box-shadow: 0 8px 20px rgba(229, 87, 74, 0.35); }
+.warn-icon-glyph { color: #FFFFFF; font-size: 36px; font-weight: 700; line-height: 36px; }
+.warn-title { margin-top: 14px; font-size: 20px; font-weight: 700; color: $zone-red; letter-spacing: -0.02em; }
+.warn-desc { font-size: 13px; color: $ink-2; margin-top: 6px; }
+
+.sec-title { padding: 16px $sp-6 8px; font-size: 11px; color: $ink-2; letter-spacing: 0.14em; font-weight: 700; }
+
+.del-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.del-item { padding: 12px 14px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.del-item:last-child { border-bottom-width: 0; }
+.del-icon { width: 28px; height: 28px; border-radius: 8px; background: $coral-wash; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.del-icon-glyph { color: $zone-red; font-size: 16px; font-weight: 700; line-height: 16px; }
+.del-body { flex: 1; }
+.del-name { font-size: 13px; color: $ink; font-weight: 600; }
+.del-desc { font-size: 11px; color: $ink-2; margin-top: 2px; }
+
+.suggest-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.sug-item { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.sug-item:last-child { border-bottom-width: 0; }
+.sug-active { opacity: 0.85; }
+.sug-icon { width: 32px; height: 32px; border-radius: 10px; background: $sun-wash; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.sug-icon-glyph { color: $sun-2; font-size: 16px; font-weight: 700; }
+.sug-name { flex: 1; font-size: 14px; color: $ink; font-weight: 500; }
+.arrow { color: $ink-3; font-size: 18px; }
+
+.confirm-card { margin: 0 $sp-6; padding: 16px 18px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; }
+.confirm-tip { font-size: 12px; color: $ink; }
+.confirm-code { color: $zone-red; font-weight: 700; }
+.confirm-input { margin-top: 10px; padding: 12px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: 10px; font-size: 14px; color: $ink; width: 100%; }
+.checkbox-row { display: flex; flex-direction: row; align-items: center; margin-top: 12px; padding: 6px 0; }
+.checkbox { width: 20px; height: 20px; border-radius: 6px; border-width: 1.5px; border-style: solid; border-color: $hairline-2; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 10px; }
+.checkbox-active { background: $zone-red; border-color: $zone-red; }
+.check-glyph { color: #FFFFFF; font-size: 13px; font-weight: 700; }
+.check-text { flex: 1; font-size: 12px; color: $ink-2; line-height: 18px; }
+
+.bottom-action { position: fixed; left: 0; right: 0; bottom: 0; padding: 20px $sp-5 0; background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%); }
+.del-btn { padding: 16px; border-radius: $r-xl; background: linear-gradient(135deg, $coral, $zone-red); align-items: center; display: flex; flex-direction: row; justify-content: center; box-shadow: 0 8px 20px -6px rgba(229, 87, 74, 0.5); }
+.del-btn-disabled { background: $card-3; box-shadow: none; }
+.del-btn-text { color: #FFFFFF; font-size: 15px; font-weight: 700; }
+.del-active { opacity: 0.9; }
+.cancel-btn { padding: 12px 0; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.cancel-text { color: $ink-2; font-size: 13px; }
+</style>

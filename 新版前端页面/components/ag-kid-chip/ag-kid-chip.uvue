@@ -1,0 +1,100 @@
+<template>
+  <view class="kid-chip" @tap="onTap" hover-class="kid-chip-active">
+    <view class="kid-avatar" :style="{ backgroundColor: kid.avatarColor }">
+      <text class="kid-avatar-text">{{ kid.name.charAt(0) }}</text>
+    </view>
+    <view class="kid-info">
+      <text class="kid-name">{{ kid.name }} · {{ kid.age }} 岁</text>
+      <view class="kid-meta">
+        <view class="conn-dot" :class="{ 'conn-dot-off': !connected }"></view>
+        <text class="conn-text">{{ metaText }}</text>
+      </view>
+    </view>
+    <text v-if="showArrow" class="kid-arrow">›</text>
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGKidChip · 儿童切换条
+ * 用法：<ag-kid-chip :kid="kid" :meta-text="'RWFit R2 · 电量 76%'" @tap="openList" />
+ */
+import type { Kid } from '@/composables/useKid';
+
+export default {
+  props: {
+    kid: { type: Object as PropType<Kid>, required: true },
+    metaText: { type: String, default: '' },
+    connected: { type: Boolean, default: true },
+    showArrow: { type: Boolean, default: true },
+  },
+  emits: ['tap'],
+  methods: {
+    onTap() {
+      this.$emit('tap');
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.kid-chip {
+  padding: 12px 14px;
+  background: rgba(255, 143, 50, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.18);
+  border-radius: $r-md;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.kid-chip-active { opacity: 0.7; }
+
+.kid-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.kid-avatar-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 15px;
+}
+.kid-info {
+  flex: 1;
+  margin-left: 12px;
+}
+.kid-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+}
+.kid-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 3px;
+}
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 8px;
+}
+.conn-dot-off { background: $ink-3; }
+.conn-text {
+  font-size: 11px;
+  color: $ink-2;
+}
+.kid-arrow {
+  font-size: 20px;
+  color: $ink-3;
+  line-height: 20px;
+}
+</style>

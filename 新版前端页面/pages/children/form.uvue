@@ -1,0 +1,232 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="close-btn" @tap="handleClose" hover-class="btn-active">
+        <text class="close-icon">×</text>
+      </view>
+      <text class="header-title">编辑档案</text>
+      <view class="save-btn" @tap="handleSave" hover-class="btn-active">
+        <text class="save-text">保存</text>
+      </view>
+    </view>
+
+    <!-- Avatar -->
+    <view class="avatar-wrap">
+      <view class="avatar">
+        <text class="avatar-text">{{ formData.name.charAt(0) }}</text>
+        <view class="avatar-edit"><text class="avatar-edit-glyph">✎</text></view>
+      </view>
+    </view>
+
+    <!-- 基本信息 -->
+    <text class="sec-title">基本信息</text>
+    <view class="form-list">
+      <view class="form-row">
+        <text class="form-lbl">姓名<text class="req">*</text></text>
+        <input class="form-input" v-model="formData.name" placeholder="孩子姓名"/>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">性别<text class="req">*</text></text>
+        <view class="form-val-row">
+          <text class="form-val">{{ formData.gender == 'F' ? '女' : '男' }}</text>
+          <text class="form-arrow">›</text>
+        </view>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">生日<text class="req">*</text></text>
+        <view class="form-val-row">
+          <text class="form-val form-val-mono">{{ formData.birthDate }}</text>
+          <text class="form-arrow">›</text>
+        </view>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">身高</text>
+        <input class="form-input" v-model="formData.height"/>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">体重</text>
+        <input class="form-input" v-model="formData.weight"/>
+      </view>
+    </view>
+
+    <!-- 哮喘信息 -->
+    <text class="sec-title">哮喘信息</text>
+    <view class="form-list">
+      <view class="form-row" style="padding-bottom: 8px;">
+        <text class="form-lbl">类型<text class="req">*</text></text>
+      </view>
+      <view class="radio-row">
+        <view
+          v-for="lv in severities"
+          :key="lv"
+          class="radio-cell"
+          :class="{ 'radio-cell-active': formData.asthmaType == lv }"
+          @tap="formData.asthmaType = lv"
+        >
+          <text class="radio-text" :class="{ 'radio-text-active': formData.asthmaType == lv }">{{ lv }}</text>
+        </view>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">确诊日期</text>
+        <view class="form-val-row">
+          <text class="form-val form-val-mono">{{ formData.diagnosisDate }}</text>
+          <text class="form-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 过敏原 -->
+    <text class="sec-title">过敏原</text>
+    <view class="form-list">
+      <view class="chip-group">
+        <view
+          v-for="a in allergens"
+          :key="a"
+          class="chip"
+          :class="{ 'chip-selected': formData.allergens.includes(a) }"
+          @tap="toggleAllergen(a)"
+        >
+          <text class="chip-text" :class="{ 'chip-text-selected': formData.allergens.includes(a) }">{{ a }}</text>
+        </view>
+        <view class="chip chip-add"><text class="chip-text chip-text-add">添加 +</text></view>
+      </view>
+    </view>
+
+    <!-- 医生 -->
+    <text class="sec-title">主治医生</text>
+    <view class="form-list">
+      <view class="form-row">
+        <text class="form-lbl">医院</text>
+        <input class="form-input" v-model="formData.hospital"/>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">医生</text>
+        <input class="form-input" v-model="formData.doctor"/>
+      </view>
+      <view class="form-row">
+        <text class="form-lbl">电话</text>
+        <input class="form-input" v-model="formData.doctorPhone"/>
+      </view>
+    </view>
+
+    <view class="delete-btn" @tap="handleDelete" hover-class="btn-active">
+      <text class="delete-text">删除档案</text>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+type FormData = {
+  name: string;
+  gender: 'F' | 'M';
+  birthDate: string;
+  height: string;
+  weight: string;
+  asthmaType: string;
+  diagnosisDate: string;
+  allergens: string[];
+  hospital: string;
+  doctor: string;
+  doctorPhone: string;
+};
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      severities: ['轻度', '中度', '重度'] as string[],
+      allergens: ['花粉', '尘螨', '宠物毛发', '霉菌', '冷空气', '牛奶', '鸡蛋'] as string[],
+      formData: {
+        name: '朵朵', gender: 'F', birthDate: '2019-04-15',
+        height: '112 cm', weight: '19 kg',
+        asthmaType: '中度', diagnosisDate: '2024-08',
+        allergens: ['花粉', '尘螨'],
+        hospital: '浙江大学儿童医院', doctor: '张医生', doctorPhone: '0571-XXXX-XXXX',
+      } as FormData,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleClose() { uni.navigateBack({}); },
+    handleSave() {
+      uni.showToast({ title: '已保存', icon: 'success' });
+      setTimeout(() => uni.navigateBack({}), 800);
+    },
+    toggleAllergen(a: string) {
+      const idx = this.formData.allergens.indexOf(a);
+      if (idx >= 0) this.formData.allergens.splice(idx, 1);
+      else this.formData.allergens.push(a);
+    },
+    handleDelete() {
+      uni.showModal({
+        title: '删除档案',
+        content: '删除后此孩子的所有监测数据将永久丢失。',
+        confirmText: '删除', confirmColor: '#E5574A',
+        success: (res) => { if (res.confirm) uni.navigateBack({}); },
+      });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.close-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.close-icon { color: $ink; font-size: 22px; line-height: 22px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.save-btn { padding: 8px 12px; }
+.save-text { color: $sun-2; font-size: 14px; font-weight: 600; }
+.btn-active { opacity: 0.7; }
+
+.avatar-wrap { padding: 12px 0 20px; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.avatar { width: 88px; height: 88px; border-radius: 28px; background-image: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; position: relative; box-shadow: 0 8px 20px rgba(245, 143, 50, 0.35); }
+.avatar-text { color: #FFFFFF; font-weight: 700; font-size: 32px; }
+.avatar-edit { position: absolute; bottom: -4px; right: -4px; width: 30px; height: 30px; border-radius: 15px; background: #FFFFFF; border-width: 2px; border-style: solid; border-color: $paper; align-items: center; justify-content: center; display: flex; flex-direction: row; box-shadow: 0 2px 6px rgba(60, 40, 20, 0.15); }
+.avatar-edit-glyph { color: $sun-2; font-size: 14px; font-weight: 700; }
+
+.sec-title { padding: 12px $sp-6 8px; font-size: 11px; color: $sun-2; letter-spacing: 0.14em; font-weight: 700; }
+
+.form-list { margin: 0 $sp-6; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; overflow: hidden; }
+.form-row { padding: 14px 16px; display: flex; flex-direction: row; align-items: center; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: $hairline; }
+.form-row:last-child { border-bottom-width: 0; }
+.form-lbl { font-size: 13px; color: $ink-2; width: 80px; }
+.req { color: $zone-red; margin-left: 2px; }
+.form-input { flex: 1; font-size: 14px; color: $ink; font-weight: 500; text-align: right; }
+.form-val-row { flex: 1; display: flex; flex-direction: row; justify-content: flex-end; align-items: center; }
+.form-val { font-size: 14px; color: $ink; font-weight: 500; }
+.form-val-mono { font-family: $font-num; }
+.form-arrow { color: $ink-3; font-size: 18px; margin-left: 6px; }
+
+.radio-row { padding: 0 16px 14px; display: flex; flex-direction: row; }
+.radio-cell { flex: 1; padding: 10px; background: $card-2; border-width: 1.5px; border-style: solid; border-color: $hairline; border-radius: 12px; align-items: center; display: flex; flex-direction: row; justify-content: center; margin-right: 8px; }
+.radio-cell:last-child { margin-right: 0; }
+.radio-cell-active { background: $sun-wash; border-color: $sun-2; }
+.radio-text { font-size: 13px; color: $ink; font-weight: 500; }
+.radio-text-active { color: $sun-2; font-weight: 700; }
+
+.chip-group { padding: 14px 16px; display: flex; flex-direction: row; flex-wrap: wrap; }
+.chip { padding: 8px 14px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: 20px; margin-right: 8px; margin-bottom: 8px; }
+.chip-selected { background: $sun-1; border-color: $sun-1; }
+.chip-add { border-style: dashed; border-color: $hairline-2; }
+.chip-text { font-size: 12px; color: $ink; font-weight: 500; }
+.chip-text-selected { color: #FFFFFF; font-weight: 600; }
+.chip-text-add { color: $sun-2; }
+
+.delete-btn { margin: 20px $sp-6 0; padding: 14px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-xl; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.delete-text { color: $zone-red; font-size: 14px; font-weight: 600; }
+.disclaimer { text-align: center; font-size: 10px; color: $ink-3; margin-top: 18px; letter-spacing: 0.04em; }
+</style>

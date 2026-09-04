@@ -1,0 +1,57 @@
+<template>
+  <view class="page">
+    <ag-header title="注销账户" />
+    <view class="placeholder">
+      <text class="p-icon">◐</text>
+      <text class="p-title">注销账户</text>
+      <text class="p-desc">此页面将在 Batch 5 中实现</text>
+      <text class="p-caption">Phase 2 · uni-app x 落地开发中</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgHeader from '@/components/ag-header/ag-header.uvue';
+export default {
+  components: { AgHeader },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  display: flex;
+  flex-direction: column;
+}
+.placeholder {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+}
+.p-icon {
+  font-size: 48px;
+  color: $sun-2;
+  margin-bottom: 20px;
+}
+.p-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+}
+.p-desc {
+  font-size: 14px;
+  color: $ink-2;
+  margin-top: 10px;
+}
+.p-caption {
+  font-size: 11px;
+  color: $ink-3;
+  margin-top: 20px;
+  letter-spacing: 0.06em;
+}
+</style>

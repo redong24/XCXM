@@ -1,0 +1,98 @@
+<template>
+  <view
+    class="ag-btn"
+    :class="[
+      `ag-btn-${type}`,
+      { 'ag-btn-block': block, 'ag-btn-disabled': disabled }
+    ]"
+    @tap="onTap"
+    hover-class="ag-btn-active"
+    :hover-stay-time="100"
+  >
+    <text class="ag-btn-text">{{ label }}</text>
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGButton · 主按钮
+ * 用法：<ag-button label="开始测量" type="primary" @tap="handleTap" />
+ * 类型：
+ *   primary   — 暖阳橙渐变（CTA，主操作）
+ *   secondary — 卡片色 + 边框（次操作）
+ *   ghost     — 透明 + 文字色
+ *   danger    — 红色（注销、删除）
+ */
+export default {
+  props: {
+    label:    { type: String, default: '' },
+    type:     { type: String, default: 'primary' }, // primary/secondary/ghost/danger
+    block:    { type: Boolean, default: true },
+    disabled: { type: Boolean, default: false },
+  },
+  emits: ['tap'],
+  methods: {
+    onTap() {
+      if (!this.disabled) this.$emit('tap');
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.ag-btn {
+  min-height: $tap-primary;
+  padding: 16px 20px;
+  border-radius: $r-xl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease-out;
+}
+.ag-btn-block { width: 100%; }
+.ag-btn-text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+// Primary — sunbeam gradient
+.ag-btn-primary {
+  background-image: linear-gradient(135deg, $sun-1 0%, $sun-2 100%);
+  box-shadow: 0 12px 30px -8px rgba(245, 143, 50, 0.45);
+  .ag-btn-text { color: #FFFFFF; }
+}
+
+// Secondary
+.ag-btn-secondary {
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  .ag-btn-text { color: $ink; }
+}
+
+// Ghost
+.ag-btn-ghost {
+  background: transparent;
+  .ag-btn-text { color: $sun-2; }
+}
+
+// Danger
+.ag-btn-danger {
+  background: $zone-red;
+  box-shadow: 0 8px 20px -6px rgba(229, 87, 74, 0.4);
+  .ag-btn-text { color: #FFFFFF; }
+}
+
+// Active (press) state
+.ag-btn-active {
+  opacity: 0.85;
+  transform: scale(0.98);
+}
+
+// Disabled
+.ag-btn-disabled {
+  opacity: 0.4;
+}
+</style>

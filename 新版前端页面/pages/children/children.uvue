@@ -1,0 +1,359 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">照护的孩子</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 儿童卡列表 -->
+    <view
+      v-for="k in kids"
+      :key="k.id"
+      class="kid-card"
+      :class="{ 'kid-card-active': k.id == currentKidId }"
+    >
+      <view class="card-top">
+        <view class="avatar" :style="{ backgroundColor: k.avatarColor }">
+          <text class="avatar-text">{{ k.name.charAt(0) }}</text>
+        </view>
+        <view class="info">
+          <view class="name-row">
+            <text class="name">{{ k.name }}</text>
+            <view v-if="k.id == currentKidId" class="active-tag">
+              <text class="active-tag-text">当前守护</text>
+            </view>
+          </view>
+          <text class="meta">{{ k.age }} 岁 · {{ k.gender == 'F' ? '女' : '男' }} · {{ k.asthmaType }}</text>
+        </view>
+      </view>
+
+      <view class="status-line">
+        <view class="stat">
+          <text class="stat-l">RWFit 状态</text>
+          <view class="stat-v-row">
+            <view class="stat-dot stat-dot-ok"></view>
+            <text class="stat-v stat-v-ok">已连接</text>
+          </view>
+        </view>
+        <view class="stat">
+          <text class="stat-l">当前区间</text>
+          <text class="stat-v stat-v-ok">绿色区</text>
+        </view>
+        <view class="stat">
+          <text class="stat-l">电量</text>
+          <text class="stat-v stat-v-num">76%</text>
+        </view>
+      </view>
+
+      <view class="actions">
+        <view class="btn-ghost" @tap="editKid(k.id)" hover-class="btn-active">
+          <text class="btn-ghost-text">编辑档案</text>
+        </view>
+        <view class="btn-primary" @tap="switchKid(k.id)" hover-class="btn-active">
+          <text class="btn-primary-text">{{ k.id == currentKidId ? '查看哨兵' : '切换守护' }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 添加卡 -->
+    <view class="add-card" @tap="addKid" hover-class="add-card-active">
+      <view class="add-plus">
+        <text class="add-plus-text">+</text>
+      </view>
+      <text class="add-name">添加孩子</text>
+      <text class="add-desc">最多可添加 5 个照护对象</text>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getAllKids, getCurrentKid, setCurrentKid, type Kid } from '@/composables/useKid';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kids: getAllKids() as Kid[],
+      currentKidId: getCurrentKid().id as string,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    switchKid(id: string) {
+      if (id == this.currentKidId) {
+        uni.reLaunch({ url: '/pages/home/home' });
+      } else {
+        setCurrentKid(id);
+        this.currentKidId = id;
+        uni.showToast({ title: '已切换守护', icon: 'success' });
+      }
+    },
+    editKid(id: string) {
+      uni.navigateTo({ url: '/pages/children/form' });
+    },
+    addKid() {
+      uni.navigateTo({ url: '/pages/children/form' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Kid card */
+.kid-card {
+  margin: 12px $sp-6 0;
+  padding: 18px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-xl;
+}
+.kid-card-active {
+  border-width: 2px;
+  border-color: $sun-1;
+  padding: 17px;
+  box-shadow: 0 8px 24px -8px rgba(245, 143, 50, 0.35);
+}
+.card-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.avatar-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 22px;
+}
+.info {
+  flex: 1;
+  margin-left: 14px;
+}
+.name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.name {
+  font-size: 18px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+  margin-right: 8px;
+}
+.active-tag {
+  padding: 3px 8px;
+  background: $sun-wash;
+  border-radius: 10px;
+}
+.active-tag-text {
+  color: $sun-2;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.meta {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 3px;
+}
+
+.status-line {
+  display: flex;
+  flex-direction: row;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+.stat { flex: 1; }
+.stat-l {
+  font-size: 10px;
+  color: $ink-3;
+  letter-spacing: 0.04em;
+}
+.stat-v-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 3px;
+}
+.stat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  margin-right: 5px;
+}
+.stat-dot-ok { background: $leaf; }
+.stat-v {
+  font-size: 13px;
+  font-weight: 600;
+  color: $ink;
+  margin-top: 3px;
+}
+.stat-v-ok { color: $leaf; }
+.stat-v-num { font-family: $font-num; }
+
+.actions {
+  display: flex;
+  flex-direction: row;
+  margin-top: 12px;
+}
+.btn-ghost {
+  flex: 1;
+  padding: 10px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 12px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  margin-right: 8px;
+}
+.btn-ghost-text {
+  color: $ink;
+  font-size: 12px;
+  font-weight: 500;
+}
+.btn-primary {
+  flex: 1;
+  padding: 10px;
+  background-image: linear-gradient(135deg, $sun-1, $sun-2);
+  border-radius: 12px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(245, 143, 50, 0.35);
+}
+.btn-primary-text {
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 600;
+}
+.btn-active { opacity: 0.85; }
+
+/* Add card */
+.add-card {
+  margin: 12px $sp-6 0;
+  padding: 24px;
+  background: $card-2;
+  border-width: 1.5px;
+  border-style: dashed;
+  border-color: $hairline-2;
+  border-radius: $r-xl;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.add-card-active { opacity: 0.7; }
+.add-plus {
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 10px;
+  box-shadow: 0 3px 10px rgba(245, 143, 50, 0.15);
+}
+.add-plus-text {
+  color: $sun-2;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 22px;
+}
+.add-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: $sun-2;
+}
+.add-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 24px;
+  letter-spacing: 0.04em;
+}
+</style>

@@ -1,0 +1,65 @@
+/**
+ * AsthmaGuard · Kid state
+ * 全局当前守护儿童 · 用于所有页面显示同一个孩子的数据
+ */
+
+export type Kid = {
+  id: string;
+  name: string;      // 朵朵
+  age: number;       // 6
+  gender: 'F' | 'M';
+  avatarColor: string; // 头像渐变起色
+  birthDate: string; // 2019-04-15
+  asthmaType: string;  // 中度间歇性
+  allergens: string[]; // ['花粉', '尘螨']
+  doctor: string;      // 张医生
+  hospital: string;    // 浙江大学儿童医院
+};
+
+// 默认 mock 儿童数据
+export const DEFAULT_KIDS: Kid[] = [
+  {
+    id: 'kid-1',
+    name: '朵朵',
+    age: 6,
+    gender: 'F',
+    avatarColor: '#FFB547',
+    birthDate: '2019-04-15',
+    asthmaType: '中度间歇性',
+    allergens: ['花粉', '尘螨'],
+    doctor: '张医生',
+    hospital: '浙江大学儿童医院',
+  },
+  {
+    id: 'kid-2',
+    name: '乐乐',
+    age: 4,
+    gender: 'M',
+    avatarColor: '#6FA6D4',
+    birthDate: '2021-08-10',
+    asthmaType: '疑似 · 观察期',
+    allergens: [],
+    doctor: '张医生',
+    hospital: '浙江大学儿童医院',
+  },
+];
+
+// 获取当前守护的儿童（默认第一个）
+export function getCurrentKid(): Kid {
+  const kidId = uni.getStorageSync('ag_current_kid_id') as string | null;
+  if (kidId != null && kidId != '') {
+    const found = DEFAULT_KIDS.find((k): boolean => k.id == kidId);
+    if (found != null) return found;
+  }
+  return DEFAULT_KIDS[0];
+}
+
+// 切换当前守护儿童
+export function setCurrentKid(kidId: string): void {
+  uni.setStorageSync('ag_current_kid_id', kidId);
+}
+
+// 获取所有儿童
+export function getAllKids(): Kid[] {
+  return DEFAULT_KIDS;
+}

@@ -1,0 +1,271 @@
+{
+  "pages": [
+    // ═══ A · 引导与权限 ═══
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/onboarding/onboarding",
+      "style": {
+        "navigationBarTitleText": "欢迎",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/permission/permission",
+      "style": {
+        "navigationBarTitleText": "开启权限",
+        "navigationStyle": "custom"
+      }
+    },
+
+    // ═══ B · 5 大 Tab ═══
+    {
+      "path": "pages/home/home",
+      "style": {
+        "navigationBarTitleText": "哨兵",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/trend/trend",
+      "style": {
+        "navigationBarTitleText": "趋势",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/location/location",
+      "style": {
+        "navigationBarTitleText": "位置",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/device/device",
+      "style": {
+        "navigationBarTitleText": "戒指设备",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/me/me",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "navigationStyle": "custom"
+      }
+    },
+
+    // ═══ C · 报警流程 ═══
+    {
+      "path": "pages/alert/detail",
+      "style": {
+        "navigationBarTitleText": "关注等级 · 提升",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/offline/offline",
+      "style": {
+        "navigationBarTitleText": "戒指离线",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/history/history",
+      "style": {
+        "navigationBarTitleText": "关注记录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/plan/plan",
+      "style": {
+        "navigationBarTitleText": "哮喘行动计划",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/threshold/threshold",
+      "style": {
+        "navigationBarTitleText": "关注等级阈值",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/notification/notification",
+      "style": {
+        "navigationBarTitleText": "通知与免打扰",
+        "navigationStyle": "custom"
+      }
+    },
+
+    // ═══ D · 数据管理 ═══
+    {
+      "path": "pages/measure/measuring",
+      "style": {
+        "navigationBarTitleText": "手动测量",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/measure/result",
+      "style": {
+        "navigationBarTitleText": "测量结果",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/symptom/symptom",
+      "style": {
+        "navigationBarTitleText": "记录症状",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/detail-chart/detail-chart",
+      "style": {
+        "navigationBarTitleText": "详细数据",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/medication/medication",
+      "style": {
+        "navigationBarTitleText": "药品库",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/export/export",
+      "style": {
+        "navigationBarTitleText": "导出报告",
+        "navigationStyle": "custom"
+      }
+    },
+
+    // ═══ E · 用户与档案 ═══
+    {
+      "path": "pages/children/children",
+      "style": {
+        "navigationBarTitleText": "照护的孩子",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/children/form",
+      "style": {
+        "navigationBarTitleText": "编辑档案",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/family/family",
+      "style": {
+        "navigationBarTitleText": "家庭成员",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/pair/pair",
+      "style": {
+        "navigationBarTitleText": "添加戒指",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/account/delete",
+      "style": {
+        "navigationBarTitleText": "注销账户",
+        "navigationStyle": "custom"
+      }
+    },
+
+    // ═══ F · 内容与系统 ═══
+    {
+      "path": "pages/inbox/inbox",
+      "style": {
+        "navigationBarTitleText": "消息",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/search/search",
+      "style": {
+        "navigationBarTitleText": "搜索",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/knowledge/knowledge",
+      "style": {
+        "navigationBarTitleText": "知识科普",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/support/support",
+      "style": {
+        "navigationBarTitleText": "帮助与反馈",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/about/about",
+      "style": {
+        "navigationBarTitleText": "关于",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "AsthmaGuard",
+    "navigationBarBackgroundColor": "#FBF6EE",
+    "backgroundColor": "#FBF6EE"
+  },
+
+  "tabBar": {
+    "color": "#9C8B72",
+    "selectedColor": "#F58F32",
+    "borderStyle": "white",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      {
+        "pagePath": "pages/home/home",
+        "text": "哨兵",
+        "iconPath": "static/tabbar/sentinel.png",
+        "selectedIconPath": "static/tabbar/sentinel-on.png"
+      },
+      {
+        "pagePath": "pages/trend/trend",
+        "text": "趋势",
+        "iconPath": "static/tabbar/trend.png",
+        "selectedIconPath": "static/tabbar/trend-on.png"
+      },
+      {
+        "pagePath": "pages/location/location",
+        "text": "位置",
+        "iconPath": "static/tabbar/location.png",
+        "selectedIconPath": "static/tabbar/location-on.png"
+      },
+      {
+        "pagePath": "pages/device/device",
+        "text": "戒指",
+        "iconPath": "static/tabbar/ring.png",
+        "selectedIconPath": "static/tabbar/ring-on.png"
+      },
+      {
+        "pagePath": "pages/me/me",
+        "text": "我的",
+        "iconPath": "static/tabbar/me.png",
+        "selectedIconPath": "static/tabbar/me-on.png"
+      }
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+<template>
+  <view class="metric-bar">
+    <view
+      v-for="(cell, index) in cells"
+      :key="cell.label"
+      class="m-cell"
+      :class="{ 'm-cell-divider': index > 0 }"
+    >
+      <text class="m-label">{{ cell.label }}</text>
+      <view class="m-value-row">
+        <text class="m-value">{{ cell.value }}</text>
+        <text class="m-unit">{{ cell.unit }}</text>
+      </view>
+      <text class="m-trend" :style="{ color: cell.trendColor }">{{ cell.trend }}</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGMetricBar · 三格监测数值条
+ * 用法：<ag-metric-bar :cells="[{label:'心率', value:'98', unit:'bpm', trend:'↗ 平稳', trendColor:'#6BB280'}]" />
+ */
+
+export type MetricCell = {
+  label: string;
+  value: string;
+  unit: string;
+  trend: string;
+  trendColor: string;
+};
+
+export default {
+  props: {
+    cells: { type: Array as PropType<MetricCell[]>, required: true },
+  },
+};
+</script>
+
+<style lang="scss">
+.metric-bar {
+  padding: 16px 8px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  display: flex;
+  flex-direction: row;
+}
+.m-cell {
+  flex: 1;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.m-cell-divider {
+  border-left-width: 1px;
+  border-left-style: solid;
+  border-left-color: $hairline;
+}
+.m-label {
+  font-size: 9px;
+  color: $ink-2;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+.m-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 6px;
+}
+.m-value {
+  font-family: $font-num;
+  font-size: 24px;
+  font-weight: 500;
+  color: $ink;
+  letter-spacing: -0.03em;
+  line-height: 24px;
+}
+.m-unit {
+  font-size: 10px;
+  color: $ink-2;
+  font-weight: 400;
+  margin-left: 2px;
+}
+.m-trend {
+  font-size: 9px;
+  font-weight: 600;
+  margin-top: 5px;
+}
+</style>

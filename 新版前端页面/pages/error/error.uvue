@@ -1,0 +1,140 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">网络异常</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <view class="content">
+      <view class="err-illus">
+        <view class="err-halo"></view>
+        <view class="err-icon"><text class="err-icon-glyph">⚠</text></view>
+      </view>
+
+      <text class="err-title">网络连接不稳定</text>
+      <text class="err-desc">请检查你的 Wi-Fi 或蜂窝网络{{ '\n' }}戒指仍在本地记录数据，联网后自动上传</text>
+
+      <!-- 诊断 -->
+      <view class="diag-card">
+        <text class="diag-title">连接诊断</text>
+        <view v-for="d in diags" :key="d.key" class="diag-row">
+          <view class="diag-dot" :class="`diag-dot-${d.status}`"></view>
+          <text class="diag-name">{{ d.name }}</text>
+          <text class="diag-val" :class="`diag-val-${d.status}`">{{ d.value }}</text>
+        </view>
+      </view>
+
+      <!-- 本地缓存数据 -->
+      <view class="cache-card">
+        <view class="cache-icon"><text class="cache-icon-glyph">◐</text></view>
+        <view class="cache-body">
+          <text class="cache-title">本地已缓存 · 待上传</text>
+          <view class="cache-metrics">
+            <text class="cache-num">128</text>
+            <text class="cache-unit">条数据</text>
+            <text class="cache-time">· 最新 12 秒前</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="bottom-area" :style="{ paddingBottom: `${safeBottom}px` }">
+      <ag-button label="重新连接" type="primary" @tap="handleRetry"/>
+      <view class="offline-btn" @tap="handleOffline" hover-class="btn-active">
+        <text class="offline-text">离线继续使用</text>
+      </view>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+type Diag = { key: string; name: string; value: string; status: 'ok' | 'warn' | 'err' };
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      diags: [
+        { key: '1', name: 'Wi-Fi',       value: 'CMCC-Home', status: 'ok' },
+        { key: '2', name: '信号强度',    value: '-72 dBm',   status: 'warn' },
+        { key: '3', name: '服务器',      value: '连接失败',  status: 'err' },
+        { key: '4', name: '数据上传',    value: '暂停',      status: 'warn' },
+      ] as Diag[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 20;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    handleRetry() {
+      uni.showLoading({ title: '重连中...' });
+      setTimeout(() => {
+        uni.hideLoading();
+        uni.showToast({ title: '连接成功', icon: 'success' });
+        setTimeout(() => uni.reLaunch({ url: '/pages/home/home' }), 800);
+      }, 1500);
+    },
+    handleOffline() {
+      uni.reLaunch({ url: '/pages/home/home' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { width: 100%; height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 20%, rgba(255, 143, 50, 0.15) 0%, transparent 60%);
+  display: flex; flex-direction: column; }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 0; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.content { flex: 1; padding: 20px 24px 0; align-items: center; display: flex; flex-direction: column; }
+
+.err-illus { width: 160px; height: 160px; align-items: center; justify-content: center; display: flex; flex-direction: row; position: relative; }
+.err-halo { position: absolute; width: 160px; height: 160px; border-radius: 80px; background: radial-gradient(circle, rgba(245, 143, 50, 0.28) 0%, transparent 65%); }
+.err-icon { width: 80px; height: 80px; border-radius: 24px; background: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; z-index: 5; box-shadow: 0 8px 20px rgba(245, 143, 50, 0.4); }
+.err-icon-glyph { color: #FFFFFF; font-size: 40px; font-weight: 700; line-height: 40px; }
+
+.err-title { margin-top: 14px; font-size: 20px; font-weight: 700; color: $ink; letter-spacing: -0.02em; text-align: center; }
+.err-desc { font-size: 13px; color: $ink-2; line-height: 20px; margin-top: 8px; text-align: center; }
+
+.diag-card { margin-top: 24px; width: 100%; padding: 14px 16px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; }
+.diag-title { font-size: 11px; color: $sun-2; letter-spacing: 0.14em; font-weight: 700; margin-bottom: 8px; }
+.diag-row { display: flex; flex-direction: row; align-items: center; padding: 6px 0; }
+.diag-dot { width: 6px; height: 6px; border-radius: 3px; margin-right: 8px; }
+.diag-dot-ok { background: $leaf; }
+.diag-dot-warn { background: $sun-2; }
+.diag-dot-err { background: $zone-red; }
+.diag-name { flex: 1; font-size: 12px; color: $ink; }
+.diag-val { font-family: $font-num; font-size: 12px; font-weight: 600; }
+.diag-val-ok { color: $leaf; }
+.diag-val-warn { color: $sun-2; }
+.diag-val-err { color: $zone-red; }
+
+.cache-card { margin-top: 12px; width: 100%; padding: 12px 14px; background: $sun-wash; border-width: 1px; border-style: solid; border-color: rgba(245, 143, 50, 0.25); border-radius: $r-md; display: flex; flex-direction: row; align-items: center; }
+.cache-icon { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, $sun-3, $sun-2); align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.cache-icon-glyph { color: #FFFFFF; font-size: 15px; font-weight: 700; }
+.cache-body { flex: 1; }
+.cache-title { font-size: 11px; color: $sun-2; font-weight: 700; letter-spacing: 0.04em; }
+.cache-metrics { display: flex; flex-direction: row; align-items: baseline; margin-top: 3px; }
+.cache-num { font-family: $font-num; font-size: 18px; font-weight: 700; color: $ink; letter-spacing: -0.02em; }
+.cache-unit { font-size: 11px; color: $ink-2; margin-left: 3px; }
+.cache-time { font-size: 10px; color: $ink-3; margin-left: 6px; }
+
+.bottom-area { padding: 20px 24px 0; }
+.offline-btn { padding: 12px 0; align-items: center; display: flex; flex-direction: row; justify-content: center; }
+.offline-text { color: $ink-3; font-size: 12px; }
+</style>

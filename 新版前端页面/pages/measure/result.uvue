@@ -1,0 +1,439 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">测量结果</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 完成 icon + 标题 -->
+    <view class="success-hero">
+      <view class="success-icon">
+        <text class="success-icon-glyph">✓</text>
+      </view>
+      <text class="success-title">测量完成</text>
+      <text class="success-time">{{ kid.name }} · {{ measureTime }}</text>
+    </view>
+
+    <!-- Zone tag -->
+    <view class="zone-tag-wrap">
+      <view class="zone-tag">
+        <view class="zone-dot"></view>
+        <text class="zone-tag-text">绿色区 · 全部数值正常</text>
+      </view>
+    </view>
+
+    <!-- 4 项指标 grid -->
+    <view class="metrics-grid">
+      <view class="metric-card">
+        <view class="metric-top">
+          <view class="metric-icon metric-icon-br">
+            <text class="metric-icon-glyph">≋</text>
+          </view>
+          <text class="metric-label">呼吸频率</text>
+        </view>
+        <view class="metric-val-row">
+          <text class="metric-val">{{ reading.breath }}</text>
+          <text class="metric-unit">次/分</text>
+        </view>
+        <text class="metric-cmp">↗ 参考区间 20-30</text>
+      </view>
+
+      <view class="metric-card">
+        <view class="metric-top">
+          <view class="metric-icon metric-icon-hr">
+            <text class="metric-icon-glyph">♥</text>
+          </view>
+          <text class="metric-label">心率</text>
+        </view>
+        <view class="metric-val-row">
+          <text class="metric-val">{{ reading.hr }}</text>
+          <text class="metric-unit">bpm</text>
+        </view>
+        <text class="metric-cmp">↗ 平稳 · 窦性</text>
+      </view>
+
+      <view class="metric-card">
+        <view class="metric-top">
+          <view class="metric-icon metric-icon-spo2">
+            <text class="metric-icon-glyph">◐</text>
+          </view>
+          <text class="metric-label">血氧</text>
+        </view>
+        <view class="metric-val-row">
+          <text class="metric-val">{{ reading.spo2 }}</text>
+          <text class="metric-unit">%</text>
+        </view>
+        <text class="metric-cmp">↗ ≥ 95 · 正常</text>
+      </view>
+
+      <view class="metric-card">
+        <view class="metric-top">
+          <view class="metric-icon metric-icon-hrv">
+            <text class="metric-icon-glyph">≡</text>
+          </view>
+          <text class="metric-label">HRV</text>
+        </view>
+        <view class="metric-val-row">
+          <text class="metric-val">{{ reading.hrv }}</text>
+          <text class="metric-unit">ms</text>
+        </view>
+        <text class="metric-cmp">↗ 良好</text>
+      </view>
+    </view>
+
+    <!-- 观察建议卡 -->
+    <view class="insight-card">
+      <view class="insight-icon">
+        <text class="insight-icon-glyph">i</text>
+      </view>
+      <view class="insight-body">
+        <text class="insight-title">今日观察</text>
+        <text class="insight-desc">
+          所有数值均在参考区间内。呼吸频率相比 3 天前的平均值（24 次/分）略有下降，属于正常波动。
+        </text>
+      </view>
+    </view>
+
+    <text class="disclaimer">健康参考，非医疗建议 · 如症状持续请及时就医</text>
+
+    <view style="height: 130px;"></view>
+  </scroll-view>
+
+  <!-- 底部按钮 -->
+  <view class="bottom-actions" :style="{ paddingBottom: `${safeBottom}px` }">
+    <view class="btn-secondary" @tap="logSymptom" hover-class="btn-active">
+      <text class="btn-secondary-text">记录症状</text>
+    </view>
+    <view class="btn-primary" @tap="handleDone" hover-class="btn-active">
+      <text class="btn-primary-text">完成</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { getLatestReading, type RingReading } from '@/composables/useRing';
+import { fmtDateTime } from '@/utils/format';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      kid: getCurrentKid(),
+      reading: getLatestReading() as RingReading,
+      measureTime: fmtDateTime(Date.now()) as string,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    logSymptom() {
+      uni.navigateTo({ url: '/pages/symptom/symptom' });
+    },
+    handleDone() {
+      uni.reLaunch({ url: '/pages/home/home' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Success hero */
+.success-hero {
+  align-items: center;
+  padding: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+}
+.success-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 36px;
+  background-image: linear-gradient(135deg, #8DD5A5, $leaf);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 10px 24px rgba(107, 178, 128, 0.35);
+}
+.success-icon-glyph {
+  color: #FFFFFF;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 40px;
+}
+.success-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+  margin-top: 16px;
+}
+.success-time {
+  font-size: 12px;
+  color: $ink-2;
+  margin-top: 6px;
+}
+
+/* Zone tag */
+.zone-tag-wrap {
+  margin-top: 18px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.zone-tag {
+  padding: 6px 14px;
+  background: $leaf-wash;
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(107, 178, 128, 0.3);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.zone-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 5px;
+}
+.zone-tag-text {
+  color: $leaf;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+/* 4 metric cards · 2x2 */
+.metrics-grid {
+  margin: 20px $sp-6 0;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.metric-card {
+  width: 48%;
+  padding: 16px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  margin-right: 4%;
+  margin-bottom: 10px;
+}
+.metric-card:nth-child(2n) { margin-right: 0; }
+.metric-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.metric-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 8px;
+}
+.metric-icon-br { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.metric-icon-hr { background: linear-gradient(135deg, #FF9E8D, $zone-red); }
+.metric-icon-spo2 { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.metric-icon-hrv { background: linear-gradient(135deg, #B9DFC7, $leaf); }
+.metric-icon-glyph {
+  color: #FFFFFF;
+  font-size: 12px;
+  font-weight: 700;
+}
+.metric-label {
+  font-size: 11px;
+  color: $ink-2;
+  letter-spacing: 0.06em;
+}
+.metric-val-row {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+}
+.metric-val {
+  font-family: $font-num;
+  font-size: 32px;
+  font-weight: 500;
+  color: $ink;
+  letter-spacing: -0.03em;
+  line-height: 32px;
+}
+.metric-unit {
+  font-size: 12px;
+  color: $ink-2;
+  margin-left: 3px;
+}
+.metric-cmp {
+  font-size: 10px;
+  color: $leaf;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-top: 8px;
+}
+
+/* Insight card */
+.insight-card {
+  margin: 16px $sp-6 0;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, $sun-wash 0%, rgba(255, 143, 50, 0.02) 100%);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.2);
+  border-radius: $r-md;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+.insight-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: $card;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+  box-shadow: 0 2px 6px rgba(245, 143, 50, 0.15);
+}
+.insight-icon-glyph {
+  color: $sun-2;
+  font-size: 16px;
+  font-weight: 700;
+}
+.insight-body { flex: 1; }
+.insight-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: $sun-2;
+  letter-spacing: 0.02em;
+}
+.insight-desc {
+  font-size: 12px;
+  color: $ink;
+  margin-top: 4px;
+  line-height: 19px;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin: 16px $sp-6 0;
+  letter-spacing: 0.04em;
+}
+
+/* Bottom actions */
+.bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px $sp-5 0;
+  background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%);
+  display: flex;
+  flex-direction: row;
+}
+.btn-secondary {
+  padding: 14px 20px;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-xl;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 10px;
+  width: 100px;
+}
+.btn-secondary-text {
+  color: $ink;
+  font-size: 14px;
+  font-weight: 600;
+}
+.btn-primary {
+  flex: 1;
+  padding: 16px 20px;
+  background-image: linear-gradient(135deg, $sun-1, $sun-2);
+  border-radius: $r-xl;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 12px 30px -8px rgba(245, 143, 50, 0.45);
+}
+.btn-primary-text {
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.btn-active { opacity: 0.85; }
+</style>

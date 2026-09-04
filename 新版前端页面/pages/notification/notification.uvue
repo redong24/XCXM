@@ -1,0 +1,337 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">通知与免打扰</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 关注等级通知 -->
+    <text class="sec-title">关注等级通知</text>
+
+    <view class="list">
+      <view class="list-item">
+        <view class="list-icon list-icon-red">
+          <text class="list-icon-glyph">!</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">红色关注 · 强制通知</text>
+          <text class="list-desc">全屏弹窗 · 震动 · 强制响铃 · 免打扰仍生效</text>
+        </view>
+        <view class="toggle" @tap="alertRed = !alertRed">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+      <view class="list-item">
+        <view class="list-icon list-icon-yellow">
+          <text class="list-icon-glyph">◐</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">黄色关注</text>
+          <text class="list-desc">横幅通知 · 短震动 · 免打扰时段静音</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !alertYellow }" @tap="alertYellow = !alertYellow">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 其他通知 -->
+    <text class="sec-title">其他通知</text>
+
+    <view class="list">
+      <view class="list-item">
+        <view class="list-icon list-icon-sun">
+          <text class="list-icon-glyph">⏱</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">用药提醒</text>
+          <text class="list-desc">按行动计划每日 8:00 / 20:00 提醒</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !medReminder }" @tap="medReminder = !medReminder">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+      <view class="list-item">
+        <view class="list-icon list-icon-sun">
+          <text class="list-icon-glyph">◐</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">戒指状态</text>
+          <text class="list-desc">低电量、断连、脱落时提醒</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !ringStatus }" @tap="ringStatus = !ringStatus">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+      <view class="list-item">
+        <view class="list-icon list-icon-sun">
+          <text class="list-icon-glyph">◉</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">位置提醒</text>
+          <text class="list-desc">孩子离开/到达安全区域</text>
+        </view>
+        <view class="toggle toggle-off" @tap="locationAlert = !locationAlert">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+      <view class="list-item">
+        <view class="list-icon list-icon-sun">
+          <text class="list-icon-glyph">≡</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">周报</text>
+          <text class="list-desc">每周日晚上推送周报摘要</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !weeklyReport }" @tap="weeklyReport = !weeklyReport">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 免打扰时段 -->
+    <text class="sec-title">免打扰时段</text>
+
+    <view class="list">
+      <view class="list-item">
+        <view class="list-icon list-icon-sun">
+          <text class="list-icon-glyph">☾</text>
+        </view>
+        <view class="list-body">
+          <text class="list-name">开启免打扰</text>
+          <text class="list-desc">时段内静音黄色通知（红色仍会响）</text>
+        </view>
+        <view class="toggle" :class="{ 'toggle-off': !dndEnabled }" @tap="dndEnabled = !dndEnabled">
+          <view class="toggle-thumb"></view>
+        </view>
+      </view>
+      <view class="list-item">
+        <view class="list-body">
+          <text class="list-name list-name-plain">开始时间</text>
+        </view>
+        <text class="list-val list-val-mono">{{ dndStart }}</text>
+      </view>
+      <view class="list-item">
+        <view class="list-body">
+          <text class="list-name list-name-plain">结束时间</text>
+        </view>
+        <text class="list-val list-val-mono">{{ dndEnd }}</text>
+      </view>
+    </view>
+
+    <!-- 关键提示 -->
+    <view class="critical-note">
+      <text class="critical-text">
+        <text class="critical-bold">重要</text>：红色关注等级会绕过免打扰强制响铃 —— 这是<text class="critical-bold">不可关闭</text>的安全设计
+      </text>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      alertRed: true as boolean,       // 不可关闭
+      alertYellow: true as boolean,
+      medReminder: true as boolean,
+      ringStatus: true as boolean,
+      locationAlert: false as boolean,
+      weeklyReport: true as boolean,
+      dndEnabled: true as boolean,
+      dndStart: '22:30' as string,
+      dndEnd: '07:00' as string,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+.sec-title {
+  padding: 22px $sp-6 10px;
+  font-size: 11px;
+  color: $sun-2;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+
+/* List */
+.list {
+  margin: 0 $sp-6;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  overflow: hidden;
+}
+.list-item {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.list-item:last-child { border-bottom-width: 0; }
+.list-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.list-icon-red { background: linear-gradient(135deg, #FF9E8D, $zone-red); }
+.list-icon-yellow { background: linear-gradient(135deg, #FFD68C, $sun-1); }
+.list-icon-sun { background: $sun-wash; }
+.list-icon-glyph {
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 700;
+}
+.list-icon-sun .list-icon-glyph {
+  color: $sun-2;
+}
+.list-body { flex: 1; }
+.list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.list-name-plain {
+  color: $ink-2;
+  font-weight: 500;
+}
+.list-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.list-val {
+  font-size: 14px;
+  color: $ink;
+  font-weight: 600;
+}
+.list-val-mono {
+  font-family: $font-num;
+}
+
+/* Toggle */
+.toggle {
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: $sun-1;
+  position: relative;
+}
+.toggle-off { background: $card-3; }
+.toggle-thumb {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.toggle-off .toggle-thumb {
+  right: auto;
+  left: 2px;
+}
+
+/* Critical note */
+.critical-note {
+  margin: 16px $sp-6 0;
+  padding: 12px 16px;
+  background: rgba(255, 143, 50, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.2);
+  border-radius: 12px;
+}
+.critical-text {
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 18px;
+}
+.critical-bold {
+  color: $sun-2;
+  font-weight: 700;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

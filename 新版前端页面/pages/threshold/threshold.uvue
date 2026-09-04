@@ -1,0 +1,428 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="back-btn-active">
+        <text class="back-icon">‹</text>
+      </view>
+      <text class="header-title">关注等级阈值</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- 免责提示 -->
+    <view class="disclosure">
+      <text class="disclosure-text">
+        <text class="disclosure-bold">提示</text>：{{ disclaimerThreshold }}当前使用<text class="disclosure-bold">{{ kid.name }}</text>的档案。
+      </text>
+    </view>
+
+    <!-- 呼吸频率 -->
+    <view class="metric-block">
+      <view class="metric-head">
+        <view class="metric-icon metric-icon-br">
+          <text class="metric-icon-glyph">≋</text>
+        </view>
+        <view class="metric-titles">
+          <text class="metric-name">呼吸频率</text>
+          <text class="metric-desc">当前设置 · {{ breathThreshold.greenMin }} – {{ breathThreshold.greenMax }} 次/分为绿色区</text>
+        </view>
+      </view>
+
+      <!-- Range viz -->
+      <view class="range-viz">
+        <view class="range-track"></view>
+        <view class="range-fill" style="left: 30%; right: 15%;"></view>
+      </view>
+      <view class="range-labels">
+        <text class="range-label">10</text>
+        <text class="range-label">20</text>
+        <text class="range-label">30</text>
+        <text class="range-label">40</text>
+        <text class="range-label">50</text>
+      </view>
+
+      <view class="zone-rows">
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-g"><text class="zone-tag-text zone-tag-text-g">绿色</text></view>
+          <text class="zone-range">
+            <text class="zone-num">{{ breathThreshold.greenMin }} – {{ breathThreshold.greenMax }}</text> 次/分 · 正常
+          </text>
+          <text class="zone-edit">调整</text>
+        </view>
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-y"><text class="zone-tag-text zone-tag-text-y">黄色</text></view>
+          <text class="zone-range">
+            <text class="zone-num">{{ breathThreshold.greenMax }} – {{ breathThreshold.amberMax }}</text> 次/分 · 需关注
+          </text>
+          <text class="zone-edit">调整</text>
+        </view>
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-r"><text class="zone-tag-text zone-tag-text-r">红色</text></view>
+          <text class="zone-range">
+            &gt; <text class="zone-num">{{ breathThreshold.amberMax }}</text> 次/分 · 触发报警
+          </text>
+          <text class="zone-edit">调整</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 血氧 -->
+    <view class="metric-block">
+      <view class="metric-head">
+        <view class="metric-icon metric-icon-spo2">
+          <text class="metric-icon-glyph">◐</text>
+        </view>
+        <view class="metric-titles">
+          <text class="metric-name">血氧饱和度</text>
+          <text class="metric-desc">当前设置 · ≥ {{ spo2Threshold.greenMin }}% 为绿色区</text>
+        </view>
+      </view>
+
+      <view class="range-viz">
+        <view class="range-track"></view>
+        <view class="range-fill" style="left: 0%; right: 25%; background-image: linear-gradient(90deg, #E5574A 0%, #FFB547 30%, #6BB280 60%);"></view>
+      </view>
+      <view class="range-labels">
+        <text class="range-label">85</text>
+        <text class="range-label">90</text>
+        <text class="range-label">95</text>
+        <text class="range-label">100</text>
+      </view>
+
+      <view class="zone-rows">
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-g"><text class="zone-tag-text zone-tag-text-g">绿色</text></view>
+          <text class="zone-range">≥ <text class="zone-num">{{ spo2Threshold.greenMin }}</text> % · 正常</text>
+          <text class="zone-edit">调整</text>
+        </view>
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-y"><text class="zone-tag-text zone-tag-text-y">黄色</text></view>
+          <text class="zone-range">
+            <text class="zone-num">{{ spo2Threshold.amberMin }} – {{ spo2Threshold.greenMin - 1 }}</text> % · 需关注
+          </text>
+          <text class="zone-edit">调整</text>
+        </view>
+        <view class="zone-row">
+          <view class="zone-tag zone-tag-r"><text class="zone-tag-text zone-tag-text-r">红色</text></view>
+          <text class="zone-range">
+            &lt; <text class="zone-num">{{ spo2Threshold.amberMin }}</text> % · 触发报警
+          </text>
+          <text class="zone-edit">调整</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 心率上限 -->
+    <view class="metric-block">
+      <view class="metric-head">
+        <view class="metric-icon metric-icon-hr">
+          <text class="metric-icon-glyph">♥</text>
+        </view>
+        <view class="metric-titles">
+          <text class="metric-name">心率上限</text>
+          <text class="metric-desc">安静状态下的心率上限</text>
+        </view>
+      </view>
+
+      <view class="range-viz">
+        <view class="range-track"></view>
+        <view class="range-fill" style="left: 0%; right: 20%;"></view>
+      </view>
+      <view class="range-labels">
+        <text class="range-label">80</text>
+        <text class="range-label">100</text>
+        <text class="range-label">120</text>
+        <text class="range-label">140</text>
+        <text class="range-label">160</text>
+      </view>
+
+      <view class="hr-summary">
+        <text class="hr-num">{{ hrThreshold }}</text>
+        <text class="hr-caption">bpm · 超过将触发关注等级提升</text>
+      </view>
+    </view>
+
+    <view class="reset-hint">
+      <text class="reset-text">恢复默认参考值 · 咨询医生调整个性化阈值</text>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getCurrentKid } from '@/composables/useKid';
+import { DEFAULT_THRESHOLDS } from '@/utils/zone';
+import { DISCLAIMER_THRESHOLD, DISCLAIMER_SHORT } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kid: getCurrentKid(),
+      breathThreshold: DEFAULT_THRESHOLDS.breath,
+      spo2Threshold: DEFAULT_THRESHOLDS.spo2,
+      hrThreshold: DEFAULT_THRESHOLDS.hr.max,
+      disclaimerThreshold: DISCLAIMER_THRESHOLD,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.back-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.back-btn-active { opacity: 0.7; }
+.back-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.placeholder-40 { width: 40px; }
+
+/* Disclosure */
+.disclosure {
+  margin: 12px $sp-6 0;
+  padding: 12px 16px;
+  background: rgba(255, 143, 50, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.2);
+  border-radius: 12px;
+}
+.disclosure-text {
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 18px;
+}
+.disclosure-bold {
+  color: $sun-2;
+  font-weight: 600;
+}
+
+/* Metric block */
+.metric-block {
+  margin: 12px $sp-6 0;
+  padding: 20px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+}
+.metric-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.metric-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.metric-icon-br { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.metric-icon-spo2 { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.metric-icon-hr { background: linear-gradient(135deg, #FF9E8D, $zone-red); }
+.metric-icon-glyph {
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+}
+.metric-titles { flex: 1; }
+.metric-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.metric-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+
+/* Range viz */
+.range-viz {
+  position: relative;
+  height: 24px;
+}
+.range-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9px;
+  height: 6px;
+  border-radius: 3px;
+  background: $card-3;
+}
+.range-fill {
+  position: absolute;
+  top: 9px;
+  height: 6px;
+  border-radius: 3px;
+  background-image: linear-gradient(90deg, $leaf 0%, $leaf 40%, $sun-1 60%, $sun-1 80%, $zone-red 90%);
+}
+
+.range-labels {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.range-label {
+  font-family: $font-num;
+  font-size: 10px;
+  color: $ink-3;
+}
+
+/* Zone rows */
+.zone-rows {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+.zone-row {
+  padding: 10px 12px;
+  background: $card-2;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.zone-row:last-child { margin-bottom: 0; }
+.zone-tag {
+  width: 56px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  margin-right: 12px;
+}
+.zone-tag-g { background: $leaf-wash; }
+.zone-tag-y { background: $sun-wash; }
+.zone-tag-r { background: $coral-wash; }
+.zone-tag-text {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.zone-tag-text-g { color: $leaf; }
+.zone-tag-text-y { color: $sun-2; }
+.zone-tag-text-r { color: $zone-red; }
+.zone-range {
+  flex: 1;
+  font-size: 13px;
+  color: $ink;
+  font-weight: 500;
+}
+.zone-num {
+  font-family: $font-num;
+  font-weight: 700;
+  color: $ink;
+}
+.zone-edit {
+  font-size: 11px;
+  color: $sun-2;
+  font-weight: 600;
+}
+
+/* HR summary */
+.hr-summary {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+.hr-num {
+  font-family: $font-num;
+  font-size: 26px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 26px;
+}
+.hr-caption {
+  font-size: 12px;
+  color: $ink-2;
+  margin-left: 8px;
+}
+
+.reset-hint {
+  margin: 12px $sp-6 0;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.reset-text {
+  font-size: 11px;
+  color: $ink-3;
+  line-height: 17px;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>

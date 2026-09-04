@@ -1,0 +1,50 @@
+{
+  "name": "AsthmaGuard",
+  "appid": "__UNI__9E0A6C2",
+  "description": "儿童哮喘可穿戴监测系统移动端 · 哨兵 · 守护呼吸",
+  "versionName": "4.0.1",
+  "versionCode": "401",
+  "transformPx": false,
+  "uni-app-x": {
+    "styleIsolationVersion": "2"
+  },
+  "app": {
+    "distribute": {
+      "android": {
+        "permissions": [
+          "<uses-permission android:name=\"android.permission.BLUETOOTH\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_ADMIN\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_SCAN\"/>",
+          "<uses-permission android:name=\"android.permission.BLUETOOTH_CONNECT\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_BACKGROUND_LOCATION\"/>",
+          "<uses-permission android:name=\"android.permission.INTERNET\"/>",
+          "<uses-permission android:name=\"android.permission.WRITE_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>",
+          "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+          "<uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\"/>",
+          "<uses-permission android:name=\"android.permission.FOREGROUND_SERVICE\"/>",
+          "<uses-permission android:name=\"android.permission.FOREGROUND_SERVICE_HEALTH\"/>",
+          "<uses-permission android:name=\"android.permission.WAKE_LOCK\"/>",
+          "<uses-permission android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\"/>",
+          "<uses-permission android:name=\"android.permission.VIBRATE\"/>",
+          "<uses-permission android:name=\"android.permission.CAMERA\"/>"
+        ],
+        "minSdkVersion": 26,
+        "targetSdkVersion": 34
+      },
+      "ios": {
+        "dSYMs": false,
+        "privacyDescription": {
+          "NSBluetoothAlwaysUsageDescription": "AsthmaGuard 使用蓝牙连接 RWFit 智能戒指，采集孩子的呼吸、心率、血氧数据。",
+          "NSBluetoothPeripheralUsageDescription": "AsthmaGuard 使用蓝牙连接 RWFit 智能戒指。",
+          "NSLocationWhenInUseUsageDescription": "AsthmaGuard 使用位置信息追踪孩子实时位置，并显示环境空气质量。",
+          "NSLocationAlwaysAndWhenInUseUsageDescription": "AsthmaGuard 需要在后台使用位置以持续追踪孩子和监测环境。",
+          "NSCameraUsageDescription": "AsthmaGuard 使用相机扫描戒指配对二维码。",
+          "NSUserNotificationsUsageDescription": "AsthmaGuard 使用通知在关注等级提升时立即提醒你。"
+        }
+      }
+    }
+  }
+}

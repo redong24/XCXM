@@ -1,0 +1,286 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- Hero -->
+    <view class="perm-hero">
+      <view class="hero-icon">
+        <text class="hero-icon-glyph">◐</text>
+      </view>
+      <text class="hero-title">让哨兵保持在岗</text>
+      <text class="hero-desc">AsthmaGuard 需要以下权限才能 24 小时守护孩子的呼吸</text>
+    </view>
+
+    <!-- 权限列表 -->
+    <view class="perm-list">
+      <view v-for="p in perms" :key="p.key" class="perm-item">
+        <view class="perm-icon" :class="`perm-icon-${p.key}`">
+          <text class="perm-icon-glyph">{{ p.icon }}</text>
+        </view>
+        <view class="perm-body">
+          <view class="perm-name-row">
+            <text class="perm-name">{{ p.name }}</text>
+            <view v-if="p.required" class="required-tag">
+              <text class="required-text">必需</text>
+            </view>
+          </view>
+          <text class="perm-desc">{{ p.desc }}</text>
+        </view>
+        <view class="status-tag" :class="`status-tag-${p.status}`">
+          <text class="status-tag-text" :class="`status-tag-text-${p.status}`">{{ statusLabels[p.status] }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 隐私声明 -->
+    <view class="privacy-card">
+      <text class="privacy-text">
+        <text class="privacy-bold">你的隐私很重要</text>：所有健康数据本地加密存储 · 未经你允许不会上传或分享。可以在系统设置中随时撤销权限。
+      </text>
+    </view>
+
+    <view style="height: 140px;"></view>
+  </scroll-view>
+
+  <view class="bottom-actions" :style="{ paddingBottom: `${safeBottom}px` }">
+    <ag-button label="一键授予" type="primary" @tap="handleGrantAll" />
+    <view class="skip-btn" @tap="handleSkip" hover-class="skip-btn-active">
+      <text class="skip-text">稍后设置</text>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+type PermItem = {
+  key: string;
+  icon: string;
+  name: string;
+  desc: string;
+  required: boolean;
+  status: 'granted' | 'pending' | 'denied';
+};
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      statusLabels: {
+        granted: '已授权',
+        pending: '待授权',
+        denied: '未授权',
+      },
+      perms: [
+        { key: 'bt',   icon: '⋱', name: '蓝牙',       desc: '连接 RWFit 戒指，实时读取呼吸、心率、血氧数据', required: true,  status: 'granted' },
+        { key: 'noti', icon: '◐', name: '通知',       desc: '关注等级提升时立即提醒你 · 免打扰模式下仍会强制响铃', required: true,  status: 'granted' },
+        { key: 'bg',   icon: '⏱', name: '后台运行',   desc: 'App 关闭后哨兵仍在岗，持续接收戒指数据', required: true,  status: 'pending' },
+        { key: 'loc',  icon: '◉', name: '位置',       desc: '追踪孩子实时位置 · 环境空气质量 · 关注记录 · 可选', required: false, status: 'denied' },
+      ] as PermItem[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+  },
+  methods: {
+    handleGrantAll() {
+      uni.showLoading({ title: '请求权限中...' });
+      setTimeout(() => {
+        uni.hideLoading();
+        this.perms.forEach((p): void => {
+          if (p.required) p.status = 'granted';
+        });
+        uni.showToast({ title: '权限已授予', icon: 'success' });
+        setTimeout(() => this.goHome(), 800);
+      }, 1200);
+    },
+    handleSkip() {
+      this.goHome();
+    },
+    goHome() {
+      uni.reLaunch({ url: '/pages/home/home' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.2) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.perm-hero {
+  padding: 30px 24px 0;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+.hero-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background-image: linear-gradient(135deg, $sun-3, $sun-2);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 12px 24px -6px rgba(245, 143, 50, 0.4);
+}
+.hero-icon-glyph {
+  color: #FFFFFF;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 40px;
+}
+.hero-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  margin-top: 20px;
+  text-align: center;
+}
+.hero-desc {
+  font-size: 13px;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: 10px;
+  text-align: center;
+  padding: 0 12px;
+}
+
+/* Perm list */
+.perm-list {
+  margin: 24px $sp-6 0;
+  background: $card;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-md;
+  overflow: hidden;
+}
+.perm-item {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.perm-item:last-child { border-bottom-width: 0; }
+.perm-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.perm-icon-bt { background: linear-gradient(135deg, #6A9BF0, #3D6BFF); }
+.perm-icon-noti { background: linear-gradient(135deg, #FFB98A, $coral); }
+.perm-icon-loc { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.perm-icon-bg { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.perm-icon-glyph {
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+}
+.perm-body { flex: 1; }
+.perm-name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.perm-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+  margin-right: 6px;
+}
+.required-tag {
+  padding: 1px 6px;
+  background: $coral-wash;
+  border-radius: 6px;
+}
+.required-text {
+  color: $zone-red;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.perm-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 4px;
+  line-height: 17px;
+}
+.status-tag {
+  padding: 4px 8px;
+  border-radius: 8px;
+  align-self: center;
+}
+.status-tag-granted { background: $leaf-wash; }
+.status-tag-pending { background: $sun-wash; }
+.status-tag-denied { background: $coral-wash; }
+.status-tag-text {
+  font-size: 11px;
+  font-weight: 700;
+}
+.status-tag-text-granted { color: $leaf; }
+.status-tag-text-pending { color: $sun-2; }
+.status-tag-text-denied { color: $zone-red; }
+
+/* Privacy */
+.privacy-card {
+  margin: 16px $sp-6 0;
+  padding: 12px 16px;
+  background: rgba(255, 143, 50, 0.08);
+  border-width: 1px;
+  border-style: solid;
+  border-color: rgba(255, 143, 50, 0.2);
+  border-radius: 12px;
+}
+.privacy-text {
+  font-size: 11px;
+  color: $ink-2;
+  line-height: 18px;
+}
+.privacy-bold {
+  color: $sun-2;
+  font-weight: 700;
+}
+
+/* Bottom */
+.bottom-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px $sp-5 0;
+  background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%);
+}
+.skip-btn {
+  padding: 12px 0;
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.skip-btn-active { opacity: 0.7; }
+.skip-text {
+  color: $ink-3;
+  font-size: 12px;
+}
+</style>

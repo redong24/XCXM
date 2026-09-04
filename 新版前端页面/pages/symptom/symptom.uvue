@@ -1,0 +1,422 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="close-btn" @tap="handleClose" hover-class="close-btn-active">
+        <text class="close-icon">×</text>
+      </view>
+      <text class="header-title">记录症状</text>
+      <view class="save-btn" @tap="handleSave" hover-class="save-btn-active">
+        <text class="save-text">保存</text>
+      </view>
+    </view>
+
+    <!-- 发生时间 -->
+    <view class="form-block">
+      <text class="form-label">发生时间</text>
+      <view class="time-row">
+        <view class="time-cell">
+          <text class="time-cell-l">日期</text>
+          <text class="time-cell-v">今天 · 9/3</text>
+        </view>
+        <view class="time-cell">
+          <text class="time-cell-l">时间</text>
+          <text class="time-cell-v">{{ currentTime }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 症状 -->
+    <view class="form-block">
+      <text class="form-label">
+        观察到的症状<text class="required">*</text>
+      </text>
+      <view class="chip-group">
+        <view
+          v-for="s in symptoms"
+          :key="s.key"
+          class="chip"
+          :class="{ 'chip-selected': selectedSymptoms.includes(s.key) }"
+          @tap="toggleSymptom(s.key)"
+        >
+          <text class="chip-text" :class="{ 'chip-text-selected': selectedSymptoms.includes(s.key) }">{{ s.label }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 严重程度 -->
+    <view class="form-block">
+      <text class="form-label">症状严重程度</text>
+      <view class="severity-row">
+        <view
+          v-for="lv in severities"
+          :key="lv.n"
+          class="sev-cell"
+          :class="{ 'sev-cell-selected': severity == lv.n }"
+          @tap="severity = lv.n"
+        >
+          <text class="sev-n" :class="{ 'sev-n-selected': severity == lv.n }">{{ lv.n }}</text>
+          <text class="sev-label" :class="{ 'sev-label-selected': severity == lv.n }">{{ lv.label }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 可能诱因 -->
+    <view class="form-block">
+      <text class="form-label">可能的诱因</text>
+      <view class="chip-group">
+        <view
+          v-for="t in triggers"
+          :key="t.key"
+          class="chip"
+          :class="{ 'chip-selected': selectedTriggers.includes(t.key) }"
+          @tap="toggleTrigger(t.key)"
+        >
+          <text class="chip-text" :class="{ 'chip-text-selected': selectedTriggers.includes(t.key) }">{{ t.label }}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 用药 -->
+    <view class="form-block">
+      <text class="form-label">是否用药</text>
+      <view class="chip-group">
+        <view class="chip chip-selected">
+          <text class="chip-text chip-text-selected">沙丁胺醇 · 2 喷</text>
+        </view>
+        <view class="chip chip-add" @tap="openMedication" hover-class="chip-add-active">
+          <text class="chip-text chip-text-add">+ 添加用药</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 备注 -->
+    <view class="form-block">
+      <text class="form-label">备注（可选）</text>
+      <textarea
+        class="notes-textarea"
+        v-model="notes"
+        placeholder="补充说明症状发作的场景、持续时间等..."
+        :maxlength="200"
+      />
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 130px;"></view>
+  </scroll-view>
+
+  <view class="bottom-action" :style="{ paddingBottom: `${safeBottom}px` }">
+    <ag-button label="保存记录" type="primary" @tap="handleSave" />
+  </view>
+</template>
+
+<script lang="uts">
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+type SymptomOpt = { key: string; label: string };
+type SevLevel = { n: number; label: string };
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      currentTime: '09:38' as string,
+      severity: 3 as number,
+      notes: '朵朵在家中玩耍时突然咳嗽 · 打开窗户后加剧 · 用药后 15 分钟缓解' as string,
+      selectedSymptoms: ['cough', 'wheeze'] as string[],
+      selectedTriggers: ['pollen'] as string[],
+      disclaimerShort: DISCLAIMER_SHORT,
+      symptoms: [
+        { key: 'cough',    label: '咳嗽' },
+        { key: 'wheeze',   label: '喘息' },
+        { key: 'tight',    label: '胸闷' },
+        { key: 'short',    label: '气促' },
+        { key: 'night',    label: '夜间惊醒' },
+        { key: 'runny',    label: '流涕' },
+        { key: 'fever',    label: '发热' },
+      ] as SymptomOpt[],
+      severities: [
+        { n: 1, label: '轻微' },
+        { n: 2, label: '偶发' },
+        { n: 3, label: '明显' },
+        { n: 4, label: '严重' },
+        { n: 5, label: '紧急' },
+      ] as SevLevel[],
+      triggers: [
+        { key: 'pollen',   label: '花粉' },
+        { key: 'dust',     label: '尘螨' },
+        { key: 'pet',      label: '宠物' },
+        { key: 'cold',     label: '冷空气' },
+        { key: 'exercise', label: '运动' },
+        { key: 'emotion',  label: '情绪' },
+        { key: 'food',     label: '饮食' },
+        { key: 'unknown',  label: '未知' },
+      ] as SymptomOpt[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 10;
+    // 当前时间
+    const now = new Date();
+    const h = now.getHours().toString().padStart(2, '0');
+    const m = now.getMinutes().toString().padStart(2, '0');
+    this.currentTime = `${h}:${m}`;
+  },
+  methods: {
+    handleClose() {
+      uni.navigateBack({});
+    },
+    toggleSymptom(key: string) {
+      const idx = this.selectedSymptoms.indexOf(key);
+      if (idx >= 0) {
+        this.selectedSymptoms.splice(idx, 1);
+      } else {
+        this.selectedSymptoms.push(key);
+      }
+    },
+    toggleTrigger(key: string) {
+      const idx = this.selectedTriggers.indexOf(key);
+      if (idx >= 0) {
+        this.selectedTriggers.splice(idx, 1);
+      } else {
+        this.selectedTriggers.push(key);
+      }
+    },
+    openMedication() {
+      uni.navigateTo({ url: '/pages/medication/medication' });
+    },
+    handleSave() {
+      if (this.selectedSymptoms.length == 0) {
+        uni.showToast({ title: '请至少选择一个症状', icon: 'none' });
+        return;
+      }
+      uni.showToast({ title: '已保存', icon: 'success' });
+      setTimeout(() => uni.navigateBack({}), 800);
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.header {
+  padding: 6px $sp-5 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.close-btn-active { opacity: 0.7; }
+.close-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+}
+.header-title {
+  color: $ink;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.save-btn {
+  padding: 8px 12px;
+}
+.save-btn-active { opacity: 0.7; }
+.save-text {
+  color: $sun-2;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Form block */
+.form-block {
+  margin: 12px $sp-6 0;
+  padding: 18px 20px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+}
+.form-label {
+  font-size: 12px;
+  color: $ink-2;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+.required {
+  color: $zone-red;
+  margin-left: 4px;
+}
+
+/* Time row */
+.time-row {
+  display: flex;
+  flex-direction: row;
+}
+.time-cell {
+  flex: 1;
+  padding: 10px 12px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  margin-right: 8px;
+}
+.time-cell:last-child { margin-right: 0; }
+.time-cell-l {
+  font-size: 13px;
+  color: $ink;
+}
+.time-cell-v {
+  font-size: 13px;
+  color: $ink;
+  font-weight: 600;
+  font-family: $font-num;
+}
+
+/* Chip group */
+.chip-group {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 8px 14px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 20px;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+.chip-selected {
+  background: $sun-1;
+  border-color: $sun-1;
+  box-shadow: 0 3px 8px rgba(245, 143, 50, 0.25);
+}
+.chip-add {
+  border-style: dashed;
+  border-color: $hairline-2;
+}
+.chip-add-active { opacity: 0.7; }
+.chip-text {
+  font-size: 12px;
+  color: $ink;
+  font-weight: 500;
+}
+.chip-text-selected {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+.chip-text-add {
+  color: $sun-2;
+}
+
+/* Severity */
+.severity-row {
+  display: flex;
+  flex-direction: row;
+}
+.sev-cell {
+  flex: 1;
+  padding: 12px 6px;
+  border-radius: 12px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $hairline;
+  background: $card-2;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 8px;
+}
+.sev-cell:last-child { margin-right: 0; }
+.sev-cell-selected {
+  border-color: $sun-2;
+  background: $sun-wash;
+}
+.sev-n {
+  font-family: $font-num;
+  font-size: 20px;
+  font-weight: 700;
+  color: $ink;
+  line-height: 20px;
+}
+.sev-n-selected {
+  color: $sun-2;
+}
+.sev-label {
+  font-size: 11px;
+  color: $ink;
+  font-weight: 600;
+  margin-top: 3px;
+}
+.sev-label-selected {
+  color: $sun-2;
+}
+
+/* Notes textarea */
+.notes-textarea {
+  padding: 12px 14px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: 12px;
+  font-size: 13px;
+  color: $ink;
+  line-height: 20px;
+  min-height: 80px;
+  width: 100%;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin: 20px $sp-6 0;
+  letter-spacing: 0.04em;
+}
+
+.bottom-action {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 20px $sp-5 0;
+  background: linear-gradient(180deg, rgba(251, 246, 238, 0) 0%, $paper 40%);
+}
+</style>

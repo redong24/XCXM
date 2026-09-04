@@ -1,0 +1,228 @@
+<template>
+  <view class="page">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <!-- 跳过 -->
+    <view class="skip-btn" @tap="handleSkip" hover-class="skip-btn-active">
+      <text class="skip-text">跳过</text>
+    </view>
+
+    <!-- 步骤指示 dots -->
+    <view class="step-dots">
+      <view v-for="i in 3" :key="i" class="dot" :class="{ 'dot-active': currentStep == i }"></view>
+    </view>
+
+    <!-- 内容区（根据 step 切换）-->
+    <view class="content">
+      <!-- Illustration -->
+      <view class="illustration">
+        <view class="halo"></view>
+        <view class="halo-ring halo-ring-1"></view>
+        <view class="halo-ring halo-ring-2"></view>
+        <view class="halo-ring halo-ring-3"></view>
+        <view class="illus-icon" :class="`illus-icon-${currentStep}`">
+          <text class="illus-glyph">{{ steps[currentStep - 1].icon }}</text>
+        </view>
+      </view>
+
+      <text class="onboard-title">
+        {{ steps[currentStep - 1].title }}
+      </text>
+      <text class="onboard-desc">
+        {{ steps[currentStep - 1].desc }}
+      </text>
+    </view>
+
+    <!-- 底部按钮 -->
+    <view class="bottom-area" :style="{ paddingBottom: `${safeBottom}px` }">
+      <ag-button
+        :label="currentStep < 3 ? '继续' : '开始使用'"
+        type="primary"
+        @tap="handleNext"
+      />
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+import AgButton from '@/components/ag-button/ag-button.uvue';
+
+type StepContent = {
+  icon: string;
+  title: string;
+  desc: string;
+};
+
+export default {
+  components: { AgButton },
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      safeBottom: 30 as number,
+      currentStep: 1 as number,
+      steps: [
+        {
+          icon: '◐',
+          title: '这个 App\n是你的哨兵',
+          desc: '它替你守护孩子的呼吸\n你只在真正需要时被叫醒',
+        },
+        {
+          icon: '≋',
+          title: '实时监测\n呼吸、心率、血氧',
+          desc: 'RWFit 智能戒指 24 小时采集\n数据本地加密存储',
+        },
+        {
+          icon: '!',
+          title: '关注等级\n绿黄红三区',
+          desc: '按医生定制的行动计划应对\n免打扰时段红色仍强制响铃',
+        },
+      ] as StepContent[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+    this.safeBottom = (info.safeAreaInsets?.bottom ?? 20) + 20;
+  },
+  methods: {
+    handleNext() {
+      if (this.currentStep < 3) {
+        this.currentStep += 1;
+      } else {
+        // 完成引导 → 进入权限授予
+        uni.setStorageSync('ag_onboarded', true);
+        uni.reLaunch({ url: '/pages/permission/permission' });
+      }
+    },
+    handleSkip() {
+      uni.setStorageSync('ag_onboarded', true);
+      uni.reLaunch({ url: '/pages/permission/permission' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  width: 100%;
+  height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 15%, rgba(255, 181, 71, 0.28) 0%, transparent 65%),
+    radial-gradient(50% 40% at 20% 30%, rgba(255, 131, 103, 0.10) 0%, transparent 55%);
+  display: flex;
+  flex-direction: column;
+}
+.status-bar { width: 100%; }
+
+.skip-btn {
+  position: absolute;
+  top: 60px;
+  right: 22px;
+  padding: 6px 12px;
+  z-index: 10;
+}
+.skip-btn-active { opacity: 0.7; }
+.skip-text {
+  color: $ink-3;
+  font-size: 12px;
+}
+
+.step-dots {
+  padding: 20px 0;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: $card-3;
+  margin: 0 3px;
+}
+.dot-active {
+  width: 26px;
+  background-image: linear-gradient(90deg, $sun-1, $sun-2);
+  border-radius: 4px;
+}
+
+.content {
+  flex: 1;
+  padding: 30px 32px 0;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.illustration {
+  width: 240px;
+  height: 240px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  position: relative;
+  margin-bottom: 40px;
+}
+.halo {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 120px;
+  background: radial-gradient(circle,
+    rgba(255, 143, 50, 0.28) 0%,
+    rgba(255, 131, 103, 0.12) 45%,
+    transparent 70%);
+}
+.halo-ring {
+  position: absolute;
+  border-radius: 100px;
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: $sun-1;
+  opacity: 0.4;
+}
+.halo-ring-1 { width: 200px; height: 200px; opacity: 0.5; }
+.halo-ring-2 { width: 170px; height: 170px; opacity: 0.35; }
+.halo-ring-3 { width: 140px; height: 140px; opacity: 0.2; }
+
+.illus-icon {
+  width: 110px;
+  height: 110px;
+  border-radius: 55px;
+  background-image: linear-gradient(135deg, $sun-1, $sun-2);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  box-shadow: 0 12px 30px rgba(245, 143, 50, 0.4);
+  z-index: 5;
+}
+.illus-glyph {
+  color: #FFFFFF;
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 52px;
+}
+
+.onboard-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.02em;
+  line-height: 34px;
+  text-align: center;
+}
+.onboard-desc {
+  font-size: 14px;
+  color: $ink-2;
+  line-height: 22px;
+  margin-top: 14px;
+  text-align: center;
+}
+
+.bottom-area {
+  padding: 20px 24px 0;
+}
+</style>

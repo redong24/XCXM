@@ -1,0 +1,130 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="header">
+      <view class="back-btn" @tap="handleBack" hover-class="btn-active"><text class="back-icon">‹</text></view>
+      <text class="header-title">知识科普</text>
+      <view class="placeholder-40"></view>
+    </view>
+
+    <!-- Featured 卡 -->
+    <view class="featured">
+      <view class="featured-halo"></view>
+      <view class="featured-body">
+        <text class="featured-tag">编辑推荐</text>
+        <text class="featured-title">看懂关注等级{{ '\n' }}绿黄红三区如何工作</text>
+        <text class="featured-meta">5 分钟阅读 · 张医生 审核</text>
+        <view class="featured-cta">
+          <text class="featured-cta-text">开始阅读 →</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 分类 -->
+    <view class="cat-tabs">
+      <view v-for="c in categories" :key="c" class="cat-tab" :class="{ 'cat-tab-active': cat == c }" @tap="cat = c">
+        <text class="cat-text" :class="{ 'cat-text-active': cat == c }">{{ c }}</text>
+      </view>
+    </view>
+
+    <!-- 文章列表 -->
+    <view v-for="a in articles" :key="a.id" class="article-item" @tap="openArticle(a.id)" hover-class="article-active">
+      <view class="article-thumb" :class="`article-thumb-${a.color}`">
+        <text class="article-thumb-glyph">{{ a.icon }}</text>
+      </view>
+      <view class="article-body">
+        <text class="article-title">{{ a.title }}</text>
+        <text class="article-preview">{{ a.preview }}</text>
+        <view class="article-meta">
+          <text class="article-tag" :class="`article-tag-${a.color}`">{{ a.category }}</text>
+          <text class="article-time">{{ a.readTime }} · {{ a.author }}</text>
+        </view>
+      </view>
+    </view>
+
+    <view style="height: 40px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+type Article = { id: string; title: string; preview: string; icon: string; color: string;
+  category: string; readTime: string; author: string };
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      categories: ['全部', '基础知识', '用药指南', '生活护理', '急救'] as string[],
+      cat: '全部' as string,
+      articles: [
+        { id: '1', title: '正确使用吸入器的 6 个步骤',
+          preview: '大约 30% 的孩子会误用吸入器 · 掌握这几步大幅提升用药效果...',
+          icon: '◐', color: 'sky', category: '用药指南', readTime: '4 分钟', author: '李药师' },
+        { id: '2', title: '如何区分感冒和哮喘发作',
+          preview: '两者症状相似但处理完全不同 · 5 个关键差异帮你快速判断...',
+          icon: '?', color: 'sun', category: '基础知识', readTime: '6 分钟', author: '张医生' },
+        { id: '3', title: '春季花粉季 · 8 个防护技巧',
+          preview: '花粉浓度早晨最高 · 出门戴口罩、及时洗鼻...',
+          icon: '≋', color: 'leaf', category: '生活护理', readTime: '5 分钟', author: '陈护士' },
+        { id: '4', title: '孩子哮喘发作时 · 家长该怎么做',
+          preview: '保持镇定 · 让孩子端坐 · 立即使用缓解药 · 观察 15 分钟...',
+          icon: '!', color: 'red', category: '急救', readTime: '3 分钟', author: '急诊科' },
+      ] as Article[],
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    handleBack() { uni.navigateBack({}); },
+    openArticle(id: string) { uni.showToast({ title: '打开文章 ' + id, icon: 'none' }); },
+  },
+};
+</script>
+
+<style lang="scss">
+.page { min-height: 100vh; background: $paper;
+  background-image: radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.15) 0%, transparent 55%); }
+.status-bar { width: 100%; }
+.header { padding: 6px $sp-5 12px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.back-btn { width: 40px; height: 40px; border-radius: 20px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; align-items: center; justify-content: center; display: flex; flex-direction: row; }
+.back-icon { color: $ink; font-size: 24px; line-height: 24px; margin-top: -4px; }
+.header-title { color: $ink; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.placeholder-40 { width: 40px; }
+.btn-active { opacity: 0.7; }
+
+.featured { margin: 0 $sp-6; padding: 24px 22px; background-image: linear-gradient(135deg, $sun-1, $sun-2); border-radius: $r-xl; position: relative; overflow: hidden; box-shadow: 0 12px 30px -8px rgba(245, 143, 50, 0.4); }
+.featured-halo { position: absolute; top: -30px; right: -30px; width: 140px; height: 140px; border-radius: 70px; background: rgba(255, 255, 255, 0.15); }
+.featured-body { position: relative; z-index: 2; }
+.featured-tag { color: rgba(255,255,255,0.9); font-size: 10px; font-weight: 700; letter-spacing: 0.24em; }
+.featured-title { color: #FFFFFF; font-size: 20px; font-weight: 700; line-height: 28px; margin-top: 8px; letter-spacing: -0.02em; }
+.featured-meta { color: rgba(255,255,255,0.88); font-size: 11px; margin-top: 8px; }
+.featured-cta { margin-top: 14px; padding: 8px 14px; background: rgba(255,255,255,0.22); border-width: 1px; border-style: solid; border-color: rgba(255,255,255,0.35); border-radius: 20px; align-self: flex-start; display: flex; flex-direction: row; }
+.featured-cta-text { color: #FFFFFF; font-size: 12px; font-weight: 600; }
+
+.cat-tabs { padding: 16px $sp-6 8px; display: flex; flex-direction: row; flex-wrap: wrap; }
+.cat-tab { padding: 6px 12px; margin-right: 6px; margin-bottom: 6px; border-radius: 16px; background: $card-2; border-width: 1px; border-style: solid; border-color: $hairline; }
+.cat-tab-active { background: $sun-1; border-color: $sun-1; }
+.cat-text { font-size: 11px; color: $ink; font-weight: 500; }
+.cat-text-active { color: #FFFFFF; font-weight: 700; }
+
+.article-item { margin: 8px $sp-6 0; padding: 14px 16px; background: $card; border-width: 1px; border-style: solid; border-color: $hairline; border-radius: $r-md; display: flex; flex-direction: row; }
+.article-active { opacity: 0.9; }
+.article-thumb { width: 60px; height: 60px; border-radius: 12px; align-items: center; justify-content: center; display: flex; flex-direction: row; margin-right: 12px; }
+.article-thumb-sun { background: linear-gradient(135deg, $sun-3, $sun-2); }
+.article-thumb-sky { background: linear-gradient(135deg, #A2CCE8, $sky); }
+.article-thumb-leaf { background: linear-gradient(135deg, #B9DFC7, $leaf); }
+.article-thumb-red { background: linear-gradient(135deg, $coral, $zone-red); }
+.article-thumb-glyph { color: #FFFFFF; font-size: 24px; font-weight: 700; }
+.article-body { flex: 1; }
+.article-title { font-size: 14px; font-weight: 700; color: $ink; letter-spacing: -0.01em; line-height: 20px; }
+.article-preview { font-size: 11px; color: $ink-2; margin-top: 4px; line-height: 16px; }
+.article-meta { margin-top: 6px; display: flex; flex-direction: row; align-items: center; }
+.article-tag { padding: 1px 6px; border-radius: 6px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; }
+.article-tag-sun { background: $sun-wash; color: $sun-2; }
+.article-tag-sky { background: $sky-wash; color: $sky; }
+.article-tag-leaf { background: $leaf-wash; color: $leaf; }
+.article-tag-red { background: $coral-wash; color: $zone-red; }
+.article-time { font-size: 10px; color: $ink-3; margin-left: 8px; }
+</style>

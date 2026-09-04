@@ -1,0 +1,114 @@
+<template>
+  <view class="ag-header" :style="{ paddingTop: `${statusBarHeight + 8}px` }">
+    <!-- 左：返回或占位 -->
+    <view class="ag-header-left">
+      <view v-if="showBack" class="ag-header-btn" @tap="onBack" hover-class="ag-header-btn-active">
+        <text class="ag-header-btn-icon">‹</text>
+      </view>
+      <view v-else class="ag-header-placeholder"></view>
+    </view>
+
+    <!-- 中：标题 -->
+    <view class="ag-header-center">
+      <text class="ag-header-title">{{ title }}</text>
+    </view>
+
+    <!-- 右：操作按钮插槽 -->
+    <view class="ag-header-right">
+      <slot name="right">
+        <view class="ag-header-placeholder"></view>
+      </slot>
+    </view>
+  </view>
+</template>
+
+<script lang="uts">
+/**
+ * AGHeader · 通用页面头部
+ * 自动适配状态栏高度
+ * 用法：
+ *   <ag-header title="戒指设备" :show-back="true" @back="handleBack">
+ *     <template v-slot:right>
+ *       <text>保存</text>
+ *     </template>
+ *   </ag-header>
+ */
+export default {
+  props: {
+    title:    { type: String, default: '' },
+    showBack: { type: Boolean, default: true },
+  },
+  emits: ['back'],
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  methods: {
+    onBack() {
+      this.$emit('back');
+      uni.navigateBack({});
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.ag-header {
+  padding-left: $sp-5;
+  padding-right: $sp-5;
+  padding-bottom: $sp-3;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.ag-header-left, .ag-header-right {
+  width: 40px;
+  display: flex;
+  flex-direction: row;
+}
+.ag-header-center {
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.ag-header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.ag-header-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.ag-header-btn-icon {
+  color: $ink;
+  font-size: 24px;
+  line-height: 24px;
+  margin-top: -4px;
+}
+.ag-header-btn-active {
+  opacity: 0.7;
+}
+.ag-header-placeholder {
+  width: 40px;
+  height: 40px;
+}
+</style>

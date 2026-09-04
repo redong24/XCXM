@@ -1,0 +1,500 @@
+<template>
+  <scroll-view class="page" scroll-y="true">
+    <view class="status-bar" :style="{ height: `${statusBarHeight}px` }"></view>
+
+    <view class="page-h">
+      <text class="page-title">我的</text>
+    </view>
+
+    <!-- 用户档案卡 -->
+    <view class="profile-card">
+      <view class="profile-halo"></view>
+      <view class="profile-top">
+        <view class="profile-avatar">
+          <text class="profile-avatar-text">妈</text>
+        </view>
+        <view class="profile-info">
+          <text class="profile-name">李妈妈</text>
+          <text class="profile-meta">138 ···· 4926 · 已实名</text>
+        </view>
+        <view class="profile-arrow">
+          <text class="profile-arrow-glyph">›</text>
+        </view>
+      </view>
+      <view class="profile-stats">
+        <view class="p-stat">
+          <text class="p-stat-n">2</text>
+          <text class="p-stat-l">照护中儿童</text>
+        </view>
+        <view class="p-stat p-stat-divider">
+          <text class="p-stat-n">142</text>
+          <text class="p-stat-l">守护天数</text>
+        </view>
+        <view class="p-stat p-stat-divider">
+          <text class="p-stat-n">3</text>
+          <text class="p-stat-l">处理关注</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 照护的孩子 -->
+    <view class="sec-title-row">
+      <text class="sec-title">照护的孩子</text>
+      <text class="sec-more" @tap="openChildren">管理 →</text>
+    </view>
+
+    <view class="kids-row">
+      <view
+        v-for="k in kids"
+        :key="k.id"
+        class="kid-card"
+        @tap="switchKid(k.id)"
+        hover-class="kid-card-active"
+      >
+        <view class="kid-card-avatar" :style="{ backgroundColor: k.avatarColor }">
+          <text class="kid-card-avatar-text">{{ k.name.charAt(0) }}</text>
+        </view>
+        <text class="kid-card-name">{{ k.name }} · {{ k.age }} 岁</text>
+        <view v-if="k.id == currentKidId" class="kid-card-online">
+          <view class="kid-card-online-dot"></view>
+          <text class="kid-card-online-text">在线</text>
+        </view>
+        <text v-else class="kid-card-offline">未佩戴</text>
+      </view>
+      <view class="kid-card-add" @tap="addKid" hover-class="kid-card-add-active">
+        <text class="kid-card-add-glyph">+</text>
+        <text class="kid-card-add-text">添加</text>
+      </view>
+    </view>
+
+    <!-- 监测与守护 -->
+    <text class="sec-title-plain">监测与守护</text>
+
+    <view class="list">
+      <view class="list-item" @tap="nav('threshold')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">⚡</text></view>
+        <view class="list-body">
+          <text class="list-name">关注等级阈值</text>
+          <text class="list-desc">心率、血氧、呼吸频率的报警区间</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" @tap="nav('plan')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">✓</text></view>
+        <view class="list-body">
+          <text class="list-name">哮喘行动计划</text>
+          <text class="list-desc">绿黄红三区应对方案</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" @tap="nav('notification')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">◐</text></view>
+        <view class="list-body">
+          <text class="list-name">通知与提醒</text>
+          <text class="list-desc">震动、声音、免打扰时段</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+
+    <!-- 账户 -->
+    <text class="sec-title-plain">账户</text>
+
+    <view class="list">
+      <view class="list-item" @tap="nav('family')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">☺</text></view>
+        <view class="list-body">
+          <text class="list-name">家庭成员</text>
+          <text class="list-desc">邀请爸爸、奶奶共同照护</text>
+        </view>
+        <text class="list-val">2 人</text>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" @tap="nav('export')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">↓</text></view>
+        <view class="list-body">
+          <text class="list-name">数据导出</text>
+          <text class="list-desc">导出监测数据 · 就诊时提供给医生</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" @tap="openPrivacy" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">🔒</text></view>
+        <view class="list-body">
+          <text class="list-name">隐私与数据</text>
+          <text class="list-desc">本地加密存储 · 授权管理</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+      <view class="list-item" @tap="nav('about')" hover-class="list-item-active">
+        <view class="list-icon"><text class="list-icon-glyph">?</text></view>
+        <view class="list-body">
+          <text class="list-name">帮助与关于</text>
+          <text class="list-desc">使用指南 · 版本 v4.0.1</text>
+        </view>
+        <text class="list-arrow">›</text>
+      </view>
+    </view>
+
+    <text class="disclaimer">— {{ disclaimerShort }} —</text>
+    <view style="height: 90px;"></view>
+  </scroll-view>
+</template>
+
+<script lang="uts">
+import { getAllKids, getCurrentKid, setCurrentKid, type Kid } from '@/composables/useKid';
+import { DISCLAIMER_SHORT } from '@/utils/copy';
+
+export default {
+  data() {
+    return {
+      statusBarHeight: 44 as number,
+      kids: getAllKids() as Kid[],
+      currentKidId: getCurrentKid().id as string,
+      disclaimerShort: DISCLAIMER_SHORT,
+    };
+  },
+  onLoad() {
+    const info = uni.getSystemInfoSync();
+    this.statusBarHeight = info.statusBarHeight ?? 44;
+  },
+  onShow() {
+    this.currentKidId = getCurrentKid().id;
+  },
+  methods: {
+    switchKid(id: string) {
+      setCurrentKid(id);
+      this.currentKidId = id;
+      uni.showToast({ title: '已切换', icon: 'success' });
+    },
+    addKid() {
+      uni.navigateTo({ url: '/pages/children/form' });
+    },
+    openChildren() {
+      uni.navigateTo({ url: '/pages/children/children' });
+    },
+    nav(page: string) {
+      const routes: Map<string, string> = new Map([
+        ['threshold',    '/pages/threshold/threshold'],
+        ['plan',         '/pages/plan/plan'],
+        ['notification', '/pages/notification/notification'],
+        ['family',       '/pages/family/family'],
+        ['export',       '/pages/export/export'],
+        ['about',        '/pages/about/about'],
+      ]);
+      const url = routes.get(page);
+      if (url != null) uni.navigateTo({ url: url });
+    },
+    openPrivacy() {
+      uni.showToast({ title: '隐私设置', icon: 'none' });
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.page {
+  min-height: 100vh;
+  background: $paper;
+  background-image:
+    radial-gradient(70% 45% at 50% 5%, rgba(255, 181, 71, 0.18) 0%, transparent 55%);
+}
+.status-bar { width: 100%; }
+
+.page-h {
+  padding: 6px $sp-6 12px;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+
+/* Profile card (橙色渐变) */
+.profile-card {
+  margin: 8px $sp-6 0;
+  padding: 20px;
+  border-radius: $r-xl;
+  background: linear-gradient(135deg, $sun-1, $sun-2);
+  position: relative;
+  overflow: hidden;
+}
+.profile-halo {
+  position: absolute;
+  top: -30px;
+  right: -20px;
+  width: 160px;
+  height: 160px;
+  border-radius: 80px;
+  background: radial-gradient(circle, rgba(255,255,255,0.28) 0%, transparent 65%);
+}
+.profile-top {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.25);
+  border-width: 1.5px;
+  border-style: solid;
+  border-color: rgba(255, 255, 255, 0.4);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.profile-avatar-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 22px;
+}
+.profile-info {
+  flex: 1;
+  margin-left: 14px;
+}
+.profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.01em;
+}
+.profile-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  margin-top: 3px;
+}
+.profile-arrow {
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.22);
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+}
+.profile-arrow-glyph {
+  color: #FFFFFF;
+  font-size: 18px;
+  font-weight: 700;
+}
+.profile-stats {
+  display: flex;
+  flex-direction: row;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top-width: 1px;
+  border-top-style: solid;
+  border-top-color: rgba(255, 255, 255, 0.2);
+}
+.p-stat {
+  flex: 1;
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+}
+.p-stat-divider {
+  border-left-width: 0;
+}
+.p-stat-n {
+  font-family: $font-num;
+  font-size: 20px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.02em;
+  line-height: 20px;
+}
+.p-stat-l {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 4px;
+}
+
+/* Section headers */
+.sec-title-row {
+  padding: 22px $sp-6 10px;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.sec-title-plain {
+  padding: 22px $sp-6 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.sec-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.sec-more {
+  font-size: 11px;
+  color: $sun-2;
+  font-weight: 500;
+}
+
+/* Kids row */
+.kids-row {
+  padding: 0 $sp-6;
+  display: flex;
+  flex-direction: row;
+}
+.kid-card {
+  flex: 1;
+  padding: 14px;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin-right: 10px;
+}
+.kid-card:last-child { margin-right: 0; }
+.kid-card-active { opacity: 0.85; }
+.kid-card-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 8px;
+}
+.kid-card-avatar-text {
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 16px;
+}
+.kid-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: $ink;
+  text-align: center;
+}
+.kid-card-online {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 3px;
+}
+.kid-card-online-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: $leaf;
+  margin-right: 4px;
+}
+.kid-card-online-text {
+  font-size: 10px;
+  color: $leaf;
+}
+.kid-card-offline {
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 3px;
+}
+.kid-card-add {
+  flex: 1;
+  padding: 14px;
+  background: $card-2;
+  border-width: 1px;
+  border-style: dashed;
+  border-color: $hairline-2;
+  border-radius: $r-md;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: column;
+}
+.kid-card-add-active { opacity: 0.7; }
+.kid-card-add-glyph {
+  color: $sun-2;
+  font-size: 20px;
+  font-weight: 700;
+}
+.kid-card-add-text {
+  color: $sun-2;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+/* List */
+.list {
+  margin: 0 $sp-6;
+  background: $card;
+  border-radius: $r-md;
+  border-width: 1px;
+  border-style: solid;
+  border-color: $hairline;
+  overflow: hidden;
+}
+.list-item {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+.list-item:last-child { border-bottom-width: 0; }
+.list-item-active { opacity: 0.7; }
+.list-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: $sun-wash;
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  flex-direction: row;
+  margin-right: 12px;
+}
+.list-icon-glyph {
+  color: $sun-2;
+  font-size: 16px;
+  font-weight: 700;
+}
+.list-body { flex: 1; }
+.list-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $ink;
+  letter-spacing: -0.01em;
+}
+.list-desc {
+  font-size: 11px;
+  color: $ink-2;
+  margin-top: 2px;
+}
+.list-val {
+  font-size: 12px;
+  color: $ink-2;
+  margin-right: 6px;
+}
+.list-arrow {
+  color: $ink-3;
+  font-size: 18px;
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 10px;
+  color: $ink-3;
+  margin-top: 18px;
+  letter-spacing: 0.04em;
+}
+</style>
