@@ -1,0 +1,74 @@
+{
+  "id": "rwfit-ble",
+  "displayName": "RWFIT BLE UTS Plugin",
+  "version": "0.0.1",
+  "description": "RWFIT smart-ring BLE SDK for Android, iOS, HarmonyOS NEXT and WeChat Mini Program",
+  "keywords": [
+    "RWFIT",
+    "BLE",
+    "smart ring",
+    "Android",
+    "iOS",
+    "HarmonyOS",
+    "WeChat Mini Program"
+  ],
+  "repository": "https://github.com/RWFitSDK/rw-uniapp-uts-plugin",
+  "engines": {
+    "HBuilderX": "^5.15.0",
+    "uni-app": "^3.0.0"
+  },
+  "dcloudext": {
+    "type": "uts",
+    "sale": {
+      "regular": { "price": "0.00" },
+      "sourcecode": { "price": "0.00" }
+    },
+    "contact": { "qq": "" },
+    "declaration": {
+      "ads": "无",
+      "data": "蓝牙扫描与设备健康数据仅在调用方应用内处理",
+      "permissions": "蓝牙扫描与连接权限"
+    },
+    "npmurl": "",
+    "darkmode": "y",
+    "i18n": "y",
+    "widescreen": "y"
+  },
+  "uni_modules": {
+    "dependencies": [],
+    "encrypt": [],
+    "platforms": {
+      "cloud": { "tcb": "-", "aliyun": "-", "alipay": "-" },
+      "client": {
+        "uni-app": {
+          "vue": { "vue2": "-", "vue3": "y" },
+          "web": { "safari": "-", "chrome": "-" },
+          "app": {
+            "vue": "y",
+            "nvue": "-",
+            "android": "y",
+            "ios": "y",
+            "harmony": "y"
+          },
+          "mp": {
+            "weixin": "y",
+            "alipay": "-",
+            "toutiao": "-",
+            "baidu": "-",
+            "kuaishou": "-",
+            "jd": "-",
+            "harmony": "-",
+            "qq": "-",
+            "lark": "-"
+          },
+          "quickapp": { "huawei": "-", "union": "-" }
+        },
+        "uni-app-x": {
+          "web": { "safari": "-", "chrome": "-" },
+          "app": { "android": "y", "ios": "y", "harmony": "y" },
+          "mp": { "weixin": "y" }
+        }
+      }
+    }
+  }
+}

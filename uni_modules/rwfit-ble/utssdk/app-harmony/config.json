@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "rw_ble_sdk": "./libs/rw_ble_sdk.har"
+  }
+}

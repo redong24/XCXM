@@ -1,0 +1,689 @@
+import type {
+  BleDevice, ConnectState, ConnectStateEvent, FirmwareInfo, FunctionListResult, FunctionMenu,
+  Initialize, GetSdkVersion, GetPluginVersion, StartScan, StopScan, Connect,
+  Disconnect, IosSetBindedStatus, Reconnect, IsConnected, GetPower,
+  GetFirmwareVersion, SetUserInfo, SetTimeFormat, GetFunctionList,
+  SetRingBtName, OnScanResult, OffScanResult, OnScanFinish, OffScanFinish,
+  OnConnectState, OffConnectState, OnFunctionMenu, OffFunctionMenu, VoidOptions,
+  StringResultOptions, BooleanResultOptions, NumberResultOptions,
+  FirmwareResultOptions, FunctionListResultOptions, RwfitFail,
+  TimedConfig, TimedConfigResultOptions, SetTimedConfigOptions,
+  RealtimeData, RealtimeMeasureOptions, WorkoutState, WorkoutStateResultOptions,
+  WorkoutControlOptions, WorkoutRealtimeData, EnabledOptions, WorkoutReport, WorkoutValueItem,
+  WorkoutReportListResultOptions, PhotoControlOptions, PhoneControlOptions,
+  HeartRateAlertConfig, HeartRateAlertResultOptions, HeartRateAlertOptions,
+  BloodOxygenAlertConfig, BloodOxygenAlertResultOptions, BloodOxygenAlertOptions,
+  SetVibrationIntervalOptions, SetCountReminderIntervalOptions,
+  SetBrightScreenTimeOptions, SetVideoHidOptions,
+  SetAlarmVibrationDurationOptions, Alarm, AlarmListResultOptions, SetAlarmOptions,
+  ScheduleToggle, ScheduleToggleResultOptions, ScheduleToggleOptions,
+  LedLevel, LedLevelResultOptions, LedLevelOptions, BondOptions, WearHandOptions,
+  VibrationConfig, VibrationResultOptions, VibrationOptions,
+  SensorRawPacket, SensorRawListResultOptions, SensorRawControlOptions,
+  SyncResult, OtaResult, OtaOptions, PushMessageOptions,
+  SetNotificationSwitchOptions, JsonResultOptions,
+  TouchEvent, CallControlEvent, HealthAlertEvent, HeartRateCalibrationResult,
+  SensorRawStoppedEvent, AccRawSample, SleepRawSample
+} from '../interface.uts'
+import { RwfitFailImpl } from '../unierror.uts'
+import type {
+  GetTimedHeartRate, GetTimedBloodOxygen, GetTimedHRV, GetTimedStress, GetTimedBloodSugar, GetTimedBloodPressure, GetTimedBodyTemperature, GetTimedPPG,
+  SetTimedHeartRate, SetTimedBloodOxygen, SetTimedHRV, SetTimedStress, SetTimedBloodSugar, SetTimedBloodPressure, SetTimedBodyTemperature, SetTimedPPG,
+  StartRealtimeMeasure, StopRealtimeMeasure, GetWorkoutState, ControlWorkout, SetWorkoutRealtimeEnabled, GetWorkoutReports, FindDevice, PowerOff,
+  FactoryReset, ControlPhoto, ControlPhone, GetMuslimCountEnabled, SetMuslimCountEnabled, GetHeartRateAlert, SetHeartRateAlert, GetBloodOxygenAlert,
+  SetBloodOxygenAlert, GetVibrationInterval, SetVibrationInterval, GetFallDetect, SetFallDetect, GetCountReminderInterval, SetCountReminderInterval, StartHeartRateCalibration,
+  GetAlarm, SetAlarm, DeleteAllAlarm, GetRaiseBrightScreen, SetRaiseBrightScreen, GetBrightScreenTime, SetBrightScreenTime, GetBrightScreenSleepTime,
+  SetBrightScreenSleepTime, GetRingLedLevel, SetRingLedLevel, GetVideoHid, SetVideoHid, GetRingWearDir, SetRingWearHand, GetVibrationCount,
+  SetVibrationCount, GetAlarmVibrationDuration, SetAlarmVibrationDuration, ControlSensorRaw, GetSensorRawHistory, CreateOrRemoveBond, SyncAllHealthData, RemoveHealthDataCallback,
+  RingOta, Unbind, PushMessage, SetNotificationSwitch, GetNotificationSwitch, OnRealtimeData, OffRealtimeData, OnRealtimeMeasureComplete,
+  OffRealtimeMeasureComplete, OnWorkoutRealtimeData, OffWorkoutRealtimeData, OnSyncProgress, OffSyncProgress, OnSyncResult, OffSyncResult, OnSyncFinish,
+  OffSyncFinish, OnSyncError, OffSyncError, OnOtaProgress, OffOtaProgress, OnOtaFinish, OffOtaFinish, OnTouchEvent,
+  OffTouchEvent, OnCallControl, OffCallControl, OnHealthAlert, OffHealthAlert, OnHeartRateCalibration, OffHeartRateCalibration, OnSensorRawData,
+  OffSensorRawData, OnSensorRawStopped, OffSensorRawStopped
+} from '../interface.uts'
+
+const PLUGIN_VERSION = '0.0.1'
+const bridge = RwfitIosNativeBridge.shared
+let initialized = false
+let scanResultListener: ((device: BleDevice) => void) | null = null
+let scanFinishListener: (() => void) | null = null
+let connectStateListener: ((event: ConnectStateEvent) => void) | null = null
+let functionMenuListener: ((menu: FunctionMenu) => void) | null = null
+let realtimeDataListener: ((data: RealtimeData) => void) | null = null
+let realtimeCompleteListener: (() => void) | null = null
+let workoutRealtimeListener: ((data: WorkoutRealtimeData) => void) | null = null
+let syncProgressListener: ((progress: number) => void) | null = null
+let syncResultListener: ((result: SyncResult) => void) | null = null
+let syncFinishListener: (() => void) | null = null
+let syncErrorListener: ((error: UTSJSONObject) => void) | null = null
+let otaProgressListener: ((progress: number) => void) | null = null
+let otaFinishListener: ((result: OtaResult) => void) | null = null
+let touchEventListener: ((event: TouchEvent) => void) | null = null
+let callControlListener: ((event: CallControlEvent) => void) | null = null
+let healthAlertListener: ((event: HealthAlertEvent) => void) | null = null
+let heartRateCalibrationListener: ((result: HeartRateCalibrationResult) => void) | null = null
+let sensorRawListener: ((packet: SensorRawPacket) => void) | null = null
+let sensorStoppedListener: ((event: SensorRawStoppedEvent) => void) | null = null
+
+function succeed(successCallback?: () => void, completeCallback?: (result: any | null) => void): void {
+  successCallback?.(); completeCallback?.(null)
+}
+
+function nativeFailure(code: number, message: string): RwfitFailImpl {
+  const lower = message.toLowerCase()
+  if (code == -7) return new RwfitFailImpl(9201007, message, code)
+  if (lower.includes('timeout') || lower.includes('timed out')) return new RwfitFailImpl(9201006, message, code)
+  if (lower.includes('powered off') || lower.includes('bluetooth unavailable')) return new RwfitFailImpl(9201002, message, code)
+  if (lower.includes('not connected') || lower.includes('not ready')) return new RwfitFailImpl(9201005, message, code)
+  return new RwfitFailImpl(9201099, message, code)
+}
+
+function fail(failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, code: number, message: string): void {
+  const error = nativeFailure(code, message)
+  failCallback?.(error); completeCallback?.(error)
+}
+
+function invalidOptions(failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, message: string): void {
+  const error = new RwfitFailImpl(9201004, message, null)
+  failCallback?.(error); completeCallback?.(error)
+}
+
+function requireInitialized(failCallback: ((error: RwfitFail) => void) | null,
+  completeCallback: ((result: any | null) => void) | null): boolean {
+  if (initialized) return true
+  const error = new RwfitFailImpl(9201001, null, null)
+  failCallback?.(error); completeCallback?.(error)
+  return false
+}
+
+function requireReady(failCallback: ((error: RwfitFail) => void) | null,
+  completeCallback: ((result: any | null) => void) | null): boolean {
+  if (!requireInitialized(failCallback, completeCallback)) return false
+  if (bridge.isReady()) return true
+  const error = new RwfitFailImpl(9201005, null, null)
+  failCallback?.(error); completeCallback?.(error)
+  return false
+}
+
+function validSensorType(value: number): boolean {
+  return value == 1 || value == 2 || value == 3 || value == 4 || value == 5 ||
+    value == 10 || value == 11 || value == 12 || value == 13
+}
+
+function parseObject(json: string): UTSJSONObject {
+  try { return JSON.parse(json) as UTSJSONObject }
+  catch (_error) { return {} as UTSJSONObject }
+}
+
+function nativeInvoke(method: string, payload: UTSJSONObject, onSuccess: (value: UTSJSONObject) => void,
+  failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null): void {
+  if (!requireReady(failCallback, completeCallback)) return
+  bridge.invoke(method, payloadJSON=JSON.stringify(payload) ?? "{}", completion=(code: number, json: string, message: string): void => {
+    if (code == 0) onSuccess(parseObject(json))
+    else fail(failCallback, completeCallback, code, message)
+  })
+}
+
+function nativeVoid(method: string, payload: UTSJSONObject, successCallback: (() => void) | null,
+  failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null): void {
+  nativeInvoke(method, payload, (_value: UTSJSONObject): void => { succeed(successCallback, completeCallback) }, failCallback, completeCallback)
+}
+
+function nativeNumber(method: string, payload: UTSJSONObject, successCallback: ((value: number) => void) | null,
+  failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null): void {
+  if (!requireReady(failCallback, completeCallback)) return
+  bridge.invoke(method, payloadJSON=JSON.stringify(payload) ?? "{}", completion=(code: number, json: string, message: string): void => {
+    if (code == 0) { const value = JSON.parse(json) as number; successCallback?.(value); completeCallback?.(value) }
+    else fail(failCallback, completeCallback, code, message)
+  })
+}
+
+function nativeBoolean(method: string, payload: UTSJSONObject, successCallback: ((value: boolean) => void) | null,
+  failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null): void {
+  if (!requireReady(failCallback, completeCallback)) return
+  bridge.invoke(method, payloadJSON=JSON.stringify(payload) ?? "{}", completion=(code: number, json: string, message: string): void => {
+    if (code == 0) { const value = JSON.parse(json) as boolean; successCallback?.(value); completeCallback?.(value) }
+    else fail(failCallback, completeCallback, code, message)
+  })
+}
+
+function nativeList(method: string, payload: UTSJSONObject, onSuccess: (value: Array<UTSJSONObject>) => void,
+  failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null): void {
+  if (!requireReady(failCallback, completeCallback)) return
+  bridge.invoke(method, payloadJSON=JSON.stringify(payload) ?? "{}", completion=(code: number, json: string, message: string): void => {
+    if (code == 0) onSuccess(JSON.parse(json) as Array<UTSJSONObject>)
+    else fail(failCallback, completeCallback, code, message)
+  })
+}
+
+function objectValue(value: any): UTSJSONObject { return JSON.parse(JSON.stringify(value) ?? "{}") as UTSJSONObject }
+
+function eventNumber(value: any): number { return (value ?? 0) as number }
+function eventString(value: any): string {
+  if (value == null) return ''
+  // JSON round-trip unwraps Swift Optional values exposed by UTSJSONObject.
+  // Do not cast the raw Any directly: iOS would generate `as! String`.
+  return JSON.parse(JSON.stringify(value) ?? '""') as string
+}
+function eventBoolean(value: any): boolean { return (value ?? false) as boolean }
+
+function connectStateValue(value: string): ConnectState {
+  if (value == 'connecting') return 'connecting'
+  if (value == 'connected') return 'connected'
+  if (value == 'disconnected') return 'disconnected'
+  return 'failed'
+}
+
+function eventNumbers(value: any): Array<number> {
+  const result: Array<number> = []
+  const values = (value ?? []) as Array<any>
+  values.forEach((item: any): void => { result.push(eventNumber(item)) })
+  return result
+}
+
+function eventObjects(value: any): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []
+  const values = (value ?? []) as Array<any>
+  values.forEach((item: any): void => { result.push(objectValue(item)) })
+  return result
+}
+
+function eventAcc(value: any): Array<AccRawSample> {
+  const result: Array<AccRawSample> = []
+  eventObjects(value).forEach((item: UTSJSONObject): void => {
+    result.push({ x: eventNumber(item['x']), y: eventNumber(item['y']), z: eventNumber(item['z']) } as AccRawSample)
+  })
+  return result
+}
+
+function eventSleep(value: any): Array<SleepRawSample> {
+  const result: Array<SleepRawSample> = []
+  eventObjects(value).forEach((item: UTSJSONObject): void => {
+    result.push({ timestampSec: eventNumber(item['timestampSec']), mode: eventNumber(item['mode']) } as SleepRawSample)
+  })
+  return result
+}
+
+function eventRealtime(value: UTSJSONObject): RealtimeData {
+  const result = {
+    dataType: eventNumber(value['dataType']),
+    dataValue: eventNumber(value['dataValue']),
+    time: eventNumber(value['time'])
+  } as RealtimeData
+  if (value['diastolic'] != null) result.diastolic = eventNumber(value['diastolic'])
+  return result
+}
+
+function eventOtaResult(value: UTSJSONObject): OtaResult {
+  const result = { success: value['success'] == true } as OtaResult
+  if (value['code'] != null) result.code = eventNumber(value['code'])
+  return result
+}
+
+function eventSensorPacket(value: UTSJSONObject): SensorRawPacket {
+  const result = {
+    type: eventNumber(value['type']),
+    ppg: eventNumbers(value['ppg']),
+    acc: eventAcc(value['acc']),
+    ppgRed: eventNumbers(value['ppgRed']),
+    ir: eventNumbers(value['ir']),
+    sleep: eventSleep(value['sleep'])
+  } as SensorRawPacket
+  if (value['sequence'] != null) result.sequence = eventNumber(value['sequence'])
+  if (value['timestampSec'] != null) result.timestampSec = eventNumber(value['timestampSec'])
+  return result
+}
+
+function timedValue(value: UTSJSONObject): TimedConfig {
+  return {
+    isOpen: eventBoolean(value['isOpen']),
+    duration: eventNumber(value['duration']),
+    startHour: eventNumber(value['startHour']),
+    startMin: eventNumber(value['startMin']),
+    endHour: eventNumber(value['endHour']),
+    endMin: eventNumber(value['endMin'])
+  } as TimedConfig
+}
+
+function workoutStateValue(value: UTSJSONObject): WorkoutState {
+  return {
+    sportType: eventNumber(value['sportType']),
+    controlType: eventNumber(value['controlType'])
+  } as WorkoutState
+}
+
+function workoutItems(value: any): Array<WorkoutValueItem> {
+  const result: Array<WorkoutValueItem> = []
+  eventObjects(value).forEach((item: UTSJSONObject): void => {
+    result.push({ index: eventNumber(item['index']), value: eventNumber(item['value']) } as WorkoutValueItem)
+  })
+  return result
+}
+
+function workoutReportValue(value: UTSJSONObject): WorkoutReport {
+  return {
+    startTime: eventNumber(value['startTime']),
+    endTime: eventNumber(value['endTime']),
+    date: eventString(value['date']),
+    sportType: eventNumber(value['sportType']),
+    duration: eventNumber(value['duration']),
+    step: eventNumber(value['step']),
+    distance: eventNumber(value['distance']),
+    calorie: eventNumber(value['calorie']),
+    height: eventNumber(value['height']),
+    pressure: eventNumber(value['pressure']),
+    cadence: eventNumber(value['cadence']),
+    speed: eventNumber(value['speed']),
+    pace: eventNumber(value['pace']),
+    averageHeartRate: eventNumber(value['averageHeartRate']),
+    maxHeartRate: eventNumber(value['maxHeartRate']),
+    minHeartRate: eventNumber(value['minHeartRate']),
+    maxCadence: eventNumber(value['maxCadence']),
+    minCadence: eventNumber(value['minCadence']),
+    maxPace: eventNumber(value['maxPace']),
+    minPace: eventNumber(value['minPace']),
+    heartRateCount: eventNumber(value['heartRateCount']),
+    viewType: eventNumber(value['viewType']),
+    heartRateItems: workoutItems(value['heartRateItems']),
+    pacePerKmItems: workoutItems(value['pacePerKmItems'])
+  } as WorkoutReport
+}
+
+function workoutReportValues(values: Array<UTSJSONObject>): Array<WorkoutReport> {
+  const result: Array<WorkoutReport> = []
+  values.forEach((value: UTSJSONObject): void => { result.push(workoutReportValue(value)) })
+  return result
+}
+
+function heartRateAlertValue(value: UTSJSONObject): HeartRateAlertConfig {
+  const result = {
+    isOpen: eventBoolean(value['isOpen']),
+    highThreshold: eventNumber(value['highThreshold'])
+  } as HeartRateAlertConfig
+  if (value['lowThreshold'] != null) result.lowThreshold = eventNumber(value['lowThreshold'])
+  return result
+}
+
+function bloodOxygenAlertValue(value: UTSJSONObject): BloodOxygenAlertConfig {
+  return {
+    isOpen: eventBoolean(value['isOpen']),
+    lowThreshold: eventNumber(value['lowThreshold'])
+  } as BloodOxygenAlertConfig
+}
+
+function sensorPacketValues(values: Array<UTSJSONObject>): Array<SensorRawPacket> {
+  const result: Array<SensorRawPacket> = []
+  values.forEach((value: UTSJSONObject): void => { result.push(eventSensorPacket(value)) })
+  return result
+}
+
+function alarmValue(value: UTSJSONObject): Alarm {
+  return {
+    alarmId: eventNumber(value['alarmId']),
+    startHour: eventNumber(value['startHour']),
+    startMin: eventNumber(value['startMin']),
+    isOpen: eventBoolean(value['isOpen']),
+    repeats: eventNumbers(value['repeats'])
+  } as Alarm
+}
+
+function alarmValues(values: Array<UTSJSONObject>): Array<Alarm> {
+  const result: Array<Alarm> = []
+  values.forEach((value: UTSJSONObject): void => { result.push(alarmValue(value)) })
+  return result
+}
+
+function scheduleValue(value: UTSJSONObject): ScheduleToggle {
+  return {
+    isOpen: eventBoolean(value['isOpen']),
+    startHour: eventNumber(value['startHour']),
+    startMin: eventNumber(value['startMin']),
+    endHour: eventNumber(value['endHour']),
+    endMin: eventNumber(value['endMin'])
+  } as ScheduleToggle
+}
+
+function ledValue(value: UTSJSONObject): LedLevel {
+  return { isOpen: eventBoolean(value['isOpen']), lcdLevel: eventNumber(value['lcdLevel']) } as LedLevel
+}
+
+function vibrationValue(value: UTSJSONObject): VibrationConfig {
+  return { count: eventNumber(value['count']), level: eventNumber(value['level']) } as VibrationConfig
+}
+
+function bindNativeEvents(): void {
+  bridge.setScanResultListener((name: string, mac: string, rssi: number, uuid: string): void => {
+    scanResultListener?.({ name, mac, rssi, uuid } as BleDevice)
+  })
+  bridge.setScanFinishListener((): void => { scanFinishListener?.() })
+  bridge.setConnectStateListener((state: string, name: string, mac: string, uuid: string, reason: string): void => {
+    console.log(`[RWFIT][iOS][callback][uts] connectState state=${state} uuid=${uuid} reason=${reason}`)
+    connectStateListener?.({
+      state: connectStateValue(state),
+      name, mac, uuid, reason
+    } as ConnectStateEvent)
+  })
+  bridge.setFunctionMenuListener((name: string, mac: string, uuid: string, json: string): void => {
+    console.log(`[RWFIT][iOS][callback][uts] functionMenu uuid=${uuid}`)
+    functionMenuListener?.({ name, mac, uuid, raw: parseObject(json) } as FunctionMenu)
+  })
+  // Health sync uses a dedicated typed callback instead of the generic JSON
+  // event dictionary. This avoids iOS UTS generating unsafe Any -> String
+  // casts for the result type.
+  bridge.setHealthSyncResultListener((type: string, json: string): void => {
+    const data = JSON.parse(json) as Array<UTSJSONObject>
+    syncResultListener?.({ type, data } as SyncResult)
+  })
+  bridge.setEventListener((name: string, json: string): void => {
+    const value = parseObject(json)
+    switch (name) {
+      case 'realtimeData': realtimeDataListener?.(eventRealtime(value)); break
+      case 'realtimeMeasureComplete': realtimeCompleteListener?.(); break
+      case 'workoutRealtimeData': workoutRealtimeListener?.({
+        duration: eventNumber(value['duration']),
+        steps: eventNumber(value['steps']),
+        distance: eventNumber(value['distance']),
+        calorie: eventNumber(value['calorie']),
+        heartRate: eventNumber(value['heartRate']),
+        dataType: eventNumber(value['dataType'])
+      } as WorkoutRealtimeData); break
+      case 'syncProgress': syncProgressListener?.((value['progress'] ?? 0) as number); break
+      case 'syncFinish': syncFinishListener?.(); break
+      case 'syncError': syncErrorListener?.(value); break
+      case 'otaProgress': otaProgressListener?.((value['progress'] ?? 0) as number); break
+      case 'otaFinish': otaFinishListener?.(eventOtaResult(value)); break
+      case 'touchEvent': touchEventListener?.({
+        action: eventString(value['action']),
+        keyType: eventNumber(value['keyType']),
+        touchType: eventNumber(value['touchType'])
+      } as TouchEvent); break
+      case 'callControl': callControlListener?.({
+        action: eventString(value['action']), rawValue: eventNumber(value['rawValue'])
+      } as CallControlEvent); break
+      case 'healthAlert': healthAlertListener?.({
+        type: eventNumber(value['type']), value: eventNumber(value['value'])
+      } as HealthAlertEvent); break
+      case 'heartRateCalibration': heartRateCalibrationListener?.({
+        testMode: eventNumber(value['testMode']), result: eventNumber(value['result'])
+      } as HeartRateCalibrationResult); break
+      case 'sensorRawData': sensorRawListener?.(eventSensorPacket(value)); break
+      case 'sensorRawStopped': sensorStoppedListener?.({
+        reason: eventNumber(value['reason'])
+      } as SensorRawStoppedEvent); break
+    }
+  })
+}
+
+export const initialize: Initialize = function(options: VoidOptions): void {
+  // Register both bridge listeners before native SDK initialization. The iOS
+  // SDK may auto-reconnect synchronously when a bound UUID already exists.
+  console.log('[RWFIT][iOS][callback][uts] initialize begin')
+  bindNativeEvents(); bridge.initializeSDK()
+  console.log('[RWFIT][iOS][callback][uts] initialize native ready')
+  const authorization = bridge.bluetoothAuthorizationStatus().toInt()
+  if (authorization == 1 || authorization == 2) {
+    const error = new RwfitFailImpl(9201003, null, null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  initialized = true; succeed(options.success, options.complete)
+}
+
+export const getSdkVersion: GetSdkVersion = function(options: StringResultOptions): void {
+  const result = bridge.sdkVersion(); options.success?.(result); options.complete?.(result)
+}
+
+export const getPluginVersion: GetPluginVersion = function(options: StringResultOptions): void {
+  const result = `${PLUGIN_VERSION}_${bridge.sdkVersion()}`
+  options.success?.(result); options.complete?.(result)
+}
+
+export const startScan: StartScan = function(options: VoidOptions): void {
+  if (!initialized) { const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return }
+  const authorization = bridge.bluetoothAuthorizationStatus().toInt()
+  if (authorization == 1 || authorization == 2) {
+    const error = new RwfitFailImpl(9201003, null, null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  bridge.startScan(); succeed(options.success, options.complete)
+}
+
+export const stopScan: StopScan = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  bridge.stopScan(); succeed(options.success, options.complete)
+}
+
+export const connect: Connect = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  const device = options.device!
+  bridge.connect(
+    name=device.name,
+    mac=device.mac,
+    rssi=device.rssi,
+    uuid=device.uuid ?? '',
+    completion=(code: number, message: string): void => {
+      if (code == 0) succeed(options.success, options.complete); else fail(options.fail, options.complete, code, message)
+    }
+  )
+}
+
+export const reconnect: Reconnect = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  bridge.reconnect(); succeed(options.success, options.complete)
+}
+
+export const disconnect: Disconnect = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  bridge.disconnect(); succeed(options.success, options.complete)
+}
+
+export const iosSetBindedStatus: IosSetBindedStatus = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  bridge.setBinded(options.isBinded); succeed(options.success, options.complete)
+}
+
+export const isConnected: IsConnected = function(options: BooleanResultOptions): void {
+  const result = bridge.isConnected(); options.success?.(result); options.complete?.(result)
+}
+
+export const getPower: GetPower = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  bridge.getPower((code: number, power: number, message: string): void => {
+    if (code == 0) { options.success?.(power); options.complete?.(power) }
+    else { const error = nativeFailure(code, message); options.fail?.(error); options.complete?.(error) }
+  })
+}
+
+export const getFirmwareVersion: GetFirmwareVersion = function(options: FirmwareResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  bridge.getFirmware((code: number, deviceClazz: string, deviceNo: string, uiVersion: string, message: string): void => {
+    if (code == 0) {
+      const result = { deviceClazz, deviceNo, uiVersion } as FirmwareInfo
+      options.success?.(result); options.complete?.(result)
+    } else {
+      const error = nativeFailure(code, message); options.fail?.(error); options.complete?.(error)
+    }
+  })
+}
+
+export const setUserInfo: SetUserInfo = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const info = options.info!
+  bridge.setUserInfo(
+    gender=info.gender, age=info.age, height=info.height, weight=info.weight,
+    completion=(code: number, message: string): void => {
+      if (code == 0) succeed(options.success, options.complete); else fail(options.fail, options.complete, code, message)
+    }
+  )
+}
+
+export const setTimeFormat: SetTimeFormat = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  bridge.setTimeFormat(options.format!, completion=(code: number, message: string): void => {
+    if (code == 0) succeed(options.success, options.complete); else fail(options.fail, options.complete, code, message)
+  })
+}
+
+export const getFunctionList: GetFunctionList = function(options: FunctionListResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const result = {
+    code: 0, msg: 'success', supportMenu: parseObject(bridge.getFunctionMenuJSON())
+  } as FunctionListResult
+  options.success?.(result); options.complete?.(result)
+}
+
+export const setRingBtName: SetRingBtName = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  bridge.setRingName(options.name!, completion=(code: number, message: string): void => {
+    if (code == 0) succeed(options.success, options.complete); else fail(options.fail, options.complete, code, message)
+  })
+}
+
+export const onScanResult: OnScanResult = function(callback: (device: BleDevice) => void): void { scanResultListener = callback }
+export const offScanResult: OffScanResult = function(): void { scanResultListener = null }
+export const onScanFinish: OnScanFinish = function(callback: () => void): void { scanFinishListener = callback }
+export const offScanFinish: OffScanFinish = function(): void { scanFinishListener = null }
+export const onConnectState: OnConnectState = function(callback: (event: ConnectStateEvent) => void): void { connectStateListener = callback }
+export const offConnectState: OffConnectState = function(): void { connectStateListener = null }
+export const onFunctionMenu: OnFunctionMenu = function(callback: (menu: FunctionMenu) => void): void { functionMenuListener = callback }
+export const offFunctionMenu: OffFunctionMenu = function(): void { functionMenuListener = null }
+
+function getTimed(name: string, options: TimedConfigResultOptions): void {
+  nativeInvoke(`getTimed:${name}`, {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = timedValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete)
+}
+function setTimed(name: string, options: SetTimedConfigOptions): void { nativeVoid(`setTimed:${name}`, objectValue(options.config), options.success, options.fail, options.complete) }
+export const getTimedHeartRate: GetTimedHeartRate = function(options: TimedConfigResultOptions): void { getTimed('heartRate', options) }
+export const setTimedHeartRate: SetTimedHeartRate = function(options: SetTimedConfigOptions): void { setTimed('heartRate', options) }
+export const getTimedBloodOxygen: GetTimedBloodOxygen = function(options: TimedConfigResultOptions): void { getTimed('bloodOxygen', options) }
+export const setTimedBloodOxygen: SetTimedBloodOxygen = function(options: SetTimedConfigOptions): void { setTimed('bloodOxygen', options) }
+export const getTimedHRV: GetTimedHRV = function(options: TimedConfigResultOptions): void { getTimed('hrv', options) }
+export const setTimedHRV: SetTimedHRV = function(options: SetTimedConfigOptions): void { setTimed('hrv', options) }
+export const getTimedStress: GetTimedStress = function(options: TimedConfigResultOptions): void { getTimed('stress', options) }
+export const setTimedStress: SetTimedStress = function(options: SetTimedConfigOptions): void { setTimed('stress', options) }
+export const getTimedBloodSugar: GetTimedBloodSugar = function(options: TimedConfigResultOptions): void { getTimed('bloodSugar', options) }
+export const setTimedBloodSugar: SetTimedBloodSugar = function(options: SetTimedConfigOptions): void { setTimed('bloodSugar', options) }
+export const getTimedBloodPressure: GetTimedBloodPressure = function(options: TimedConfigResultOptions): void { getTimed('bloodPressure', options) }
+export const setTimedBloodPressure: SetTimedBloodPressure = function(options: SetTimedConfigOptions): void { setTimed('bloodPressure', options) }
+export const getTimedBodyTemperature: GetTimedBodyTemperature = function(options: TimedConfigResultOptions): void { getTimed('temperature', options) }
+export const setTimedBodyTemperature: SetTimedBodyTemperature = function(options: SetTimedConfigOptions): void { setTimed('temperature', options) }
+export const getTimedPPG: GetTimedPPG = function(options: TimedConfigResultOptions): void { getTimed('ppg', options) }
+export const setTimedPPG: SetTimedPPG = function(options: SetTimedConfigOptions): void { setTimed('ppg', options) }
+
+export const startRealtimeMeasure: StartRealtimeMeasure = function(options: RealtimeMeasureOptions): void { nativeVoid('startRealtimeMeasure', { metric: options.metric } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const stopRealtimeMeasure: StopRealtimeMeasure = function(options: RealtimeMeasureOptions): void { nativeVoid('stopRealtimeMeasure', { metric: options.metric } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getWorkoutState: GetWorkoutState = function(options: WorkoutStateResultOptions): void { nativeInvoke('getWorkoutState', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = workoutStateValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const controlWorkout: ControlWorkout = function(options: WorkoutControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.sportType < 7 || options.sportType > 161 || options.controlType < 1 || options.controlType > 4) { invalidOptions(options.fail, options.complete, 'sportType must be 7..161 and controlType must be 1..4'); return }
+  nativeVoid('controlWorkout', { sportType: options.sportType, controlType: options.controlType } as UTSJSONObject, options.success, options.fail, options.complete)
+}
+export const setWorkoutRealtimeEnabled: SetWorkoutRealtimeEnabled = function(options: EnabledOptions): void { nativeVoid('setWorkoutRealtimeEnabled', { enabled: options.enabled } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getWorkoutReports: GetWorkoutReports = function(options: WorkoutReportListResultOptions): void { nativeList('getWorkoutReports', {} as UTSJSONObject, (values: Array<UTSJSONObject>): void => { const result = workoutReportValues(values); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const findDevice: FindDevice = function(options: VoidOptions): void { nativeVoid('findDevice', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const powerOff: PowerOff = function(options: VoidOptions): void { nativeVoid('powerOff', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const factoryReset: FactoryReset = function(options: VoidOptions): void { nativeVoid('factoryReset', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const controlPhoto: ControlPhoto = function(options: PhotoControlOptions): void { nativeVoid('controlPhoto', { state: options.state } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const controlPhone: ControlPhone = function(options: PhoneControlOptions): void { nativeVoid('controlPhone', { action: options.action } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getMuslimCountEnabled: GetMuslimCountEnabled = function(options: BooleanResultOptions): void { nativeBoolean('getMuslimCountEnabled', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setMuslimCountEnabled: SetMuslimCountEnabled = function(options: EnabledOptions): void { nativeVoid('setMuslimCountEnabled', { enabled: options.enabled } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getHeartRateAlert: GetHeartRateAlert = function(options: HeartRateAlertResultOptions): void { nativeInvoke('getHeartRateAlert', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = heartRateAlertValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setHeartRateAlert: SetHeartRateAlert = function(options: HeartRateAlertOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const low = options.config.lowThreshold
+  if (options.config.highThreshold < 0 || options.config.highThreshold > 254 || (low != null && (low < 0 || low > 254))) { invalidOptions(options.fail, options.complete, 'heart-rate thresholds must be 0..254'); return }
+  nativeVoid('setHeartRateAlert', objectValue(options.config), options.success, options.fail, options.complete)
+}
+export const getBloodOxygenAlert: GetBloodOxygenAlert = function(options: BloodOxygenAlertResultOptions): void { nativeInvoke('getBloodOxygenAlert', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = bloodOxygenAlertValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setBloodOxygenAlert: SetBloodOxygenAlert = function(options: BloodOxygenAlertOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.config.lowThreshold < 0 || options.config.lowThreshold > 254) { invalidOptions(options.fail, options.complete, 'blood-oxygen threshold must be 0..254'); return }
+  nativeVoid('setBloodOxygenAlert', objectValue(options.config), options.success, options.fail, options.complete)
+}
+export const getVibrationInterval: GetVibrationInterval = function(options: NumberResultOptions): void { nativeNumber('getVibrationInterval', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setVibrationInterval: SetVibrationInterval = function(options: SetVibrationIntervalOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.intervalMs < 100 || options.intervalMs > 1000) { invalidOptions(options.fail, options.complete, 'intervalMs must be 100..1000'); return }
+  nativeVoid('setVibrationInterval', { intervalMs: options.intervalMs } as UTSJSONObject, options.success, options.fail, options.complete)
+}
+export const startHeartRateCalibration: StartHeartRateCalibration = function(options: VoidOptions): void { nativeVoid('startHeartRateCalibration', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getFallDetect: GetFallDetect = function(options: BooleanResultOptions): void { nativeBoolean('getFallDetect', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setFallDetect: SetFallDetect = function(options: EnabledOptions): void { nativeVoid('setFallDetect', { enabled: options.enabled } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getCountReminderInterval: GetCountReminderInterval = function(options: NumberResultOptions): void { nativeNumber('getCountReminderInterval', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setCountReminderInterval: SetCountReminderInterval = function(options: SetCountReminderIntervalOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const value = options.intervalMinutes
+  if (value != 0 && value != 30 && value != 60 && value != 90 && value != 120) { invalidOptions(options.fail, options.complete, 'intervalMinutes must be 0, 30, 60, 90, or 120'); return }
+  nativeVoid('setCountReminderInterval', { intervalMinutes: value } as UTSJSONObject, options.success, options.fail, options.complete)
+}
+export const controlSensorRaw: ControlSensorRaw = function(options: SensorRawControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (!validSensorType(options.sensorType)) { invalidOptions(options.fail, options.complete, 'unsupported sensorType combination'); return }
+  nativeVoid('controlSensorRaw', { enabled: options.enabled, sensorType: options.sensorType } as UTSJSONObject, options.success, options.fail, options.complete)
+}
+export const getSensorRawHistory: GetSensorRawHistory = function(options: SensorRawListResultOptions): void { nativeList('getSensorRawHistory', {} as UTSJSONObject, (values: Array<UTSJSONObject>): void => { const result = sensorPacketValues(values); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const getAlarm: GetAlarm = function(options: AlarmListResultOptions): void { nativeList('getAlarm', {} as UTSJSONObject, (values: Array<UTSJSONObject>): void => { const result = alarmValues(values); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setAlarm: SetAlarm = function(options: SetAlarmOptions): void { nativeVoid('setAlarm', { alarms: options.alarms } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const deleteAllAlarm: DeleteAllAlarm = function(options: VoidOptions): void { nativeVoid('deleteAllAlarm', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getRaiseBrightScreen: GetRaiseBrightScreen = function(options: ScheduleToggleResultOptions): void { nativeInvoke('getRaiseBrightScreen', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = scheduleValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setRaiseBrightScreen: SetRaiseBrightScreen = function(options: ScheduleToggleOptions): void { nativeVoid('setRaiseBrightScreen', objectValue(options.config), options.success, options.fail, options.complete) }
+export const getBrightScreenTime: GetBrightScreenTime = function(options: NumberResultOptions): void { nativeNumber('getBrightScreenTime', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setBrightScreenTime: SetBrightScreenTime = function(options: SetBrightScreenTimeOptions): void { nativeVoid('setBrightScreenTime', { timeSecond: options.timeSecond } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getBrightScreenSleepTime: GetBrightScreenSleepTime = function(options: ScheduleToggleResultOptions): void { nativeInvoke('getBrightScreenSleepTime', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = scheduleValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setBrightScreenSleepTime: SetBrightScreenSleepTime = function(options: ScheduleToggleOptions): void { nativeVoid('setBrightScreenSleepTime', objectValue(options.config), options.success, options.fail, options.complete) }
+export const getRingLedLevel: GetRingLedLevel = function(options: LedLevelResultOptions): void { nativeInvoke('getRingLedLevel', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = ledValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setRingLedLevel: SetRingLedLevel = function(options: LedLevelOptions): void { nativeVoid('setRingLedLevel', objectValue(options.config), options.success, options.fail, options.complete) }
+export const getVideoHid: GetVideoHid = function(options: NumberResultOptions): void { nativeNumber('getVideoHid', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setVideoHid: SetVideoHid = function(options: SetVideoHidOptions): void { nativeVoid('setVideoHid', { hidOpen: options.hidOpen } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const createOrRemoveBond: CreateOrRemoveBond = function(options: BondOptions): void { nativeBoolean('createOrRemoveBond', { type: options.type, mac: options.mac } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getRingWearDir: GetRingWearDir = function(options: BooleanResultOptions): void { nativeBoolean('getRingWearDir', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setRingWearHand: SetRingWearHand = function(options: WearHandOptions): void { nativeVoid('setRingWearHand', { isRight: options.isRight } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const getVibrationCount: GetVibrationCount = function(options: VibrationResultOptions): void { nativeInvoke('getVibrationCount', {} as UTSJSONObject, (value: UTSJSONObject): void => { const result = vibrationValue(value); options.success?.(result); options.complete?.(result) }, options.fail, options.complete) }
+export const setVibrationCount: SetVibrationCount = function(options: VibrationOptions): void { nativeVoid('setVibrationCount', objectValue(options.config), options.success, options.fail, options.complete) }
+export const getAlarmVibrationDuration: GetAlarmVibrationDuration = function(options: NumberResultOptions): void { nativeNumber('getAlarmVibrationDuration', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const setAlarmVibrationDuration: SetAlarmVibrationDuration = function(options: SetAlarmVibrationDurationOptions): void { nativeVoid('setAlarmVibrationDuration', { duration: options.duration } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const syncAllHealthData: SyncAllHealthData = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  nativeVoid('syncAllHealthData', {} as UTSJSONObject, options.success, options.fail, options.complete)
+}
+export const removeHealthDataCallback: RemoveHealthDataCallback = function(options: VoidOptions): void { nativeVoid('removeHealthDataCallback', {} as UTSJSONObject, options.success, options.fail, options.complete) }
+export const ringOta: RingOta = function(options: OtaOptions): void { nativeVoid('ringOta', { path: options.path } as UTSJSONObject, options.success, options.fail, options.complete) }
+export const unbind: Unbind = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  bridge.invoke('unbind', payloadJSON='{}', completion=(code: number, _json: string, message: string): void => {
+    if (code == 0) succeed(options.success, options.complete)
+    else fail(options.fail, options.complete, code, message)
+  })
+}
+export const pushMessage: PushMessage = function(options: PushMessageOptions): void { nativeVoid('pushMessage', options.message, options.success, options.fail, options.complete) }
+export const setNotificationSwitch: SetNotificationSwitch = function(options: SetNotificationSwitchOptions): void { nativeVoid('setNotificationSwitch', options.switches, options.success, options.fail, options.complete) }
+export const getNotificationSwitch: GetNotificationSwitch = function(options: JsonResultOptions): void { nativeInvoke('getNotificationSwitch', {} as UTSJSONObject, (value: UTSJSONObject): void => { options.success?.(value); options.complete?.(value) }, options.fail, options.complete) }
+
+export const onRealtimeData: OnRealtimeData = function(callback: (data: RealtimeData) => void): void { realtimeDataListener = callback }
+export const offRealtimeData: OffRealtimeData = function(): void { realtimeDataListener = null }
+export const onRealtimeMeasureComplete: OnRealtimeMeasureComplete = function(callback: () => void): void { realtimeCompleteListener = callback }
+export const offRealtimeMeasureComplete: OffRealtimeMeasureComplete = function(): void { realtimeCompleteListener = null }
+export const onWorkoutRealtimeData: OnWorkoutRealtimeData = function(callback: (data: WorkoutRealtimeData) => void): void { workoutRealtimeListener = callback }
+export const offWorkoutRealtimeData: OffWorkoutRealtimeData = function(): void { workoutRealtimeListener = null }
+export const onSyncProgress: OnSyncProgress = function(callback: (progress: number) => void): void { syncProgressListener = callback }
+export const offSyncProgress: OffSyncProgress = function(): void { syncProgressListener = null }
+export const onSyncResult: OnSyncResult = function(callback: (result: SyncResult) => void): void { syncResultListener = callback }
+export const offSyncResult: OffSyncResult = function(): void { syncResultListener = null }
+export const onSyncFinish: OnSyncFinish = function(callback: () => void): void { syncFinishListener = callback }
+export const offSyncFinish: OffSyncFinish = function(): void { syncFinishListener = null }
+export const onSyncError: OnSyncError = function(callback: (error: UTSJSONObject) => void): void { syncErrorListener = callback }
+export const offSyncError: OffSyncError = function(): void { syncErrorListener = null }
+export const onOtaProgress: OnOtaProgress = function(callback: (progress: number) => void): void { otaProgressListener = callback }
+export const offOtaProgress: OffOtaProgress = function(): void { otaProgressListener = null }
+export const onOtaFinish: OnOtaFinish = function(callback: (result: OtaResult) => void): void { otaFinishListener = callback }
+export const offOtaFinish: OffOtaFinish = function(): void { otaFinishListener = null }
+export const onTouchEvent: OnTouchEvent = function(callback: (event: TouchEvent) => void): void { touchEventListener = callback }
+export const offTouchEvent: OffTouchEvent = function(): void { touchEventListener = null }
+export const onCallControl: OnCallControl = function(callback: (event: CallControlEvent) => void): void { callControlListener = callback }
+export const offCallControl: OffCallControl = function(): void { callControlListener = null }
+export const onHealthAlert: OnHealthAlert = function(callback: (event: HealthAlertEvent) => void): void { healthAlertListener = callback }
+export const offHealthAlert: OffHealthAlert = function(): void { healthAlertListener = null }
+export const onHeartRateCalibration: OnHeartRateCalibration = function(callback: (result: HeartRateCalibrationResult) => void): void { heartRateCalibrationListener = callback }
+export const offHeartRateCalibration: OffHeartRateCalibration = function(): void { heartRateCalibrationListener = null }
+export const onSensorRawData: OnSensorRawData = function(callback: (packet: SensorRawPacket) => void): void { sensorRawListener = callback }
+export const offSensorRawData: OffSensorRawData = function(): void { sensorRawListener = null }
+export const onSensorRawStopped: OnSensorRawStopped = function(callback: (event: SensorRawStoppedEvent) => void): void { sensorStoppedListener = callback }
+export const offSensorRawStopped: OffSensorRawStopped = function(): void { sensorStoppedListener = null }

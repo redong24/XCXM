@@ -1,0 +1,27 @@
+import type { RwfitErrorCode, RwfitFail } from './interface.uts'
+
+export const UniErrorSubject = 'rwfit-ble'
+
+export const RwfitErrors: Map<RwfitErrorCode, string> = new Map([
+  [9201001, 'RWFIT SDK is not initialized'],
+  [9201002, 'Bluetooth is unavailable'],
+  [9201003, 'Bluetooth permission denied'],
+  [9201004, 'Invalid argument'],
+  [9201005, 'RWFIT device is not connected or ready'],
+  [9201006, 'RWFIT operation timed out'],
+  [9201007, 'Operation is not supported'],
+  [9201099, 'Native RWFIT SDK error']
+])
+
+export class RwfitFailImpl extends UniError implements RwfitFail {
+  override errCode: RwfitErrorCode = 9201099
+  nativeCode?: number | null = null
+
+  constructor(errCode: RwfitErrorCode, message: string | null, nativeCode: number | null) {
+    super()
+    this.errSubject = UniErrorSubject
+    this.errCode = errCode
+    this.errMsg = message ?? RwfitErrors.get(errCode) ?? 'RWFIT BLE error'
+    this.nativeCode = nativeCode
+  }
+}

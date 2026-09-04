@@ -1,0 +1,36 @@
+import type { RwfitErrorCode, RwfitFail } from '../interface.uts'
+
+const UniErrorSubject = 'rwfit-ble'
+
+const RwfitErrors: Map<RwfitErrorCode, string> = new Map([
+  [9201001, 'RWFIT SDK is not initialized'],
+  [9201002, 'Bluetooth is unavailable'],
+  [9201003, 'Bluetooth permission denied'],
+  [9201004, 'Invalid argument'],
+  [9201005, 'RWFIT device is not connected or ready'],
+  [9201006, 'RWFIT operation timed out'],
+  [9201007, 'Operation is not supported'],
+  [9201099, 'Native RWFIT SDK error']
+])
+
+/**
+ * The standard uni-app WeChat runtime does not expose the native UTS UniError
+ * class. Keep the same public error fields on top of JavaScript Error instead.
+ */
+export class RwfitFailImpl extends Error implements RwfitFail {
+  errSubject: string = UniErrorSubject
+  errCode: RwfitErrorCode = 9201099
+  errMsg: string = 'RWFIT BLE error'
+  data: any | null = null
+  cause: Error | null = null
+  nativeCode?: number | null = null
+
+  constructor(errCode: RwfitErrorCode, message: string | null, nativeCode: number | null) {
+    const errMsg = message ?? RwfitErrors.get(errCode) ?? 'RWFIT BLE error'
+    super(errMsg)
+    this.name = 'RwfitFail'
+    this.errCode = errCode
+    this.errMsg = errMsg
+    this.nativeCode = nativeCode
+  }
+}

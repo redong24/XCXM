@@ -1,0 +1,1475 @@
+import { UTSAndroid } from 'io.dcloud.uts'
+import Build from 'android.os.Build'
+import Context from 'android.content.Context'
+import BluetoothManager from 'android.bluetooth.BluetoothManager'
+import DHBleSdk from 'com.example.blesdk.DHBleSdk'
+import ScanBleService from 'com.example.blesdk.ble.ScanBleService'
+import NativeBleDevice from 'com.example.blesdk.ble.bean.BleDevice'
+import ScanDeviceCallback from 'com.example.blesdk.callback.ScanDeviceCallback'
+import RingConnectBleCallback from 'com.example.blesdk.blering.RingConnectBleCallback'
+import RingBleError from 'com.example.blesdk.blering.RingBleError'
+import SupportMenuBean from 'com.example.blesdk.bean.function.SupportMenuBean'
+import PowerBean from 'com.example.blesdk.bean.function.PowerBean'
+import FirmVersionBean from 'com.example.blesdk.bean.function.FirmVersionBean'
+import PersonBean from 'com.example.blesdk.bean.function.PersonBean'
+import BtNameBean from 'com.example.blesdk.bean.function.BtNameBean'
+import PowerCallback from 'com.example.blesdk.callback.data.PowerCallback'
+import FirmwareCallback from 'com.example.blesdk.callback.data.FirmwareCallback'
+import SupportCallback from 'com.example.blesdk.callback.data.SupportCallback'
+import CommonStatusCallback from 'com.example.blesdk.callback.status.CommonStatusCallback'
+import DrinkReminderBean from 'com.example.blesdk.bean.function.DrinkReminderBean'
+import AlarmRemainderBean from 'com.example.blesdk.bean.function.AlarmRemainderBean'
+import BrightScreenBean from 'com.example.blesdk.bean.function.BrightScreenBean'
+import BrightScreenTimeBean from 'com.example.blesdk.bean.function.BrightScreenTimeBean'
+import BrightScreenLedBean from 'com.example.blesdk.bean.function.BrightScreenLedBean'
+import VideoHidBean from 'com.example.blesdk.bean.function.VideoHidBean'
+import MsgPushBean from 'com.example.blesdk.bean.function.MsgPushBean'
+import HealthDataSyncBean from 'com.example.blesdk.bean.sync.HealthDataSyncBean'
+import HrPartData from 'com.example.blesdk.bean.sync.HrPartData'
+import BoPartData from 'com.example.blesdk.bean.sync.BoPartData'
+import BpPartData from 'com.example.blesdk.bean.sync.BpPartData'
+import PressurePartData from 'com.example.blesdk.bean.sync.PressurePartData'
+import TempPartData from 'com.example.blesdk.bean.sync.TempPartData'
+import StepSyncBean from 'com.example.blesdk.bean.sync.StepSyncBean'
+import StepItemBean from 'com.example.blesdk.bean.sync.StepItemBean'
+import SleepSyncBean from 'com.example.blesdk.bean.sync.SleepSyncBean'
+import SleepItemBean from 'com.example.blesdk.bean.sync.SleepItemBean'
+import HeartRateSyncBean from 'com.example.blesdk.bean.sync.HeartRateSyncBean'
+import HeartRateItemBean from 'com.example.blesdk.bean.sync.HeartRateItemBean'
+import BloodPressSyncBean from 'com.example.blesdk.bean.sync.BloodPressSyncBean'
+import BloodPressItemBean from 'com.example.blesdk.bean.sync.BloodPressItemBean'
+import BloodOxySyncBean from 'com.example.blesdk.bean.sync.BloodOxySyncBean'
+import BloodOxyItemBean from 'com.example.blesdk.bean.sync.BloodOxyItemBean'
+import BodyTempSyncBean from 'com.example.blesdk.bean.sync.BodyTempSyncBean'
+import BodyTempItemBean from 'com.example.blesdk.bean.sync.BodyTempItemBean'
+import PressureSyncBean from 'com.example.blesdk.bean.sync.PressureSyncBean'
+import PressureItemBean from 'com.example.blesdk.bean.sync.PressureItemBean'
+import BloodSugarSyncBean from 'com.example.blesdk.bean.sync.BloodSugarSyncBean'
+import BloodSugarItemBean from 'com.example.blesdk.bean.sync.BloodSugarItemBean'
+import BreatheSyncBean from 'com.example.blesdk.bean.sync.BreatheSyncBean'
+import HrvSyncBean from 'com.example.blesdk.bean.sync.HrvSyncBean'
+import HrvItemBean from 'com.example.blesdk.bean.sync.HrvItemBean'
+import MuslimCountSyncBean from 'com.example.blesdk.bean.sync.MuslimCountSyncBean'
+import MuslimCountItemBean from 'com.example.blesdk.bean.sync.MuslimCountItemBean'
+import TimedHeartRateCallback from 'com.example.blesdk.callback.data.TimedHeartRateCallback'
+import TimedBloodOxygenCallback from 'com.example.blesdk.callback.data.TimedBloodOxygenCallback'
+import TimedHrvCallback from 'com.example.blesdk.callback.data.TimedHrvCallback'
+import TimedStressCallback from 'com.example.blesdk.callback.data.TimedStressCallback'
+import TimedBloodSugarCallback from 'com.example.blesdk.callback.data.TimedBloodSugarCallback'
+import TimedBloodPressureCallback from 'com.example.blesdk.callback.data.TimedBloodPressureCallback'
+import TimedBodyTemperatureCallback from 'com.example.blesdk.callback.data.TimedBodyTemperatureCallback'
+import TimedPPGCallback from 'com.example.blesdk.callback.data.TimedPPGCallback'
+import HealthDataBroCallback from 'com.example.blesdk.callback.data.HealthDataBroCallback'
+import HealthDataControlCallback from 'com.example.blesdk.callback.status.HealthDataControlCallback'
+import SportGetControlCallback from 'com.example.blesdk.callback.data.SportGetControlCallback'
+import SportControlCallback from 'com.example.blesdk.callback.status.SportControlCallback'
+import SportDataPushCallback from 'com.example.blesdk.callback.data.SportDataPushCallback'
+import Sport3ResultCallback from 'com.example.blesdk.callback.data.Sport3ResultCallback'
+import MuslimCountSwitchCallback from 'com.example.blesdk.callback.data.MuslimCountSwitchCallback'
+import HrReminderCallback from 'com.example.blesdk.callback.data.HrReminderCallback'
+import BoReminderCallback from 'com.example.blesdk.callback.data.BoReminderCallback'
+import VibrationIntervalCallback from 'com.example.blesdk.callback.data.VibrationIntervalCallback'
+import FallDetectCallback from 'com.example.blesdk.callback.data.FallDetectCallback'
+import CountReminderIntervalCallback from 'com.example.blesdk.callback.data.CountReminderIntervalCallback'
+import SensorRawDataCallback from 'com.example.blesdk.callback.data.SensorRawDataCallback'
+import SensorRawControlCallback from 'com.example.blesdk.callback.data.SensorRawControlCallback'
+import SensorHistoryRawCallback from 'com.example.blesdk.callback.data.SensorHistoryRawCallback'
+import AlarmCallback from 'com.example.blesdk.callback.data.AlarmCallback'
+import BrightCallback from 'com.example.blesdk.callback.data.BrightCallback'
+import BrightTimeCallback from 'com.example.blesdk.callback.data.BrightTimeCallback'
+import BrightLedLevelCallback from 'com.example.blesdk.callback.data.BrightLedLevelCallback'
+import VideoHidCallback from 'com.example.blesdk.callback.data.VideoHidCallback'
+import WearHandCallback from 'com.example.blesdk.callback.data.WearHandCallback'
+import VibrationCountCallback from 'com.example.blesdk.callback.data.VibrationCountCallback'
+import AlarmVibrationDurationCallback from 'com.example.blesdk.callback.data.AlarmVibrationDurationCallback'
+import FactoryTestCallback from 'com.example.blesdk.callback.data.FactoryTestCallback'
+import TakePhotoCallback from 'com.example.blesdk.callback.data.TakePhotoCallback'
+import TouchEventCallback from 'com.example.blesdk.callback.data.TouchEventCallback'
+import HrBoActualReminderCallback from 'com.example.blesdk.callback.data.HrBoActualReminderCallback'
+import MusicPushSettingCallback from 'com.example.blesdk.callback.status.MusicPushSettingCallback'
+import MsgPushSettingCallback from 'com.example.blesdk.callback.status.MsgPushSettingCallback'
+import CallRemindCallback from 'com.example.blesdk.callback.data.CallRemindCallback'
+import HealthDataSyncCallback from 'com.example.blesdk.callback.HealthDataSyncCallback'
+import OnFileTransferCallback from 'com.example.blesdk.callback.OnFileTransferCallback'
+import BlueToothUtils from 'com.example.blesdk.utils.BlueToothUtils'
+import CmdConstants from 'com.example.blesdk.utils.CmdConstants'
+import BleActivityMode from 'com.example.blesdk.utils.BleActivityMode'
+import WorkoutControlType from 'com.example.blesdk.utils.WorkoutControlType'
+import NewSportBean from 'com.example.blesdk.bean.sync.NewSportBean'
+import SportDataPushBean from 'com.example.blesdk.bean.sync.SportDataPushBean'
+import SportResultBean from 'com.example.blesdk.bean.sync.SportResultBean'
+import HrReminderBean from 'com.example.blesdk.bean.function.HrReminderBean'
+import BoReminderBean from 'com.example.blesdk.bean.function.BoReminderBean'
+import HrBoActualReminderBean from 'com.example.blesdk.bean.function.HrBoActualReminderBean'
+import FactoryInBean from 'com.example.blesdk.bean.function.FactoryInBean'
+import BrightVibrationBean from 'com.example.blesdk.bean.function.BrightVibrationBean'
+import SensorRawDataBean from 'com.example.blesdk.bean.function.SensorRawDataBean'
+import SensorHistoryRawBean from 'com.example.blesdk.bean.function.SensorHistoryRawBean'
+import JavaInteger from 'java.lang.Integer'
+import JavaFloat from 'java.lang.Float'
+import ArrayList from 'java.util.ArrayList'
+
+import type {
+  BleDevice, ConnectStateEvent, FirmwareInfo, FunctionListResult, FunctionMenu,
+  Initialize, GetSdkVersion, GetPluginVersion, StartScan, StopScan, Connect,
+  Disconnect, IosSetBindedStatus, Reconnect, IsConnected, GetPower,
+  GetFirmwareVersion, SetUserInfo, SetTimeFormat, GetFunctionList,
+  SetRingBtName, OnScanResult, OffScanResult, OnScanFinish, OffScanFinish,
+  OnConnectState, OffConnectState, OnFunctionMenu, OffFunctionMenu, VoidOptions,
+  StringResultOptions, BooleanResultOptions, NumberResultOptions,
+  FirmwareResultOptions, FunctionListResultOptions, RwfitFail,
+  TimedConfig, SetTimedConfigOptions, RealtimeData, WorkoutState,
+  WorkoutRealtimeData, WorkoutReport, WorkoutValueItem, SensorRawPacket,
+  AccRawSample, SleepRawSample, ScheduleToggle, LedLevel, VibrationConfig,
+  SyncResult, OtaResult, TouchEvent, CallControlEvent, HealthAlertEvent,
+  HeartRateCalibrationResult, SensorRawStoppedEvent
+  , TimedConfigResultOptions, RealtimeMeasureOptions, WorkoutStateResultOptions,
+  WorkoutControlOptions, EnabledOptions, WorkoutReportListResultOptions
+  , PhotoControlOptions, PhoneControlOptions, HeartRateAlertResultOptions,
+  HeartRateAlertOptions, BloodOxygenAlertResultOptions, BloodOxygenAlertOptions,
+  SetVibrationIntervalOptions, SetCountReminderIntervalOptions,
+  SetBrightScreenTimeOptions, SetVideoHidOptions,
+  SetAlarmVibrationDurationOptions
+  , HeartRateAlertConfig, BloodOxygenAlertConfig
+  , AlarmListResultOptions, SetAlarmOptions, Alarm,
+  ScheduleToggleResultOptions, ScheduleToggleOptions, LedLevelResultOptions,
+  LedLevelOptions, VibrationResultOptions, VibrationOptions, WearHandOptions
+  , SensorRawControlOptions, SensorRawListResultOptions
+  , BondOptions, OtaOptions, PushMessageOptions, SetNotificationSwitchOptions, JsonResultOptions
+} from '../interface.uts'
+import { RwfitFailImpl } from '../unierror.uts'
+import type {
+  GetTimedHeartRate, GetTimedBloodOxygen, GetTimedHRV, GetTimedStress, GetTimedBloodSugar, GetTimedBloodPressure, GetTimedBodyTemperature, GetTimedPPG,
+  SetTimedHeartRate, SetTimedBloodOxygen, SetTimedHRV, SetTimedStress, SetTimedBloodSugar, SetTimedBloodPressure, SetTimedBodyTemperature, SetTimedPPG,
+  StartRealtimeMeasure, StopRealtimeMeasure, GetWorkoutState, ControlWorkout, SetWorkoutRealtimeEnabled, GetWorkoutReports, FindDevice, PowerOff,
+  FactoryReset, ControlPhoto, ControlPhone, GetMuslimCountEnabled, SetMuslimCountEnabled, GetHeartRateAlert, SetHeartRateAlert, GetBloodOxygenAlert,
+  SetBloodOxygenAlert, GetVibrationInterval, SetVibrationInterval, GetFallDetect, SetFallDetect, GetCountReminderInterval, SetCountReminderInterval, StartHeartRateCalibration,
+  GetAlarm, SetAlarm, DeleteAllAlarm, GetRaiseBrightScreen, SetRaiseBrightScreen, GetBrightScreenTime, SetBrightScreenTime, GetBrightScreenSleepTime,
+  SetBrightScreenSleepTime, GetRingLedLevel, SetRingLedLevel, GetVideoHid, SetVideoHid, GetRingWearDir, SetRingWearHand, GetVibrationCount,
+  SetVibrationCount, GetAlarmVibrationDuration, SetAlarmVibrationDuration, ControlSensorRaw, GetSensorRawHistory, CreateOrRemoveBond, SyncAllHealthData, RemoveHealthDataCallback,
+  RingOta, Unbind, PushMessage, SetNotificationSwitch, GetNotificationSwitch, OnRealtimeData, OffRealtimeData, OnRealtimeMeasureComplete,
+  OffRealtimeMeasureComplete, OnWorkoutRealtimeData, OffWorkoutRealtimeData, OnSyncProgress, OffSyncProgress, OnSyncResult, OffSyncResult, OnSyncFinish,
+  OffSyncFinish, OnSyncError, OffSyncError, OnOtaProgress, OffOtaProgress, OnOtaFinish, OffOtaFinish, OnTouchEvent,
+  OffTouchEvent, OnCallControl, OffCallControl, OnHealthAlert, OffHealthAlert, OnHeartRateCalibration, OffHeartRateCalibration, OnSensorRawData,
+  OffSensorRawData, OnSensorRawStopped, OffSensorRawStopped
+} from '../interface.uts'
+
+const PLUGIN_VERSION = '0.0.1'
+let initialized = false
+let ready = false
+let scanResultListener: ((device: BleDevice) => void) | null = null
+let scanFinishListener: (() => void) | null = null
+let connectStateListener: ((event: ConnectStateEvent) => void) | null = null
+let functionMenuListener: ((menu: FunctionMenu) => void) | null = null
+let realtimeDataListener: ((data: RealtimeData) => void) | null = null
+let realtimeCompleteListener: (() => void) | null = null
+let workoutRealtimeListener: ((data: WorkoutRealtimeData) => void) | null = null
+let syncProgressListener: ((progress: number) => void) | null = null
+let syncResultListener: ((result: SyncResult) => void) | null = null
+let syncFinishListener: (() => void) | null = null
+let syncErrorListener: ((error: UTSJSONObject) => void) | null = null
+let otaProgressListener: ((progress: number) => void) | null = null
+let otaFinishListener: ((result: OtaResult) => void) | null = null
+let touchEventListener: ((event: TouchEvent) => void) | null = null
+let callControlListener: ((event: CallControlEvent) => void) | null = null
+let healthAlertListener: ((event: HealthAlertEvent) => void) | null = null
+let heartRateCalibrationListener: ((result: HeartRateCalibrationResult) => void) | null = null
+let sensorRawListener: ((packet: SensorRawPacket) => void) | null = null
+let sensorStoppedListener: ((event: SensorRawStoppedEvent) => void) | null = null
+let realtimeCallback: HealthDataBroCallback | null = null
+let workoutCallback: SportDataPushCallback | null = null
+let sensorRawCallback: SensorRawDataCallback | null = null
+let syncCallback: HealthDataSyncCallback | null = null
+let factoryCallback: FactoryTestCallback | null = null
+let touchCallback: TouchEventCallback | null = null
+let alertCallback: HrBoActualReminderCallback | null = null
+let callCallback: CallRemindCallback | null = null
+let musicCallback: MusicPushSettingCallback | null = null
+
+function deviceFromNative(device: NativeBleDevice): BleDevice {
+  return {
+    name: device.getBleName() ?? '',
+    mac: device.getBleMac() ?? '',
+    rssi: device.getBleRssi()
+  } as BleDevice
+}
+
+function menuFromNative(bean: SupportMenuBean): UTSJSONObject {
+  const interval = bean.getActivityDataInterval()
+  return {
+    isPushMsgEnableSwitch: bean.isPushMsgEnableSwitch(),
+    pushMsgSwitchValue: bean.getPushMsgSwitchValue(),
+    pushMsgSwitchValue2: bean.getPushMsgSwitchValue2(),
+    activityDataInterval: interval > 0 ? interval : 60,
+    isAlarm: bean.isAlarm(),
+    isBrightScreenSleepTime: bean.isBrightScreenSleepTime(),
+    isBrightScreenTime: bean.isBrightScreenTime(),
+    isSupportWorkout: bean.isNewSport(),
+    isRememberSwitch: bean.isRememberSwitch(),
+    isSupportHrReminder: bean.isSupportHrReminder(),
+    isSupportBoReminder: bean.isSupportBoReminder(),
+    isSupportMotoVibrationLevel: bean.isSupportMotoVibrationLevel(),
+    isSupportAlarmVibrationDuration: bean.isSupportAlarmVibrationDuration(),
+    isSupportVibrationInterval: bean.isSupportVibrationInterval(),
+    isStep: bean.isStep(),
+    isSleep: bean.isSleep(),
+    isHr: bean.isHr(),
+    isBloodOxy: bean.isBloodOxy(),
+    isBloodPress: bean.isBloodPress(),
+    isBloodSugar: bean.isBloodSugar(),
+    isHrv: bean.isHrv(),
+    isPressure: bean.isPressure(),
+    isMuslimCountData: bean.isMuslimCountData(),
+    isBodyTemp: bean.isDataTypeTemperature(),
+    isSupportMuslimTimeDisplayMode: bean.isSupportMuslimTimeDisplayMode(),
+    isSupportSensorRawPPG: bean.isSupportSensorRawPPG(),
+    isSupportPPGMonitoring: bean.isSupportPPGMonitoring(),
+    isSupportTemperatureMonitoring: bean.isSupportTemperatureMonitoring(),
+    isSupportCountReminder: bean.isSupportCountReminder(),
+    isSupportSensorRawACC: bean.isSupportSensorRawACC(),
+    isSupportSensorRawPPGRed: bean.isSupportSensorRawPPGRed(),
+    isSupportSensorRawIR: bean.isSupportSensorRawIR(),
+    isSupportSensorRawSleep: bean.isSupportSensorRawSleep(),
+    isSupportFallDetect: bean.isSupportFallDetect(),
+    isSupportRecording: bean.isSupportRecording(),
+    isFindDevice: bean.isFindDevice(),
+    isTakePhoto: bean.isTakePhoto(),
+    isLedLight: bean.isLEDLight(),
+    isWearDirection: bean.isWearDir(),
+    isVideoHid: bean.isVideoHid(),
+    isVideoHidBook: bean.isVideoHidBook(),
+    isVideoHidMusic: bean.isVideoHidMusic(),
+    isRaiseBrightScreen: bean.isRaiseBrightScreen(),
+    isPowerOff: bean.isPowerOff(),
+    isFactoryReset: bean.isRecovery(),
+    isPushMessage: bean.isMsgNotification()
+  } as UTSJSONObject
+}
+
+class CoreCallback implements ScanDeviceCallback, RingConnectBleCallback {
+  override onScanDevice(device: NativeBleDevice): void {
+    scanResultListener?.(deviceFromNative(device))
+  }
+
+  override onScanFinish(): void {
+    scanFinishListener?.()
+  }
+
+  override onError(errorCode: Int, error: Exception): void {
+    console.error(`RWFIT scan error ${errorCode}: ${error.message ?? ''}`)
+  }
+
+  override onRingConnecting(device: NativeBleDevice | null): void {
+    if (device == null) return
+    connectStateListener?.({
+      state: 'connecting', name: device.getBleName(), mac: device.getBleMac()
+    } as ConnectStateEvent)
+  }
+
+  override onRingConnected(device: NativeBleDevice | null): void {
+    ready = false
+    if (device == null) return
+    connectStateListener?.({
+      state: 'connected', name: device.getBleName(), mac: device.getBleMac()
+    } as ConnectStateEvent)
+  }
+
+  override onRingConnectFailed(device: NativeBleDevice | null, reason: RingBleError): void {
+    ready = false
+    if (device == null) return
+    connectStateListener?.({
+      state: 'failed', name: device.getBleName(), mac: device.getBleMac(),
+      reason: reason.name
+    } as ConnectStateEvent)
+  }
+
+  override onRingDidFunctionMenu(device: NativeBleDevice | null, supportMenuBean: SupportMenuBean): void {
+    if (device == null) return
+    ready = true
+    functionMenuListener?.({
+      name: device.getBleName() ?? '',
+      mac: device.getBleMac() ?? '',
+      raw: menuFromNative(supportMenuBean)
+    } as FunctionMenu)
+  }
+}
+
+const coreCallback = new CoreCallback()
+
+function requireInitialized(failCallback?: (error: RwfitFail) => void, completeCallback?: (result: any | null) => void): boolean {
+  if (initialized) return true
+  const error = new RwfitFailImpl(9201001, null, null)
+  failCallback?.(error); completeCallback?.(error)
+  return false
+}
+
+function requireBluetoothAvailable(failCallback?: (error: RwfitFail) => void,
+  completeCallback?: (result: any | null) => void): boolean {
+  const context = UTSAndroid.getAppContext()
+  const manager = context?.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager | null
+  const adapter = manager?.getAdapter()
+  if (adapter != null && adapter!.isEnabled()) return true
+  const error = new RwfitFailImpl(9201002, null, null)
+  failCallback?.(error); completeCallback?.(error)
+  return false
+}
+
+function requireReady(failCallback?: (error: RwfitFail) => void, completeCallback?: (result: any | null) => void): boolean {
+  if (!requireInitialized(failCallback, completeCallback)) return false
+  if (!requireBluetoothAvailable(failCallback, completeCallback)) return false
+  if (ready && DHBleSdk.isBleConnected()) return true
+  const error = new RwfitFailImpl(9201005, null, null)
+  failCallback?.(error); completeCallback?.(error)
+  return false
+}
+
+function succeed(successCallback?: () => void, completeCallback?: (result: any | null) => void): void {
+  successCallback?.(); completeCallback?.(null)
+}
+
+function fail(failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, message: string, nativeCode: number | null): void {
+  const lower = message.toLowerCase()
+  const code = lower.includes('timeout') || lower.includes('timed out') ? 9201006
+    : lower.includes('bluetooth') && (lower.includes('off') || lower.includes('unavailable')) ? 9201002
+    : lower.includes('not connected') || lower.includes('not ready') ? 9201005
+    : 9201099
+  const error = new RwfitFailImpl(code, message, nativeCode)
+  failCallback?.(error); completeCallback?.(error)
+}
+
+function invalidOptions(failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, message: string): void {
+  const error = new RwfitFailImpl(9201004, message, null)
+  failCallback?.(error); completeCallback?.(error)
+}
+
+function unsupported(failCallback: ((error: RwfitFail) => void) | null,
+  completeCallback: ((result: any | null) => void) | null, message: string): void {
+  const error = new RwfitFailImpl(9201007, message, null)
+  failCallback?.(error); completeCallback?.(error)
+}
+
+function validSensorType(value: number): boolean {
+  return value == 1 || value == 2 || value == 3 || value == 4 || value == 5 ||
+    value == 10 || value == 11 || value == 12 || value == 13
+}
+
+function androidBluetoothPermissions(): Array<string> {
+  return Build.VERSION.SDK_INT >= 31
+    ? ['android.permission.BLUETOOTH_SCAN', 'android.permission.BLUETOOTH_CONNECT']
+    : ['android.permission.ACCESS_FINE_LOCATION']
+}
+
+function requestBluetoothPermissions(
+  failCallback: ((error: RwfitFail) => void) | null,
+  completeCallback: ((result: any | null) => void) | null,
+  onGranted: () => void
+): void {
+  const activity = UTSAndroid.getUniActivity()
+  if (activity == null) {
+    fail(failCallback, completeCallback, 'Android activity is unavailable', null); return
+  }
+  const permissions = androidBluetoothPermissions()
+  if (UTSAndroid.checkSystemPermissionGranted(activity, permissions)) {
+    onGranted(); return
+  }
+  let settled = false
+  UTSAndroid.requestSystemPermission(
+    activity,
+    permissions,
+    (allRight: boolean, _grantedList: Array<string>): void => {
+      if (settled) return
+      settled = true
+      if (allRight) onGranted()
+      else {
+        const error = new RwfitFailImpl(9201003, null, null)
+        failCallback?.(error); completeCallback?.(error)
+      }
+    },
+    (_doNotAskAgain: boolean, _grantedList: Array<string>): void => {
+      if (settled) return
+      settled = true
+      const error = new RwfitFailImpl(9201003, null, null)
+      failCallback?.(error); completeCallback?.(error)
+    },
+    true
+  )
+}
+
+function connectNative(device: BleDevice, successCallback?: () => void, failCallback?: (error: RwfitFail) => void, completeCallback?: (result: any | null) => void): void {
+  if ((device.mac ?? '').trim().length == 0) {
+    const error = new RwfitFailImpl(9201004, 'mac is required on Android', null)
+    failCallback?.(error); completeCallback?.(error); return
+  }
+  const nativeDevice = new NativeBleDevice()
+  ready = false
+  nativeDevice.setBleName(device.name)
+  nativeDevice.setBleMac(device.mac)
+  nativeDevice.setBleRssi(device.rssi.toInt())
+  DHBleSdk.setConnectBleCallback(coreCallback)
+  DHBleSdk.connectDeviceWithModel(nativeDevice)
+  succeed(successCallback, completeCallback)
+}
+
+export const initialize: Initialize = function(options: VoidOptions): void {
+  const context = UTSAndroid.getAppContext()
+  if (context == null) {
+    fail(options.fail, options.complete, 'Android application context is unavailable', null); return
+  }
+  requestBluetoothPermissions(options.fail, options.complete, (): void => {
+    try {
+      DHBleSdk.initSDK(context)
+      DHBleSdk.setConnectBleCallback(coreCallback)
+      ScanBleService.getService().initBle(context)
+      ScanBleService.getService().registerScanBleCallback(coreCallback)
+      initialized = true
+      ready = false
+      if (realtimeDataListener != null) bindRealtimeCallback()
+      succeed(options.success, options.complete)
+    } catch (error) {
+      fail(options.fail, options.complete, `${error}`, null)
+    }
+  })
+}
+
+export const getSdkVersion: GetSdkVersion = function(options: StringResultOptions): void {
+  const result = DHBleSdk.getSDKVersion()
+  options.success?.(result); options.complete?.(result)
+}
+
+export const getPluginVersion: GetPluginVersion = function(options: StringResultOptions): void {
+  const result = `${PLUGIN_VERSION}_${DHBleSdk.getSDKVersion()}`
+  options.success?.(result); options.complete?.(result)
+}
+
+function beginScan(options: VoidOptions): void {
+  try {
+    ScanBleService.getService().startScan(false, null)
+    succeed(options.success, options.complete)
+  } catch (error) {
+    fail(options.fail, options.complete, `${error}`, null)
+  }
+}
+
+export const startScan: StartScan = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  if (!requireBluetoothAvailable(options.fail, options.complete)) return
+  requestBluetoothPermissions(options.fail, options.complete, (): void => beginScan(options))
+}
+
+export const stopScan: StopScan = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  ScanBleService.getService().stopScan(); succeed(options.success, options.complete)
+}
+
+export const connect: Connect = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  if (!requireBluetoothAvailable(options.fail, options.complete)) return
+  connectNative(options.device, options.success, options.fail, options.complete)
+}
+
+export const reconnect: Reconnect = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  if (!requireBluetoothAvailable(options.fail, options.complete)) return
+  if (options.device == null) {
+    const error = new RwfitFailImpl(9201004, 'device is required on Android', null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  connectNative(options.device!, options.success, options.fail, options.complete)
+}
+
+export const disconnect: Disconnect = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  ready = false
+  DHBleSdk.disconnect()
+  connectStateListener?.({ state: 'disconnected' } as ConnectStateEvent)
+  succeed(options.success, options.complete)
+}
+
+export const iosSetBindedStatus: IosSetBindedStatus = function(options): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  unsupported(options.fail, options.complete, 'iosSetBindedStatus is only supported on iOS')
+}
+
+export const isConnected: IsConnected = function(options: BooleanResultOptions): void {
+  const result = initialized && DHBleSdk.isBleConnected()
+  options.success?.(result); options.complete?.(result)
+}
+
+export const getPower: GetPower = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  const callback = new (class implements PowerCallback {
+    override onSuccess(): void {}
+    override onFail(code: Int): void {
+      const error = new RwfitFailImpl(9201099, 'getPower failed', code)
+      options.fail?.(error); options.complete?.(error); DHBleSdk.dispose(this)
+    }
+    override onResult(data: PowerBean): void {
+      const result = data.getPower()
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+  })
+  DHBleSdk.subscribeData(callback); DHBleSdk.getPowerJL()
+}
+
+export const getFirmwareVersion: GetFirmwareVersion = function(options: FirmwareResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const callback = new (class implements FirmwareCallback {
+    override onSuccess(): void {}
+    override onFail(code: Int): void {
+      const error = new RwfitFailImpl(9201099, 'getFirmwareVersion failed', code)
+      options.fail?.(error); options.complete?.(error); DHBleSdk.dispose(this)
+    }
+    override onResult(data: FirmVersionBean): void {
+      const result = {
+        deviceClazz: data.getDeviceClazz() ?? '',
+        deviceNo: data.getDeviceNo() ?? '',
+        uiVersion: data.getUiVersion() ?? ''
+      } as FirmwareInfo
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+  })
+  DHBleSdk.subscribeData(callback); DHBleSdk.getFirmwareVersionJL()
+}
+
+function statusThen(successCallback: (() => void) | null, failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, action: () => void): void {
+  const callback = new (class implements CommonStatusCallback {
+    override onSuccess(msgId: Int): void {
+      succeed(successCallback, completeCallback); DHBleSdk.dispose(this)
+    }
+    override onFail(msgId: Int, code: Int): void {
+      fail(failCallback, completeCallback, 'RWFIT set operation failed', code); DHBleSdk.dispose(this)
+    }
+  })
+  DHBleSdk.subscribeStatus(callback); action()
+}
+
+export const setUserInfo: SetUserInfo = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const bean = new PersonBean()
+  bean.setGender(options.info.gender.toInt()); bean.setAge(options.info.age.toInt())
+  bean.setHeight(options.info.height.toFloat()); bean.setWeight(options.info.weight.toFloat())
+  bean.setMeasureUnit(0)
+  statusThen(options.success, options.fail, options.complete, () => DHBleSdk.setUserInfo(bean))
+}
+
+export const setTimeFormat: SetTimeFormat = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  statusThen(options.success, options.fail, options.complete, () => DHBleSdk.ringSetTimeformat(options.format.toInt()))
+}
+
+export const setRingBtName: SetRingBtName = function(options): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const bean = new BtNameBean(); bean.setBtName(options.name)
+  statusThen(options.success, options.fail, options.complete, () => DHBleSdk.setRingBtName(bean))
+}
+
+export const getFunctionList: GetFunctionList = function(options: FunctionListResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const callback = new (class implements SupportCallback {
+    override onSuccess(): void {}
+    override onFail(code: Int): void {
+      const error = new RwfitFailImpl(9201099, 'getFunctionList failed', code)
+      options.fail?.(error); options.complete?.(error); DHBleSdk.dispose(this)
+    }
+    override onResult(bean: SupportMenuBean): void {
+      const result = { code: 0, msg: 'success', supportMenu: menuFromNative(bean) } as FunctionListResult
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+  })
+  DHBleSdk.subscribeData(callback); DHBleSdk.getFunctionListV2JL()
+}
+
+export const onScanResult: OnScanResult = function(callback: (device: BleDevice) => void): void { scanResultListener = callback }
+export const offScanResult: OffScanResult = function(): void { scanResultListener = null }
+export const onScanFinish: OnScanFinish = function(callback: () => void): void { scanFinishListener = callback }
+export const offScanFinish: OffScanFinish = function(): void { scanFinishListener = null }
+export const onConnectState: OnConnectState = function(callback: (event: ConnectStateEvent) => void): void { connectStateListener = callback }
+export const offConnectState: OffConnectState = function(): void { connectStateListener = null }
+export const onFunctionMenu: OnFunctionMenu = function(callback: (menu: FunctionMenu) => void): void { functionMenuListener = callback }
+export const offFunctionMenu: OffFunctionMenu = function(): void { functionMenuListener = null }
+
+function timedBean(config: TimedConfig): DrinkReminderBean {
+  const bean = new DrinkReminderBean()
+  bean.setOpen(config.isOpen); bean.setRemindDuration(config.duration.toInt())
+  bean.setStartHour(config.startHour.toInt()); bean.setStartMin(config.startMin.toInt())
+  bean.setEndHour(config.endHour.toInt()); bean.setEndMin(config.endMin.toInt())
+  return bean
+}
+
+function timedResult(bean: DrinkReminderBean): TimedConfig {
+  return {
+    isOpen: bean.isOpen(), duration: bean.getRemindDuration(),
+    startHour: bean.getStartHour(), startMin: bean.getStartMin(),
+    endHour: bean.getEndHour(), endMin: bean.getEndMin()
+  } as TimedConfig
+}
+
+export const getTimedHeartRate: GetTimedHeartRate = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedHeartRateCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedHeartRate failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedHeartRateJL()
+}
+export const getTimedBloodOxygen: GetTimedBloodOxygen = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodOxygenCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedBloodOxygen failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedBloodOxygenJL()
+}
+export const getTimedHRV: GetTimedHRV = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedHrvCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedHRV failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedHRVJL()
+}
+export const getTimedStress: GetTimedStress = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedStressCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedStress failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedStressJL()
+}
+export const getTimedBloodSugar: GetTimedBloodSugar = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodSugarCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedBloodSugar failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedBloodSugarJL()
+}
+export const getTimedBloodPressure: GetTimedBloodPressure = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodPressureCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedBloodPressure failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedBloodPressureJL()
+}
+export const getTimedBodyTemperature: GetTimedBodyTemperature = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBodyTemperatureCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedBodyTemperature failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedBodyTemperature()
+}
+export const getTimedPPG: GetTimedPPG = function(options: TimedConfigResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedPPGCallback {
+    override onResult(data: DrinkReminderBean): void { const result = timedResult(data); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getTimedPPG failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getTimedPPGJL()
+}
+
+export const setTimedHeartRate: SetTimedHeartRate = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedHeartRateCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedHeartRate failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedHeartRateJL(timedBean(options.config))
+}
+export const setTimedBloodOxygen: SetTimedBloodOxygen = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodOxygenCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedBloodOxygen failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedBloodOxygenJL(timedBean(options.config))
+}
+export const setTimedHRV: SetTimedHRV = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedHrvCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedHRV failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedHRVJL(timedBean(options.config))
+}
+export const setTimedStress: SetTimedStress = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedStressCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedStress failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedStressJL(timedBean(options.config))
+}
+export const setTimedBloodSugar: SetTimedBloodSugar = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodSugarCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedBloodSugar failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedBloodSugarJL(timedBean(options.config))
+}
+export const setTimedBloodPressure: SetTimedBloodPressure = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBloodPressureCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedBloodPressure failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedBloodPressureJL(timedBean(options.config))
+}
+export const setTimedBodyTemperature: SetTimedBodyTemperature = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedBodyTemperatureCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedBodyTemperature failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedBodyTemperature(timedBean(options.config))
+}
+export const setTimedPPG: SetTimedPPG = function(options: SetTimedConfigOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TimedPPGCallback {
+    override onResult(_data: DrinkReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setTimedPPG failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setTimedPPGJL(timedBean(options.config))
+}
+
+function healthKey(metric: string): Byte {
+  const zero = 0
+  switch (metric) {
+    case 'hr': return CmdConstants.JL_HR_DATA_TRANSFER_KEY
+    case 'bloodOxy': return CmdConstants.JL_BO_DATA_TRANSFER_KEY
+    case 'hrv': return CmdConstants.JL_HRV_DATA_TRANSFER_KEY
+    case 'pressure': return CmdConstants.JL_PRESSURE_DATA_TRANSFER_KEY
+    case 'bloodSugar': return CmdConstants.JL_BLOODSUGAR_DATA_TRANSFER_KEY
+    case 'bloodPressure': return CmdConstants.JL_BP_DATA_TRANSFER_KEY
+    default: return zero.toByte()
+  }
+}
+
+function bindRealtimeCallback(): void {
+  if (realtimeCallback != null) return
+  const callback = new (class implements HealthDataBroCallback {
+    override onResult(data: HealthDataSyncBean): void {
+      const type = data.getDataType()
+      if (type == 1) { // Constants.RingHealthType.HR
+        const list = data.getHrPartData(); if (list == null || list.isEmpty()) return
+        const item: HrPartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getHr(), time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 13) { // Constants.RingHealthType.HRV; SDK also stores it in HrPartData
+        const list = data.getHrPartData(); if (list == null || list.isEmpty()) return
+        const item: HrPartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getHr(), time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 3) {
+        const list = data.getBoPartData(); if (list == null || list.isEmpty()) return
+        const item: BoPartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getBo(), time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 4) {
+        const list = data.getBpPartData(); if (list == null || list.isEmpty()) return
+        const item: BpPartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getSp(), diastolic: item.getDp(), time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 8) {
+        const list = data.getPressurePartData(); if (list == null || list.isEmpty()) return
+        const item: PressurePartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getPressure(), time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 9) { // Constants.RingHealthType.BLOOD_SUGAR; SDK stores it in TempPartData
+        const list = data.getTempPartData(); if (list == null || list.isEmpty()) return
+        const item: TempPartData = list.get(list.size - 1)
+        realtimeDataListener?.({ dataType: type, dataValue: item.getTemp().toDouble() / 10.0, time: item.getTime().toDouble() } as RealtimeData)
+      } else if (type == 10) { // Constants.RingHealthType.MUSLIM_COUNT
+        const item = data.getMuslimCountPartData(); if (item == null) return
+        realtimeDataListener?.({ dataType: type, dataValue: item!.getCount(), time: item!.getTimeMills().toDouble() } as RealtimeData)
+      }
+    }
+    override onFail(_code: Int): void {}
+    override onSuccess(): void {}
+  })
+  realtimeCallback = callback
+  DHBleSdk.subscribeData(callback)
+}
+
+function controlHealth(options: RealtimeMeasureOptions, start: boolean): void {
+  const key = healthKey(options.metric)
+  const zero = 0
+  if (key == zero.toByte()) { const error = new RwfitFailImpl(9201004, `Unknown realtime metric: ${options.metric}`, null); options.fail?.(error); options.complete?.(error); return }
+  bindRealtimeCallback()
+  const status = new (class implements HealthDataControlCallback {
+    override onResult(data: Int): void { if (data >= 10) realtimeCompleteListener?.() }
+    override onFail(code: Int): void { fail(options.fail, options.complete, start ? 'startRealtimeMeasure failed' : 'stopRealtimeMeasure failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete) }
+  }); DHBleSdk.subscribeData(status)
+  const state = start ? 1 : 0
+  DHBleSdk.controlHealthDataJL(key, state.toByte())
+}
+
+export const startRealtimeMeasure: StartRealtimeMeasure = function(options: RealtimeMeasureOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  controlHealth(options, true) }
+export const stopRealtimeMeasure: StopRealtimeMeasure = function(options: RealtimeMeasureOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  controlHealth(options, false) }
+
+export const getWorkoutState: GetWorkoutState = function(options: WorkoutStateResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements SportGetControlCallback {
+    override onResult(data: NewSportBean): void {
+      const result = { sportType: data.getSportType().value, controlType: data.getStatus().value } as WorkoutState
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getWorkoutState failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.controlGetSportJLData()
+}
+
+export const controlWorkout: ControlWorkout = function(options: WorkoutControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.sportType < 7 || options.sportType > 161 || options.controlType < 1 || options.controlType > 4) {
+    invalidOptions(options.fail, options.complete, 'sportType must be 7..161 and controlType must be 1..4'); return
+  }
+  const sport = BleActivityMode.Companion.fromValue(options.sportType.toInt())
+  const control = WorkoutControlType.Companion.fromValue(options.controlType.toInt())
+  if (sport == null || control == null) { const error = new RwfitFailImpl(9201004, 'invalid sportType or controlType', null); options.fail?.(error); options.complete?.(error); return }
+  const cb = new (class implements SportControlCallback {
+    override onResult(_data: NewSportBean): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'controlWorkout failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.controlSportJL(sport!, control!)
+}
+
+export const setWorkoutRealtimeEnabled: SetWorkoutRealtimeEnabled = function(options: EnabledOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (workoutCallback != null) { DHBleSdk.dispose(workoutCallback!); workoutCallback = null }
+  if (options.enabled) {
+    const cb = new (class implements SportDataPushCallback {
+      override onResult(data: SportDataPushBean): void {
+        workoutRealtimeListener?.({
+          duration: data.gettActivityTime() ?? 0, steps: data.gettActivitySteps() ?? 0,
+          // The bundled Android SDK already converts the protocol's 0.1 cal
+          // value while parsing workout realtime packets.
+          distance: data.gettActivityDistance() ?? 0, calorie: data.gettActivityCalorie() ?? 0,
+          heartRate: data.gettActivityHr() ?? 0, dataType: 0x0223
+        } as WorkoutRealtimeData)
+      }
+      override onFail(_code: Int): void {}
+      override onSuccess(): void {}
+    }); workoutCallback = cb; DHBleSdk.subscribeData(cb)
+  }
+  const status = new (class implements SportDataPushCallback {
+    override onResult(_data: SportDataPushBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setWorkoutRealtimeEnabled failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(status); DHBleSdk.setExerciseMore(options.enabled ? 1 : 0)
+}
+
+function pad2(value: number): string { return value < 10 ? `0${value}` : `${value}` }
+function workoutDate(timestamp: number): string {
+  if (timestamp <= 0) return ''
+  const date = new Date(timestamp * 1000)
+  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`
+}
+
+function workoutValues(raw: string | null): Array<WorkoutValueItem> {
+  const result: Array<WorkoutValueItem> = []
+  if (raw == null || raw!.trim().length == 0) return result
+  try {
+    const values = JSON.parse(raw!) as Array<UTSJSONObject>
+    values.forEach((value: UTSJSONObject, index: number): void => {
+      result.push({ index: (value['index'] ?? index) as number, value: (value['value'] ?? 0) as number } as WorkoutValueItem)
+    })
+  } catch (_error) {
+    const clean = raw!.replace('[', '').replace(']', '')
+    clean.split(',').forEach((value: string, index: number): void => { result.push({ index, value: parseInt(value.trim()) } as WorkoutValueItem) })
+  }
+  return result
+}
+
+function reportFromNative(item: SportResultBean): WorkoutReport {
+  const start = item.getStartTime().toDouble(); let end = item.getEndTime().toDouble()
+  if (end <= 0 && start > 0) end = start + item.getExerciseTime()
+  return {
+    startTime: start, endTime: end, date: workoutDate(start), sportType: item.getWorkModel(), duration: item.getExerciseTime(),
+    step: item.getStep().toDouble(), distance: item.getDistance().toDouble(), calorie: item.getCalorie().toDouble(),
+    height: item.getHeight(), pressure: item.getBarometricPressure(), cadence: item.getCadence(),
+    speed: JavaFloat.intBitsToFloat(JavaInteger.reverseBytes(item.getSpeed())).toDouble(), pace: item.getPace(),
+    averageHeartRate: item.getAverageHr(), maxHeartRate: item.getMaxHr(), minHeartRate: item.getMinHr(),
+    maxCadence: item.getMaxCadence(), minCadence: item.getMinCadence(), maxPace: item.getMaxPace(), minPace: item.getMinPace(),
+    heartRateCount: item.getHrCount(), viewType: item.getViewType(),
+    heartRateItems: workoutValues(item.getNewSportHrs()), pacePerKmItems: workoutValues(item.getPacePerKmList())
+  } as WorkoutReport
+}
+
+export const getWorkoutReports: GetWorkoutReports = function(options: WorkoutReportListResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements Sport3ResultCallback {
+    override onResult(data: MutableList<SportResultBean>): void {
+      const result: Array<any> = []; data.forEach((item: SportResultBean): void => { result.push(reportFromNative(item) as any) })
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getWorkoutReports failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getSport3ResultJL()
+}
+
+export const findDevice: FindDevice = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  DHBleSdk.controlFindDeviceJL(); succeed(options.success, options.complete) }
+export const powerOff: PowerOff = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  DHBleSdk.setPowerOffJL(1); succeed(options.success, options.complete) }
+export const factoryReset: FactoryReset = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  DHBleSdk.setPowerOffJL(2); succeed(options.success, options.complete) }
+
+export const controlPhoto: ControlPhoto = function(options: PhotoControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements TakePhotoCallback {
+    override onResult(data: Int): void { if (data == 2) touchEventListener?.({ action: 'cameraTakePicture', keyType: 0, touchType: 0 } as TouchEvent) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'controlPhoto failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.controlTakePhotoJL(options.state.toInt())
+}
+
+export const controlPhone: ControlPhone = function(options: PhoneControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements CallRemindCallback {
+    override onResult(data: Int): void {
+      const action = data == 1 ? 'answer' : data == 2 ? 'reject' : 'unknown'
+      callControlListener?.({ action, rawValue: data } as CallControlEvent)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'controlPhone failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.controlPhoneJL(options.action.toInt())
+}
+
+export const getMuslimCountEnabled: GetMuslimCountEnabled = function(options: BooleanResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  // deviceRememberSwitch/Get are the Android SDK's documented Muslim count
+  // switch APIs. "Remember" is the native SDK's historical public name.
+  const cb = new (class implements MuslimCountSwitchCallback {
+    override onResult(data: Int): void { const result = data == 1; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getMuslimCountEnabled failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deviceRememberSwitchGet()
+}
+export const setMuslimCountEnabled: SetMuslimCountEnabled = function(options: EnabledOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements MuslimCountSwitchCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setMuslimCountEnabled failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deviceRememberSwitch(options.enabled ? 1 : 0)
+}
+
+export const getHeartRateAlert: GetHeartRateAlert = function(options: HeartRateAlertResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements HrReminderCallback {
+    override onResult(data: HrReminderBean): void {
+      const low: number | null = data.getUnderValue() == 0xff ? null : data.getUnderValue()
+      const result = { isOpen: data.isOpen(), highThreshold: data.getRemindValue(), lowThreshold: low } as HeartRateAlertConfig
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getHeartRateAlert failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deviceGetHrAlertCmd()
+}
+export const setHeartRateAlert: SetHeartRateAlert = function(options: HeartRateAlertOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const low = options.config.lowThreshold
+  if (options.config.highThreshold < 0 || options.config.highThreshold > 254 || (low != null && (low < 0 || low > 254))) {
+    invalidOptions(options.fail, options.complete, 'heart-rate thresholds must be 0..254'); return
+  }
+  const cb = new (class implements HrReminderCallback {
+    override onResult(_data: HrReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setHeartRateAlert failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb)
+  DHBleSdk.deviceSetHrAlertCmd(options.config.isOpen ? 1 : 0, options.config.highThreshold.toInt(), (options.config.lowThreshold ?? 0xff).toInt())
+}
+export const getBloodOxygenAlert: GetBloodOxygenAlert = function(options: BloodOxygenAlertResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements BoReminderCallback {
+    override onResult(data: BoReminderBean): void {
+      const result = { isOpen: data.isOpen(), lowThreshold: data.getRemindValue() } as BloodOxygenAlertConfig
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getBloodOxygenAlert failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deviceGetBoAlertCmd()
+}
+export const setBloodOxygenAlert: SetBloodOxygenAlert = function(options: BloodOxygenAlertOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.config.lowThreshold < 0 || options.config.lowThreshold > 254) {
+    invalidOptions(options.fail, options.complete, 'blood-oxygen threshold must be 0..254'); return
+  }
+  const cb = new (class implements BoReminderCallback {
+    override onResult(_data: BoReminderBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setBloodOxygenAlert failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deviceSetBoAlertCmd(options.config.isOpen ? 1 : 0, options.config.lowThreshold.toInt())
+}
+
+export const getVibrationInterval: GetVibrationInterval = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements VibrationIntervalCallback {
+    override onResult(data: Int): void { options.success?.(data); options.complete?.(data); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getVibrationInterval failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getVibrationInterval()
+}
+export const setVibrationInterval: SetVibrationInterval = function(options: SetVibrationIntervalOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (options.intervalMs < 100 || options.intervalMs > 1000) {
+    invalidOptions(options.fail, options.complete, 'intervalMs must be 100..1000'); return
+  }
+  const cb = new (class implements VibrationIntervalCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setVibrationInterval failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setVibrationInterval(options.intervalMs.toInt())
+}
+export const getFallDetect: GetFallDetect = function(options: BooleanResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements FallDetectCallback {
+    override onResult(data: Int): void { const result = data == 1; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getFallDetect failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getFallDetect()
+}
+export const setFallDetect: SetFallDetect = function(options: EnabledOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements FallDetectCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setFallDetect failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setFallDetect(options.enabled)
+}
+export const getCountReminderInterval: GetCountReminderInterval = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements CountReminderIntervalCallback {
+    override onResult(data: Int): void { options.success?.(data); options.complete?.(data); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getCountReminderInterval failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getCountReminderInterval()
+}
+export const setCountReminderInterval: SetCountReminderInterval = function(options: SetCountReminderIntervalOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const value = options.intervalMinutes
+  if (value != 0 && value != 30 && value != 60 && value != 90 && value != 120) {
+    invalidOptions(options.fail, options.complete, 'intervalMinutes must be 0, 30, 60, 90, or 120'); return
+  }
+  const cb = new (class implements CountReminderIntervalCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setCountReminderInterval failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setCountReminderInterval(options.intervalMinutes.toInt())
+}
+
+export const startHeartRateCalibration: StartHeartRateCalibration = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (factoryCallback != null) { DHBleSdk.dispose(factoryCallback!); factoryCallback = null }
+  const cb = new (class implements FactoryTestCallback {
+    override onResult(data: LongArray): void {
+      if (data.size >= 2) heartRateCalibrationListener?.({ testMode: data[0].toDouble(), result: data[1].toDouble() } as HeartRateCalibrationResult)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'startHeartRateCalibration failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete) }
+  }); factoryCallback = cb; DHBleSdk.subscribeData(cb); DHBleSdk.startFactoryTest(0x15)
+}
+
+export const getAlarm: GetAlarm = function(options: AlarmListResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements AlarmCallback {
+    override onResult(data: MutableList<AlarmRemainderBean>): void {
+      const result: Array<any> = []
+      data.forEach((bean: AlarmRemainderBean): void => {
+        const repeats: Array<number> = []; bean.getRepeatModel().forEach((value: Int): void => { repeats.push(value) })
+        result.push(({ alarmId: bean.getAlarmId(), startHour: bean.getStartHour(), startMin: bean.getStartMin(), isOpen: bean.isOpen(), repeats } as Alarm) as any)
+      })
+      options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this)
+    }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getAlarm failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getAlarmRemindJL()
+}
+
+function alarmBeans(alarms: Array<any>): ArrayList<AlarmRemainderBean> {
+  const result = new ArrayList<AlarmRemainderBean>()
+  alarms.forEach((value: any): void => {
+    const alarm = new UTSJSONObject(value)
+    const bean = new AlarmRemainderBean(); bean.setAlarmId((alarm['alarmId'] as number).toInt()); bean.setStartHour((alarm['startHour'] as number).toInt()); bean.setStartMin((alarm['startMin'] as number).toInt()); bean.setOpen(alarm['isOpen'] as boolean); bean.setAlarmTag('')
+    const repeats = new IntArray(7)
+    const rawRepeats = alarm['repeats']
+    if (rawRepeats != null) {
+      const repeatValues = rawRepeats as Array<any>
+      repeatValues.forEach((item: any, index: number): void => { if (index < 7) repeats[index.toInt()] = (item as number).toInt() })
+    }
+    bean.setRepeatModel(repeats); result.add(bean)
+  })
+  return result
+}
+
+export const setAlarm: SetAlarm = function(options: SetAlarmOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements AlarmCallback {
+    override onResult(_data: MutableList<AlarmRemainderBean>): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setAlarm failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setAlarmRemindJL(alarmBeans(options.alarms))
+}
+export const deleteAllAlarm: DeleteAllAlarm = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements AlarmCallback {
+    override onResult(_data: MutableList<AlarmRemainderBean>): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'deleteAllAlarm failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.deleteAllAlarmRemindJL()
+}
+
+export const getRaiseBrightScreen: GetRaiseBrightScreen = function(options: ScheduleToggleResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements BrightCallback {
+    override onResult(data: BrightScreenBean): void { const result = { isOpen: data.isOpen(), startHour: data.getStartHour(), startMin: data.getStartMin(), endHour: data.getEndHour(), endMin: data.getEndMin() } as ScheduleToggle; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getRaiseBrightScreen failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getRaiseBrightScreenJL()
+}
+export const setRaiseBrightScreen: SetRaiseBrightScreen = function(options: ScheduleToggleOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const c = options.config; const bean = new BrightScreenBean(); bean.setOpen(c.isOpen); bean.setStartHour(c.startHour.toInt()); bean.setStartMin(c.startMin.toInt()); bean.setEndHour(c.endHour.toInt()); bean.setEndMin(c.endMin.toInt())
+  const cb = new (class implements BrightCallback {
+    override onResult(_data: BrightScreenBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setRaiseBrightScreen failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setRaiseBrightScreenJL(bean)
+}
+export const getBrightScreenTime: GetBrightScreenTime = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements BrightTimeCallback {
+    override onResult(data: BrightScreenTimeBean): void { const result = data.getTimeSecond(); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getBrightScreenTime failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getBrightScreenTimeJL()
+}
+export const setBrightScreenTime: SetBrightScreenTime = function(options: SetBrightScreenTimeOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const bean = new BrightScreenTimeBean(); bean.setTimeSecond(options.timeSecond.toInt())
+  const cb = new (class implements BrightTimeCallback {
+    override onResult(_data: BrightScreenTimeBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setBrightScreenTime failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setBrightScreenTimeJL(bean)
+}
+export const getBrightScreenSleepTime: GetBrightScreenSleepTime = function(options: ScheduleToggleResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements BrightTimeCallback {
+    override onResult(data: BrightScreenTimeBean): void { const result = { isOpen: data.isOpen(), startHour: data.getStartHour(), startMin: data.getStartMin(), endHour: data.getEndHour(), endMin: data.getEndMin() } as ScheduleToggle; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getBrightScreenSleepTime failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getRingBrightScreenSleepTime()
+}
+export const setBrightScreenSleepTime: SetBrightScreenSleepTime = function(options: ScheduleToggleOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const c = options.config; const bean = new BrightScreenTimeBean(); bean.setOpen(c.isOpen); bean.setStartHour(c.startHour.toInt()); bean.setStartMin(c.startMin.toInt()); bean.setEndHour(c.endHour.toInt()); bean.setEndMin(c.endMin.toInt())
+  const cb = new (class implements BrightTimeCallback {
+    override onResult(_data: BrightScreenTimeBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setBrightScreenSleepTime failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setRingBrightScreenSleepTime(bean)
+}
+export const getRingLedLevel: GetRingLedLevel = function(options: LedLevelResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements BrightLedLevelCallback {
+    override onResult(data: BrightScreenLedBean): void { const result = { isOpen: data.isOpen(), lcdLevel: data.getLcdLevel() } as LedLevel; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getRingLedLevel failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getRingLedLevel()
+}
+export const setRingLedLevel: SetRingLedLevel = function(options: LedLevelOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const bean = new BrightScreenLedBean(); bean.setOpen(options.config.isOpen); bean.setLcdLevel(options.config.lcdLevel.toInt())
+  const cb = new (class implements BrightLedLevelCallback {
+    override onResult(_data: BrightScreenLedBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setRingLedLevel failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setRingLedLevel(bean)
+}
+export const getVideoHid: GetVideoHid = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements VideoHidCallback {
+    override onResult(data: VideoHidBean): void { const result = data.getHidOpen(); options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getVideoHid failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getVideoHidJL()
+}
+export const setVideoHid: SetVideoHid = function(options: SetVideoHidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const bean = new VideoHidBean(); bean.setHidOpen(options.hidOpen.toInt())
+  const cb = new (class implements VideoHidCallback {
+    override onResult(_data: VideoHidBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setVideoHid failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setVideoHidJL(bean)
+}
+export const getRingWearDir: GetRingWearDir = function(options: BooleanResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements WearHandCallback {
+    override onResult(data: FactoryInBean): void { const result = data.isOpen() == 1; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getRingWearDir failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getRingWearDir()
+}
+export const setRingWearHand: SetRingWearHand = function(options: WearHandOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements WearHandCallback {
+    override onResult(_data: FactoryInBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setRingWearHand failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setRingWearHand(options.isRight)
+}
+export const getVibrationCount: GetVibrationCount = function(options: VibrationResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements VibrationCountCallback {
+    override onResult(data: BrightVibrationBean): void { const result = { count: data.getCount(), level: data.getLevel() } as VibrationConfig; options.success?.(result); options.complete?.(result); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getVibrationCount failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getVibrationCount()
+}
+export const setVibrationCount: SetVibrationCount = function(options: VibrationOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements VibrationCountCallback {
+    override onResult(_data: BrightVibrationBean): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setVibrationCount failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setVibrationCount(options.config.level.toInt(), options.config.count.toInt())
+}
+export const getAlarmVibrationDuration: GetAlarmVibrationDuration = function(options: NumberResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements AlarmVibrationDurationCallback {
+    override onResult(data: Int): void { options.success?.(data); options.complete?.(data); DHBleSdk.dispose(this) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getAlarmVibrationDuration failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void {}
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.getAlarmVibrationDuration()
+}
+export const setAlarmVibrationDuration: SetAlarmVibrationDuration = function(options: SetAlarmVibrationDurationOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements AlarmVibrationDurationCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'setAlarmVibrationDuration failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setAlarmVibrationDuration(options.duration.toInt())
+}
+
+function integerList(values: MutableList<Int> | null): Array<number> {
+  const result: Array<number> = []; values?.forEach((value: Int): void => { result.push(value) }); return result
+}
+function accList(values: MutableList<SensorRawDataBean.AccRawItem> | null): Array<AccRawSample> {
+  const result: Array<AccRawSample> = []; values?.forEach((item: SensorRawDataBean.AccRawItem): void => { result.push({ x: item.getX(), y: item.getY(), z: item.getZ() } as AccRawSample) }); return result
+}
+function sensorPacket(data: SensorRawDataBean): SensorRawPacket {
+  const sleep: Array<SleepRawSample> = []
+  data.getSleepDataList()?.forEach((item: LongArray): void => { if (item.size >= 2) sleep.push({ timestampSec: item[0].toDouble(), mode: item[1].toDouble() } as SleepRawSample) })
+  return { type: data.getType(), timestampSec: data.getTimestamp().toDouble(), ppg: integerList(data.getPpgDataList()), acc: accList(data.getAccDataList()), ppgRed: integerList(data.getPpgRedDataList()), ir: integerList(data.getIrDataList()), sleep } as SensorRawPacket
+}
+function sensorHistoryPacket(data: SensorHistoryRawBean): SensorRawPacket {
+  return { type: data.getType(), sequence: data.getSequence(), ppg: integerList(data.getPpgDataList()), acc: accList(data.getAccDataList()), ppgRed: integerList(data.getPpgRedDataList()), ir: integerList(data.getIrDataList()), sleep: [] } as SensorRawPacket
+}
+export const controlSensorRaw: ControlSensorRaw = function(options: SensorRawControlOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (!validSensorType(options.sensorType)) { invalidOptions(options.fail, options.complete, 'unsupported sensorType combination'); return }
+  if (sensorRawCallback != null) { DHBleSdk.dispose(sensorRawCallback!); sensorRawCallback = null }
+  if (options.enabled) {
+    const dataCb = new (class implements SensorRawDataCallback {
+      override onResult(data: SensorRawDataBean): void { sensorRawListener?.(sensorPacket(data)) }
+      override onFail(_code: Int): void {}
+      override onSuccess(): void {}
+    }); sensorRawCallback = dataCb; DHBleSdk.subscribeData(dataCb)
+  }
+  const status = new (class implements SensorRawControlCallback {
+    override onResult(data: Int): void { sensorStoppedListener?.({ reason: data } as SensorRawStoppedEvent) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'controlSensorRaw failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete) }
+  }); DHBleSdk.subscribeData(status); DHBleSdk.ringControlSensorRaw(options.enabled ? 1 : 2, options.sensorType.toInt())
+}
+export const getSensorRawHistory: GetSensorRawHistory = function(options: SensorRawListResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const packets: Array<any> = []
+  const cb = new (class implements SensorHistoryRawCallback {
+    override onResult(data: MutableList<SensorHistoryRawBean>): void { data.forEach((item: SensorHistoryRawBean): void => { packets.push(sensorHistoryPacket(item) as any) }) }
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'getSensorRawHistory failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { options.success?.(packets); options.complete?.(packets); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.ringGetHistorySensorRaw()
+}
+
+export const createOrRemoveBond: CreateOrRemoveBond = function(options: BondOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const result = BlueToothUtils.createOrRemoveBond(options.type.toInt(), options.mac)
+  options.success?.(result); options.complete?.(result)
+}
+
+function syncDay(time: Long): UTSJSONObject { const value = time.toDouble(); return { time: value, date: workoutDate(value) } as UTSJSONObject }
+function emitSync(type: string, data: Array<UTSJSONObject>): void { syncResultListener?.({ type, data } as SyncResult) }
+
+function stepSync(data: MutableList<StepSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []
+  data.forEach((bean: StepSyncBean): void => {
+    const day = syncDay(bean.getTime()); day['totalSteps'] = bean.getTotalSteps(); day['totalCalorie'] = bean.getTotalCalorie(); day['totalDistance'] = bean.getTotalDistance(); day['activityDataInterval'] = bean.getActivityDataInterval()
+    const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: StepItemBean): void => { items.push({ time: item.getTimestamp().toDouble(), index: item.getIndex(), steps: item.getSteps(), calorie: item.getCalorie(), distance: item.getDistance() } as UTSJSONObject) }); day['items'] = items; result.push(day)
+  }); return result
+}
+function sleepSync(data: MutableList<SleepSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: SleepSyncBean): void => { const day = syncDay(bean.getTime()); day['duration'] = bean.getTotalSleepTime(); day['beginTime'] = bean.getAsleepTime(); day['endTime'] = bean.getAwakeTime(); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: SleepItemBean): void => { items.push({ len: item.getLen(), sleepType: item.getSleepType() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function hrSync(data: MutableList<HeartRateSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: HeartRateSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: HeartRateItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), hr: item.getHr() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function bpSync(data: MutableList<BloodPressSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: BloodPressSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: BloodPressItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), systolic: item.getSp(), diastolic: item.getDp() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function boSync(data: MutableList<BloodOxySyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: BloodOxySyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: BloodOxyItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), bloodOxy: item.getBloodOxy() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function tempSync(data: MutableList<BodyTempSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: BodyTempSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: BodyTempItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), temp: item.getTemp() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function pressureSync(data: MutableList<PressureSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: PressureSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: PressureItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), pressure: item.getPressure() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function sugarSync(data: MutableList<BloodSugarSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: BloodSugarSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: BloodSugarItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), bloodSugar: item.getSugar() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function hrvSync(data: MutableList<HrvSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: HrvSyncBean): void => { const day = syncDay(bean.getTime()); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: HrvItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), hrv: item.getHrv() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+function muslimSync(data: MutableList<MuslimCountSyncBean>): Array<UTSJSONObject> {
+  const result: Array<UTSJSONObject> = []; data.forEach((bean: MuslimCountSyncBean): void => { const day = syncDay(bean.getTime()); day['totalCount'] = bean.getTotalCount(); const items: Array<UTSJSONObject> = []; bean.getItems()?.forEach((item: MuslimCountItemBean): void => { items.push({ time: item.getTimeMills().toDouble(), count: item.getCount() } as UTSJSONObject) }); day['items'] = items; result.push(day) }); return result
+}
+
+export const syncAllHealthData: SyncAllHealthData = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  if (syncCallback != null) DHBleSdk.removeHealthDataCallBack(syncCallback!)
+  const cb = new (class implements HealthDataSyncCallback {
+    override onSyncProgress(progress: Int): void { if (progress >= 100) syncProgressListener?.(100) }
+    override onSyncFinish(): void { syncFinishListener?.() }
+    override onSyncError(code: Int): void { syncErrorListener?.({ code }) }
+    override onSyncStep(data: MutableList<StepSyncBean>): void { emitSync('step', stepSync(data)) }
+    override onSyncSleep(data: MutableList<SleepSyncBean>): void { emitSync('sleep', sleepSync(data)) }
+    override onSyncHr(data: MutableList<HeartRateSyncBean>): void { emitSync('hr', hrSync(data)) }
+    override onSyncBp(data: MutableList<BloodPressSyncBean>): void { emitSync('bp', bpSync(data)) }
+    override onSyncBo(data: MutableList<BloodOxySyncBean>): void { emitSync('bo', boSync(data)) }
+    override onSyncTemp(data: MutableList<BodyTempSyncBean>): void { emitSync('temp', tempSync(data)) }
+    override onSyncPressure(data: MutableList<PressureSyncBean>): void { emitSync('pressure', pressureSync(data)) }
+    override onSyncBloodSugar(data: MutableList<BloodSugarSyncBean>): void { emitSync('bloodSugar', sugarSync(data)) }
+    override onSyncBreath(_data: MutableList<BreatheSyncBean>): void {}
+    override onSyncHrv(data: MutableList<HrvSyncBean>): void { emitSync('hrv', hrvSync(data)) }
+    override onSyncMuslimCount(data: MutableList<MuslimCountSyncBean>): void { emitSync('muslimCount', muslimSync(data)) }
+  }); syncCallback = cb; DHBleSdk.syncAllHealthData(cb); succeed(options.success, options.complete)
+}
+export const removeHealthDataCallback: RemoveHealthDataCallback = function(options: VoidOptions): void {
+  if (!requireInitialized(options.fail, options.complete)) return
+  if (syncCallback != null) DHBleSdk.removeHealthDataCallBack(syncCallback!); syncCallback = null; succeed(options.success, options.complete) }
+
+export const ringOta: RingOta = function(options: OtaOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  DHBleSdk.ringOtaWithFileData(options.path, new (class implements OnFileTransferCallback {
+    override onProgress(progress: Float): void { const value = progress > 1.0 ? progress.toDouble() / 100.0 : progress.toDouble(); otaProgressListener?.(value) }
+    override onFinish(): void { otaFinishListener?.({ success: true } as OtaResult) }
+    override onFail(code: Int): void { otaFinishListener?.({ success: false, code } as OtaResult) }
+  })); succeed(options.success, options.complete)
+}
+
+export const unbind: Unbind = function(options: VoidOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const cb = new (class implements CommonStatusCallback {
+    override onSuccess(_msgId: Int): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+    override onFail(_msgId: Int, code: Int): void { fail(options.fail, options.complete, 'unbind failed', code); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeStatus(cb); DHBleSdk.unbindJL()
+}
+
+export const pushMessage: PushMessage = function(options: PushMessageOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  const value = options.message; const bean = new MsgPushBean()
+  bean.setAppId(`${value['appId'] ?? ''}`); bean.setTitle(`${value['title'] ?? ''}`); bean.setContent(`${value['content'] ?? ''}`)
+  if (value['msgType'] != null) bean.setMsgType((value['msgType'] as number).toInt())
+  if (value['timeMill'] != null) bean.setTimeMill((value['timeMill'] as number).toLong())
+  const cb = new (class implements MsgPushSettingCallback {
+    override onResult(_data: Int): void {}
+    override onFail(code: Int): void { fail(options.fail, options.complete, 'pushMessage failed', code); DHBleSdk.dispose(this) }
+    override onSuccess(): void { succeed(options.success, options.complete); DHBleSdk.dispose(this) }
+  }); DHBleSdk.subscribeData(cb); DHBleSdk.setPushMsgJL(bean)
+}
+
+export const setNotificationSwitch: SetNotificationSwitch = function(options: SetNotificationSwitchOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  unsupported(options.fail, options.complete, 'Notification switches are not exposed by the Android SDK') }
+export const getNotificationSwitch: GetNotificationSwitch = function(options: JsonResultOptions): void {
+  if (!requireReady(options.fail, options.complete)) return
+  unsupported(options.fail, options.complete, 'Notification switches are not exposed by the Android SDK') }
+
+export const onRealtimeData: OnRealtimeData = function(callback: (data: RealtimeData) => void): void { realtimeDataListener = callback; if (initialized) bindRealtimeCallback() }
+export const offRealtimeData: OffRealtimeData = function(): void { realtimeDataListener = null; if (realtimeCallback != null) DHBleSdk.dispose(realtimeCallback!); realtimeCallback = null }
+export const onRealtimeMeasureComplete: OnRealtimeMeasureComplete = function(callback: () => void): void { realtimeCompleteListener = callback }
+export const offRealtimeMeasureComplete: OffRealtimeMeasureComplete = function(): void { realtimeCompleteListener = null }
+export const onWorkoutRealtimeData: OnWorkoutRealtimeData = function(callback: (data: WorkoutRealtimeData) => void): void { workoutRealtimeListener = callback }
+export const offWorkoutRealtimeData: OffWorkoutRealtimeData = function(): void { workoutRealtimeListener = null; if (workoutCallback != null) DHBleSdk.dispose(workoutCallback!); workoutCallback = null }
+export const onSyncProgress: OnSyncProgress = function(callback: (progress: number) => void): void { syncProgressListener = callback }
+export const offSyncProgress: OffSyncProgress = function(): void { syncProgressListener = null }
+export const onSyncResult: OnSyncResult = function(callback: (result: SyncResult) => void): void { syncResultListener = callback }
+export const offSyncResult: OffSyncResult = function(): void { syncResultListener = null }
+export const onSyncFinish: OnSyncFinish = function(callback: () => void): void { syncFinishListener = callback }
+export const offSyncFinish: OffSyncFinish = function(): void { syncFinishListener = null }
+export const onSyncError: OnSyncError = function(callback: (error: UTSJSONObject) => void): void { syncErrorListener = callback }
+export const offSyncError: OffSyncError = function(): void { syncErrorListener = null }
+export const onOtaProgress: OnOtaProgress = function(callback: (progress: number) => void): void { otaProgressListener = callback }
+export const offOtaProgress: OffOtaProgress = function(): void { otaProgressListener = null }
+export const onOtaFinish: OnOtaFinish = function(callback: (result: OtaResult) => void): void { otaFinishListener = callback }
+export const offOtaFinish: OffOtaFinish = function(): void { otaFinishListener = null }
+function touchAction(keyType: Int, touchType: Int): string {
+  if (keyType == 2) return 'fallDetected'
+  if (keyType != 1) return 'unknown'
+  switch (touchType) { case 1: return 'singleTap'; case 2: return 'doubleTap'; case 3: return 'tripleTap'; case 4: return 'longPress'; case 5: return 'swing'; default: return 'unknown' }
+}
+export const onTouchEvent: OnTouchEvent = function(callback: (event: TouchEvent) => void): void {
+  touchEventListener = callback
+  if (touchCallback != null) DHBleSdk.dispose(touchCallback!)
+  const cb = new (class implements TouchEventCallback {
+    override onResult(data: IntArray): void { if (data.size >= 2) touchEventListener?.({ action: touchAction(data[0], data[1]), keyType: data[0], touchType: data[1] } as TouchEvent) }
+    override onFail(_code: Int): void {}
+    override onSuccess(): void {}
+  }); touchCallback = cb; DHBleSdk.subscribeData(cb)
+  if (musicCallback != null) DHBleSdk.dispose(musicCallback!)
+  const music = new (class implements MusicPushSettingCallback {
+    override onResult(data: Int): void { const action = data == 1 ? 'musicPlay' : data == 2 ? 'musicPause' : data == 3 ? 'musicNext' : data == 4 ? 'musicPrev' : data == 5 ? 'musicVolumeUp' : data == 6 ? 'musicVolumeDown' : 'unknown'; touchEventListener?.({ action, keyType: 0, touchType: 0 } as TouchEvent) }
+    override onFail(_code: Int): void {}
+    override onSuccess(): void {}
+  }); musicCallback = music; DHBleSdk.subscribeData(music)
+}
+export const offTouchEvent: OffTouchEvent = function(): void { touchEventListener = null; if (touchCallback != null) DHBleSdk.dispose(touchCallback!); touchCallback = null; if (musicCallback != null) DHBleSdk.dispose(musicCallback!); musicCallback = null }
+export const onCallControl: OnCallControl = function(callback: (event: CallControlEvent) => void): void {
+  callControlListener = callback
+  if (callCallback != null) DHBleSdk.dispose(callCallback!)
+  const cb = new (class implements CallRemindCallback {
+    override onResult(data: Int): void { const action = data == 1 ? 'answer' : data == 2 ? 'reject' : 'unknown'; callControlListener?.({ action, rawValue: data } as CallControlEvent) }
+    override onFail(_code: Int): void {}
+    override onSuccess(): void {}
+  }); callCallback = cb; DHBleSdk.subscribeData(cb)
+}
+export const offCallControl: OffCallControl = function(): void { callControlListener = null; if (callCallback != null) DHBleSdk.dispose(callCallback!); callCallback = null }
+export const onHealthAlert: OnHealthAlert = function(callback: (event: HealthAlertEvent) => void): void {
+  healthAlertListener = callback
+  if (alertCallback != null) { DHBleSdk.dispose(alertCallback!); alertCallback = null }
+  const cb = new (class implements HrBoActualReminderCallback {
+    override onResult(data: HrBoActualReminderBean): void { healthAlertListener?.({ type: data.getType(), value: data.getRemindValue() } as HealthAlertEvent) }
+    override onFail(_code: Int): void {}
+    override onSuccess(): void {}
+  }); alertCallback = cb; DHBleSdk.subscribeData(cb)
+}
+export const offHealthAlert: OffHealthAlert = function(): void { healthAlertListener = null; if (alertCallback != null) DHBleSdk.dispose(alertCallback!); alertCallback = null }
+export const onHeartRateCalibration: OnHeartRateCalibration = function(callback: (result: HeartRateCalibrationResult) => void): void { heartRateCalibrationListener = callback }
+export const offHeartRateCalibration: OffHeartRateCalibration = function(): void { heartRateCalibrationListener = null; if (factoryCallback != null) DHBleSdk.dispose(factoryCallback!); factoryCallback = null }
+export const onSensorRawData: OnSensorRawData = function(callback: (packet: SensorRawPacket) => void): void { sensorRawListener = callback }
+export const offSensorRawData: OffSensorRawData = function(): void { sensorRawListener = null; if (sensorRawCallback != null) DHBleSdk.dispose(sensorRawCallback!); sensorRawCallback = null }
+export const onSensorRawStopped: OnSensorRawStopped = function(callback: (event: SensorRawStoppedEvent) => void): void { sensorStoppedListener = callback }
+export const offSensorRawStopped: OffSensorRawStopped = function(): void { sensorStoppedListener = null }

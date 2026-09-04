@@ -1,0 +1,1245 @@
+import { RingSdk, getSDKVersion } from './sdk/rw-ble-sdk.esm.js'
+import type {
+  BleDevice, ConnectStateEvent, FirmwareInfo, FunctionListResult, FunctionMenu,
+  Initialize, GetSdkVersion, GetPluginVersion, StartScan, StopScan, Connect,
+  Disconnect, IosSetBindedStatus, Reconnect, IsConnected, GetPower,
+  GetFirmwareVersion, SetUserInfo, SetTimeFormat, GetFunctionList,
+  SetRingBtName, OnScanResult, OffScanResult, OnScanFinish, OffScanFinish,
+  OnConnectState, OffConnectState, OnFunctionMenu, OffFunctionMenu, VoidOptions,
+  StringResultOptions, BooleanResultOptions, NumberResultOptions,
+  FirmwareResultOptions, FunctionListResultOptions, RwfitFail,
+  TimedConfig, TimedConfigResultOptions, SetTimedConfigOptions, RealtimeMetric, RealtimeData,
+  RealtimeMeasureOptions, WorkoutStateResultOptions, WorkoutControlOptions, EnabledOptions,
+  WorkoutReportListResultOptions, PhotoControlOptions, PhoneControlOptions,
+  HeartRateAlertResultOptions, HeartRateAlertOptions, BloodOxygenAlertResultOptions,
+  BloodOxygenAlertOptions, SetVibrationIntervalOptions, SetCountReminderIntervalOptions,
+  SensorRawControlOptions, SensorRawListResultOptions, AlarmListResultOptions, SetAlarmOptions,
+  ScheduleToggleResultOptions, ScheduleToggleOptions, SetBrightScreenTimeOptions,
+  LedLevelResultOptions, LedLevelOptions, SetVideoHidOptions, BondOptions, WearHandOptions,
+  VibrationResultOptions, VibrationOptions, SetAlarmVibrationDurationOptions, OtaOptions,
+  PushMessageOptions, SetNotificationSwitchOptions, JsonResultOptions,
+  WorkoutState, WorkoutRealtimeData, WorkoutReport, Alarm, ScheduleToggle,
+  LedLevel, VibrationConfig, HeartRateAlertConfig, BloodOxygenAlertConfig,
+  HealthAlertEvent, HeartRateCalibrationResult, SensorRawPacket,
+  SensorRawStoppedEvent, SyncResult, OtaResult, TouchEvent, CallControlEvent
+} from '../interface.uts'
+import { RwfitFailImpl } from './unierror.uts'
+import type {
+  GetTimedHeartRate, GetTimedBloodOxygen, GetTimedHRV, GetTimedStress, GetTimedBloodSugar, GetTimedBloodPressure, GetTimedBodyTemperature, GetTimedPPG,
+  SetTimedHeartRate, SetTimedBloodOxygen, SetTimedHRV, SetTimedStress, SetTimedBloodSugar, SetTimedBloodPressure, SetTimedBodyTemperature, SetTimedPPG,
+  StartRealtimeMeasure, StopRealtimeMeasure, GetWorkoutState, ControlWorkout, SetWorkoutRealtimeEnabled, GetWorkoutReports, FindDevice, PowerOff,
+  FactoryReset, ControlPhoto, ControlPhone, GetMuslimCountEnabled, SetMuslimCountEnabled, GetHeartRateAlert, SetHeartRateAlert, GetBloodOxygenAlert,
+  SetBloodOxygenAlert, GetVibrationInterval, SetVibrationInterval, GetFallDetect, SetFallDetect, GetCountReminderInterval, SetCountReminderInterval, StartHeartRateCalibration,
+  GetAlarm, SetAlarm, DeleteAllAlarm, GetRaiseBrightScreen, SetRaiseBrightScreen, GetBrightScreenTime, SetBrightScreenTime, GetBrightScreenSleepTime,
+  SetBrightScreenSleepTime, GetRingLedLevel, SetRingLedLevel, GetVideoHid, SetVideoHid, GetRingWearDir, SetRingWearHand, GetVibrationCount,
+  SetVibrationCount, GetAlarmVibrationDuration, SetAlarmVibrationDuration, ControlSensorRaw, GetSensorRawHistory, CreateOrRemoveBond, SyncAllHealthData, RemoveHealthDataCallback,
+  RingOta, Unbind, PushMessage, SetNotificationSwitch, GetNotificationSwitch, OnRealtimeData, OffRealtimeData, OnRealtimeMeasureComplete,
+  OffRealtimeMeasureComplete, OnWorkoutRealtimeData, OffWorkoutRealtimeData, OnSyncProgress, OffSyncProgress, OnSyncResult, OffSyncResult, OnSyncFinish,
+  OffSyncFinish, OnSyncError, OffSyncError, OnOtaProgress, OffOtaProgress, OnOtaFinish, OffOtaFinish, OnTouchEvent,
+  OffTouchEvent, OnCallControl, OffCallControl, OnHealthAlert, OffHealthAlert, OnHeartRateCalibration, OffHeartRateCalibration, OnSensorRawData,
+  OffSensorRawData, OnSensorRawStopped, OffSensorRawStopped
+} from '../interface.uts'
+
+const PLUGIN_VERSION = '0.0.1'
+let initialized = false
+let connected = false
+let client: RingSdk | null = null
+let scanSession: any | null = null
+let scanStarting = false
+let connecting = false
+let lifecycleBound = false
+let adapterStateListener: ((state: any) => void) | null = null
+let currentDevice: BleDevice | null = null
+let connectionUnsubscribe: (() => void) | null = null
+let deviceEventUnsubscribe: (() => void) | null = null
+let scanResultListener: ((device: BleDevice) => void) | null = null
+let scanFinishListener: (() => void) | null = null
+let connectStateListener: ((event: ConnectStateEvent) => void) | null = null
+let functionMenuListener: ((menu: FunctionMenu) => void) | null = null
+let realtimeDataListener: ((data: RealtimeData) => void) | null = null
+let realtimeCompleteListener: (() => void) | null = null
+let workoutRealtimeListener: ((data: WorkoutRealtimeData) => void) | null = null
+let syncProgressListener: ((progress: number) => void) | null = null
+let syncResultListener: ((result: SyncResult) => void) | null = null
+let syncFinishListener: (() => void) | null = null
+let syncErrorListener: ((error: UTSJSONObject) => void) | null = null
+let otaProgressListener: ((progress: number) => void) | null = null
+let otaFinishListener: ((result: OtaResult) => void) | null = null
+let touchEventListener: ((event: TouchEvent) => void) | null = null
+let healthAlertListener: ((event: HealthAlertEvent) => void) | null = null
+let heartRateCalibrationListener: ((result: HeartRateCalibrationResult) => void) | null = null
+let sensorRawListener: ((packet: SensorRawPacket) => void) | null = null
+let sensorStoppedListener: ((event: SensorRawStoppedEvent) => void) | null = null
+
+function succeed(successCallback?: () => void, completeCallback?: (result: any | null) => void): void {
+  successCallback?.(); completeCallback?.(null)
+}
+
+function sdkError(value: any, message: string): RwfitFailImpl {
+  const nativeCode = typeof value?.errCode === 'number' ? value.errCode : undefined
+  const detail = `${value?.message ?? value?.errMsg ?? value ?? ''}`
+  const lower = detail.toLowerCase()
+  if (value?.state == 3 || lower.includes('auth') || lower.includes('permission') || lower.includes('authorize')) {
+    return new RwfitFailImpl(9201003, `${message}: ${detail}`, nativeCode)
+  }
+  if (nativeCode == 10001 || nativeCode == 10009) {
+    return new RwfitFailImpl(9201002, `${message}: ${detail}`, nativeCode)
+  }
+  if (lower.includes('timeout') || lower.includes('timed out')) {
+    return new RwfitFailImpl(9201006, `${message}: ${detail}`, nativeCode)
+  }
+  if (lower.includes('not connected') || lower.includes('not ready') || lower.includes('disconnected')) {
+    return new RwfitFailImpl(9201005, `${message}: ${detail}`, nativeCode)
+  }
+  return new RwfitFailImpl(9201099, `${message}: ${detail}`, nativeCode)
+}
+
+function failOptions(failCallback: ((error: RwfitFail) => void) | null, completeCallback: ((result: any | null) => void) | null, value: any, message: string): void {
+  const error = sdkError(value, message); failCallback?.(error); completeCallback?.(error)
+}
+
+function authorizeBluetooth(successCallback: () => void, failCallback: (error: any) => void): void {
+  wx.authorize({
+    scope: 'scope.bluetooth',
+    success: (result: any): void => {
+      successCallback()
+    },
+    fail: (error: any): void => {
+      failCallback(error)
+    }
+  })
+}
+
+function authorizeLocation(successCallback: () => void, failCallback: (error: any) => void): void {
+  let hostLocationAuthorization = ''
+  try { hostLocationAuthorization = wx.getAppAuthorizeSetting().locationAuthorized }
+  catch (_error) {}
+  if (hostLocationAuthorization == 'denied') {
+    failCallback({
+      errCode: -1,
+      errMsg: 'WeChat location permission is denied in system settings; enable it and scan again'
+    })
+    return
+  }
+  wx.authorize({
+    scope: 'scope.userLocation',
+    success: (result: any): void => {
+      successCallback()
+    },
+    fail: (error: any): void => {
+      failCallback(error)
+    }
+  })
+}
+
+function isLocationPermissionError(error: any): boolean {
+  const detail = `${error?.message ?? error?.errMsg ?? error ?? ''}`.toLowerCase()
+  // Some WeChat versions return the misspelled text "locaiton permission".
+  return (detail.includes('location') || detail.includes('locaiton')) &&
+    (detail.includes('permission') || detail.includes('auth') || detail.includes('denied'))
+}
+
+function openBluetoothAdapter(options: VoidOptions): void {
+  wx.openBluetoothAdapter({
+    success: (result: any): void => {
+      initialized = true; bindLifecycle(); succeed(options.success, options.complete)
+    },
+    fail: (error: any): void => {
+      failOptions(options.fail, options.complete, error, 'Bluetooth adapter initialization failed')
+    }
+  })
+}
+
+function beginScan(options: VoidOptions, canRequestLocation: boolean): void {
+  RingSdk.startScan({
+    timeoutMs: 10000,
+    onDevices: devices => devices.forEach(device => scanResultListener?.(fromScan(device)))
+  }).then(session => {
+    scanStarting = false
+    scanSession = session
+    session.finished.then(() => {
+      if (scanSession == session) scanSession = null
+      scanFinishListener?.()
+    }).catch(error => console.error(`RWFIT scan finish: ${error}`))
+    succeed(options.success, options.complete)
+  }).catch(error => {
+    if (canRequestLocation && isLocationPermissionError(error)) {
+      authorizeLocation(
+        (): void => beginScan(options, false),
+        (authorizationError: any): void => {
+          scanStarting = false
+          failOptions(options.fail, options.complete, authorizationError, 'Location permission denied')
+        }
+      )
+      return
+    }
+    scanStarting = false
+    failOptions(options.fail, options.complete, error, 'scan failed')
+  })
+}
+
+function ensureClient(options: any): boolean {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null)
+    options.fail?.(error); options.complete?.(error)
+    return false
+  }
+  if (client != null) return true
+  const error = new RwfitFailImpl(9201005, null, null)
+  options.fail?.(error); options.complete?.(error)
+  return false
+}
+
+function bindLifecycle(): void {
+  if (lifecycleBound) return
+  lifecycleBound = true
+  if (typeof wx.onAppHide === 'function') {
+    wx.onAppHide((): void => {
+      if (scanSession != null) {
+        const session = scanSession
+        scanSession = null
+        session.stop().catch((_error: any): void => {})
+      }
+    })
+  }
+  if (typeof wx.onBluetoothAdapterStateChange === 'function') {
+    adapterStateListener = (state: any): void => {
+      if (state?.available !== false) return
+      if (scanSession != null) {
+        const session = scanSession
+        scanSession = null
+        session.stop().catch((_error: any): void => {})
+      }
+      connectionUnsubscribe?.(); connectionUnsubscribe = null
+      deviceEventUnsubscribe?.(); deviceEventUnsubscribe = null
+      client?.dispose('Bluetooth adapter unavailable')
+      client = null; connected = false; initialized = false
+      emitState('disconnected', 'Bluetooth adapter unavailable')
+    }
+    wx.onBluetoothAdapterStateChange(adapterStateListener!)
+  }
+}
+
+function resolveValue(options: any, value: any): void {
+  options.success?.(value); options.complete?.(value)
+}
+
+function rejectValue(options: any, error: any, message: string): void {
+  failOptions(options.fail, options.complete, error, message)
+}
+
+function invalidOptions(options: any, message: string): void {
+  const error = new RwfitFailImpl(9201004, message, null)
+  options.fail?.(error); options.complete?.(error)
+}
+
+function validSensorType(value: number): boolean {
+  return value == 1 || value == 2 || value == 3 || value == 4 || value == 5 ||
+    value == 10 || value == 11 || value == 12 || value == 13
+}
+
+const measurementCodes: UTSJSONObject = {
+  hr: 3,
+  bloodPressure: 4,
+  bloodOxy: 9,
+  hrv: 10,
+  pressure: 13,
+  bloodSugar: 16
+}
+
+const healthDataTypes: UTSJSONObject = {
+  heartRate: 1,
+  bloodOxygen: 3,
+  bloodPressure: 4,
+  stress: 8,
+  bloodSugar: 9,
+  muslimCount: 10,
+  hrv: 13
+}
+
+function rawPacket(data: any): SensorRawPacket {
+  return {
+    type: data.type ?? 0,
+    sequence: data.sequence,
+    timestampSec: data.timestamp,
+    ppg: data.ppgDataList ?? [],
+    acc: (data.accDataList ?? []).map((item: any) => ({ x: item.x ?? 0, y: item.y ?? 0, z: item.z ?? 0 })),
+    ppgRed: data.ppgRedDataList ?? [],
+    ir: data.irDataList ?? [],
+    sleep: (data.sleepDataList ?? []).map((item: any) => ({ timestampSec: Math.floor((item.timestamp ?? 0) / 1000), mode: item.sleepMode ?? 0 }))
+  } as SensorRawPacket
+}
+
+function workoutReport(report: any): WorkoutReport {
+  return {
+    startTime: Math.floor((report.startTime ?? 0) / 1000),
+    endTime: Math.floor((report.endTime ?? 0) / 1000),
+    date: '',
+    sportType: report.workModel ?? 0,
+    duration: report.exerciseTime ?? 0,
+    step: report.step ?? 0,
+    distance: report.distance ?? 0,
+    calorie: report.calorie ?? 0,
+    height: 0,
+    pressure: 0,
+    cadence: report.cadence ?? 0,
+    speed: report.speed ?? 0,
+    pace: report.pace ?? 0,
+    averageHeartRate: report.averageHeartRate ?? 0,
+    maxHeartRate: report.maxHeartRate ?? 0,
+    minHeartRate: report.minHeartRate ?? 0,
+    maxCadence: report.maxCadence ?? 0,
+    minCadence: report.minCadence ?? 0,
+    maxPace: report.maxPace ?? 0,
+    minPace: report.minPace ?? 0,
+    heartRateCount: (report.heartRates ?? []).length,
+    viewType: report.viewType ?? 0,
+    heartRateItems: (report.heartRates ?? []).map((value: number, index: number) => ({ index, value })),
+    pacePerKmItems: (report.pacePerKmList ?? []).map((value: number, index: number) => ({ index, value }))
+  } as WorkoutReport
+}
+
+function handleDeviceEvent(event: any): void {
+  if (event == null) return
+  if (event.type === 'health' && (event.records ?? []).length > 0) {
+    const record = event.records[event.records.length - 1]
+    const rawValue = typeof record.value === 'number' ? record.value : Number(record.value ?? 0)
+    realtimeDataListener?.({
+      dataType: healthDataTypes[event.healthType] ?? 0,
+      dataValue: Number.isFinite(rawValue) ? rawValue : 0,
+      diastolic: record.detail?.diastolic,
+      time: Math.floor((record.measuredAt ?? Date.now()) / 1000)
+    } as RealtimeData)
+    return
+  }
+  if (event.type === 'healthStatus' && event.completed === true) {
+    realtimeCompleteListener?.(); return
+  }
+  if (event.type === 'healthAlert') {
+    healthAlertListener?.({ type: event.alertType ?? -1, value: event.value ?? 0 } as HealthAlertEvent); return
+  }
+  if (event.type === 'camera') {
+    touchEventListener?.({ action: 'cameraTakePicture', keyType: event.action ?? 0, touchType: 0 } as TouchEvent); return
+  }
+  if (event.type === 'touch') {
+    const keyType = event.keyType ?? 0
+    const touchType = event.touchType ?? 0
+    const action = keyType === 2 ? 'fallDetected'
+      : keyType !== 1 ? 'unknown'
+      : touchType === 1 ? 'singleTap'
+      : touchType === 2 ? 'doubleTap'
+      : touchType === 3 ? 'tripleTap'
+      : touchType === 4 ? 'longPress'
+      : touchType === 5 ? 'swing' : 'unknown'
+    touchEventListener?.({ action, keyType, touchType } as TouchEvent); return
+  }
+  if (event.type === 'workoutData') {
+    workoutRealtimeListener?.({
+      duration: event.data?.activityTime ?? 0,
+      steps: event.data?.steps ?? 0,
+      distance: event.data?.distance ?? 0,
+      calorie: event.data?.calorie ?? 0,
+      heartRate: event.data?.heartRate ?? 0,
+      dataType: 0x0223
+    } as WorkoutRealtimeData); return
+  }
+  if (event.type === 'sensorRaw') { sensorRawListener?.(rawPacket(event.data)); return }
+  if (event.type === 'sensorStopped') { sensorStoppedListener?.({ reason: event.reason ?? 0 } as SensorRawStoppedEvent); return }
+  if (event.type === 'factoryTest') {
+    heartRateCalibrationListener?.({ testMode: event.testMode ?? 0, result: event.result ?? 0 } as HeartRateCalibrationResult)
+  }
+}
+
+function fromScan(device: any): BleDevice {
+  return {
+    name: device.name ?? device.localName ?? '',
+    mac: device.macAddress ?? '',
+    rssi: device.RSSI ?? 0,
+    uuid: device.deviceId,
+    deviceId: device.deviceId
+  } as BleDevice
+}
+
+function menuMap(menu: any): UTSJSONObject {
+  return {
+    isPushMsgEnableSwitch: menu.pushMsgEnableSwitch ?? false,
+    pushMsgSwitchValue: menu.pushMsgSwitchValue ?? 0,
+    pushMsgSwitchValue2: menu.pushMsgSwitchValue2 ?? 0,
+    activityDataInterval: menu.activityDataInterval > 0 ? menu.activityDataInterval : 60,
+    isAlarm: menu.alarm ?? false,
+    isBrightScreenSleepTime: menu.brightScreenSleepTime ?? false,
+    isBrightScreenTime: menu.brightScreenTime ?? false,
+    isSupportWorkout: menu.newSport ?? menu.workout ?? false,
+    isRememberSwitch: menu.rememberSwitch ?? false,
+    isSupportHrReminder: menu.supportHrReminder ?? false,
+    isSupportBoReminder: menu.supportBoReminder ?? false,
+    isSupportMotoVibrationLevel: menu.supportMotoVibrationLevel ?? false,
+    isSupportAlarmVibrationDuration: menu.supportAlarmVibrationDuration ?? false,
+    isSupportVibrationInterval: menu.supportVibrationInterval ?? false,
+    isStep: menu.step ?? false,
+    isSleep: menu.sleep ?? false,
+    isHr: menu.hr ?? false,
+    isBloodOxy: menu.bloodOxy ?? false,
+    isBloodPress: menu.bloodPress ?? false,
+    isBloodSugar: menu.bloodSugar ?? false,
+    isHrv: menu.hrv ?? false,
+    isPressure: menu.pressure ?? false,
+    isMuslimCountData: menu.muslimCountData ?? false,
+    isBodyTemp: menu.temperature ?? false,
+    isSupportMuslimTimeDisplayMode: menu.supportMuslimTimeDisplayMode ?? false,
+    isSupportSensorRawPPG: menu.supportSensorRawPPG ?? false,
+    isSupportPPGMonitoring: menu.supportPPGMonitoring ?? false,
+    isSupportTemperatureMonitoring: menu.supportTemperatureMonitoring ?? false,
+    isSupportCountReminder: menu.supportCountReminder ?? false,
+    isSupportSensorRawACC: menu.supportSensorRawACC ?? false,
+    isSupportSensorRawPPGRed: menu.supportSensorRawPPGRed ?? false,
+    isSupportSensorRawIR: menu.supportSensorRawIR ?? false,
+    isSupportSensorRawSleep: menu.supportSensorRawSleep ?? false,
+    isSupportFallDetect: menu.supportFallDetect ?? false,
+    isSupportRecording: menu.supportRecording ?? false,
+    isFindDevice: menu.findDevice ?? false,
+    isTakePhoto: menu.takePhoto ?? false,
+    isLedLight: menu.ledLight ?? false,
+    isWearDirection: menu.wearDir ?? false,
+    isVideoHid: menu.videoHid ?? false,
+    isVideoHidBook: menu.videoHidBook ?? false,
+    isVideoHidMusic: menu.videoHidMusic ?? false,
+    isRaiseBrightScreen: menu.raiseBrightScreen ?? false,
+    isPowerOff: menu.powerOff ?? false,
+    isFactoryReset: menu.recovery ?? false,
+    isPushMessage: menu.msgNotification ?? false
+  } as UTSJSONObject
+}
+
+function emitState(state: 'connecting' | 'connected' | 'disconnected' | 'failed', reason?: string): void {
+  connectStateListener?.({
+    state, name: currentDevice?.name, mac: currentDevice?.mac,
+    uuid: currentDevice?.uuid, reason
+  } as ConnectStateEvent)
+}
+
+function connectDevice(device: BleDevice, successCallback?: () => void, failCallback?: (error: RwfitFail) => void, completeCallback?: (result: any | null) => void): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null)
+    failCallback?.(error); completeCallback?.(error); return
+  }
+  if (connecting) {
+    const error = new RwfitFailImpl(9201004, 'A connection attempt is already in progress', null)
+    failCallback?.(error); completeCallback?.(error); return
+  }
+  const deviceId = device.deviceId ?? device.uuid
+  if (deviceId == null || deviceId.length === 0) {
+    const error = new RwfitFailImpl(9201004, 'deviceId/uuid is required on WeChat Mini Program', null)
+    failCallback?.(error); completeCallback?.(error); return
+  }
+  connecting = true
+  currentDevice = device
+  emitState('connecting')
+  const beginConnect = (): void => {
+    RingSdk.connect(deviceId, {
+      onStage: (stage: string) => {
+        if (stage === 'connecting') emitState('connecting')
+      }
+    }).then((sdk: RingSdk) => {
+      connecting = false
+      connectionUnsubscribe?.()
+      deviceEventUnsubscribe?.()
+      client = sdk; connected = true
+      connectionUnsubscribe = sdk.onConnectionStateChange(state => {
+        connected = state.connected
+        emitState(state.connected ? 'connected' : 'disconnected')
+      })
+      deviceEventUnsubscribe = sdk.onDeviceEvent(handleDeviceEvent)
+      emitState('connected')
+      const raw = menuMap(sdk.supportMenu ?? {})
+      functionMenuListener?.({ name: device.name, mac: device.mac, uuid: device.uuid ?? deviceId, raw } as FunctionMenu)
+      succeed(successCallback, completeCallback)
+    }).catch(error => {
+      connecting = false; connected = false; emitState('failed', error?.message ?? error?.errMsg ?? 'unknown')
+      failOptions(failCallback, completeCallback, error, 'connect failed')
+    })
+  }
+  if (client == null) { beginConnect(); return }
+  const previous = client!
+  connectionUnsubscribe?.(); connectionUnsubscribe = null
+  deviceEventUnsubscribe?.(); deviceEventUnsubscribe = null
+  client = null; connected = false
+  previous.disconnect('replaced by a new connection').catch((_error: any): void => {
+    previous.dispose('replaced by a new connection')
+  }).then((): void => beginConnect())
+}
+
+export const initialize: Initialize = function(options: VoidOptions): void {
+  if (initialized) { succeed(options.success, options.complete); return }
+  authorizeBluetooth(
+    (): void => openBluetoothAdapter(options),
+    (error: any): void => failOptions(options.fail, options.complete, error, 'Bluetooth permission denied')
+  )
+}
+
+export const getSdkVersion: GetSdkVersion = function(options: StringResultOptions): void {
+  const result = getSDKVersion(); options.success?.(result); options.complete?.(result)
+}
+
+export const getPluginVersion: GetPluginVersion = function(options: StringResultOptions): void {
+  const result = `${PLUGIN_VERSION}_${getSDKVersion()}`
+  options.success?.(result); options.complete?.(result)
+}
+
+export const startScan: StartScan = function(options: VoidOptions): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  if (scanStarting || scanSession != null) {
+    const error = new RwfitFailImpl(9201004, 'A scan is already in progress', null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  scanStarting = true
+  authorizeBluetooth(
+    (): void => beginScan(options, true),
+    (error: any): void => {
+      scanStarting = false
+      failOptions(options.fail, options.complete, error, 'Bluetooth permission denied')
+    }
+  )
+}
+
+export const stopScan: StopScan = function(options: VoidOptions): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  if (scanStarting) {
+    const error = new RwfitFailImpl(9201004, 'Scan startup is still in progress', null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  if (scanSession == null) { succeed(options.success, options.complete); return }
+  scanSession.stop().then(() => {
+    scanSession = null; succeed(options.success, options.complete)
+  }).catch(error => failOptions(options.fail, options.complete, error, 'stopScan failed'))
+}
+
+export const connect: Connect = function(options): void { connectDevice(options.device, options.success, options.fail, options.complete) }
+
+export const reconnect: Reconnect = function(options): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  if (options.device == null) {
+    const error = new RwfitFailImpl(9201004, 'device is required on WeChat Mini Program', null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  connectDevice(options.device!, options.success, options.fail, options.complete)
+}
+
+export const disconnect: Disconnect = function(options: VoidOptions): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  if (connecting) {
+    const error = new RwfitFailImpl(9201004, 'Connection startup is still in progress', null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  if (client == null) { connected = false; succeed(options.success, options.complete); return }
+  client!.disconnect('app request').then(() => {
+    connectionUnsubscribe?.(); connectionUnsubscribe = null
+    deviceEventUnsubscribe?.(); deviceEventUnsubscribe = null
+    client = null; connected = false; emitState('disconnected'); succeed(options.success, options.complete)
+  }).catch(error => failOptions(options.fail, options.complete, error, 'disconnect failed'))
+}
+
+export const iosSetBindedStatus: IosSetBindedStatus = function(options): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  succeed(options.success, options.complete)
+}
+
+export const isConnected: IsConnected = function(options: BooleanResultOptions): void {
+  options.success?.(connected); options.complete?.(connected)
+}
+
+export const getPower: GetPower = function(options: NumberResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.readPower().then(info => {
+    options.success?.(info.level); options.complete?.(info.level)
+  }).catch(error => {
+    const result = sdkError(error, 'getPower failed'); options.fail?.(result); options.complete?.(result)
+  })
+}
+
+export const getFirmwareVersion: GetFirmwareVersion = function(options: FirmwareResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.readFirmwareVersion().then(info => {
+    const result = {
+      deviceClazz: info?.deviceModel ?? '',
+      deviceNo: info?.version ?? '',
+      uiVersion: info?.uiVersion ?? ''
+    } as FirmwareInfo
+    options.success?.(result); options.complete?.(result)
+  }).catch(error => {
+    const result = sdkError(error, 'getFirmwareVersion failed'); options.fail?.(result); options.complete?.(result)
+  })
+}
+
+export const setUserInfo: SetUserInfo = function(options): void {
+  if (!ensureClient(options)) return
+  client!.setUserProfile({ measureUnit: 0, ...options.info }).then(() => succeed(options.success, options.complete)).catch(error => failOptions(options.fail, options.complete, error, 'setUserInfo failed'))
+}
+
+export const setTimeFormat: SetTimeFormat = function(options): void {
+  if (!ensureClient(options)) return
+  client!.setHourSystem(options.format).then(() => succeed(options.success, options.complete)).catch(error => failOptions(options.fail, options.complete, error, 'setTimeFormat failed'))
+}
+
+export const getFunctionList: GetFunctionList = function(options: FunctionListResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.readFunctionList().then(menu => {
+    const result = { code: 0, msg: 'success', supportMenu: menuMap(menu ?? {}) } as FunctionListResult
+    options.success?.(result); options.complete?.(result)
+  }).catch(error => {
+    const result = sdkError(error, 'getFunctionList failed'); options.fail?.(result); options.complete?.(result)
+  })
+}
+
+export const setRingBtName: SetRingBtName = function(options): void {
+  if (!ensureClient(options)) return
+  client!.setRingName(options.name).then(() => succeed(options.success, options.complete)).catch(error => failOptions(options.fail, options.complete, error, 'setRingBtName failed'))
+}
+
+function timedConfig(info: any): TimedConfig {
+  return {
+    isOpen: info.enabled ?? false,
+    duration: info.intervalMinutes ?? 60,
+    startHour: info.startHour ?? 0,
+    startMin: info.startMinute ?? 0,
+    endHour: info.endHour ?? 23,
+    endMin: info.endMinute ?? 59
+  } as TimedConfig
+}
+
+function getTimed(type: string, options: any): void {
+  if (!ensureClient(options)) return
+  client!.getMonitoring(type).then((info: any) => resolveValue(options, timedConfig(info)))
+    .catch(error => rejectValue(options, error, `get ${type} monitoring failed`))
+}
+
+function setTimed(type: string, options: SetTimedConfigOptions): void {
+  if (!ensureClient(options)) return
+  const config = options.config
+  client!.setMonitoring(type, {
+    enabled: config.isOpen,
+    intervalMinutes: config.duration,
+    startHour: config.startHour,
+    startMinute: config.startMin,
+    endHour: config.endHour,
+    endMinute: config.endMin
+  }).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, `set ${type} monitoring failed`))
+}
+
+export const getTimedHeartRate: GetTimedHeartRate = function(options: TimedConfigResultOptions): void { getTimed('heartRate', options) }
+export const setTimedHeartRate: SetTimedHeartRate = function(options: SetTimedConfigOptions): void { setTimed('heartRate', options) }
+export const getTimedBloodOxygen: GetTimedBloodOxygen = function(options: TimedConfigResultOptions): void { getTimed('bloodOxygen', options) }
+export const setTimedBloodOxygen: SetTimedBloodOxygen = function(options: SetTimedConfigOptions): void { setTimed('bloodOxygen', options) }
+export const getTimedHRV: GetTimedHRV = function(options: TimedConfigResultOptions): void { getTimed('hrv', options) }
+export const setTimedHRV: SetTimedHRV = function(options: SetTimedConfigOptions): void { setTimed('hrv', options) }
+export const getTimedStress: GetTimedStress = function(options: TimedConfigResultOptions): void { getTimed('stress', options) }
+export const setTimedStress: SetTimedStress = function(options: SetTimedConfigOptions): void { setTimed('stress', options) }
+export const getTimedBloodSugar: GetTimedBloodSugar = function(options: TimedConfigResultOptions): void { getTimed('bloodSugar', options) }
+export const setTimedBloodSugar: SetTimedBloodSugar = function(options: SetTimedConfigOptions): void { setTimed('bloodSugar', options) }
+export const getTimedBloodPressure: GetTimedBloodPressure = function(options: TimedConfigResultOptions): void { getTimed('bloodPressure', options) }
+export const setTimedBloodPressure: SetTimedBloodPressure = function(options: SetTimedConfigOptions): void { setTimed('bloodPressure', options) }
+export const getTimedBodyTemperature: GetTimedBodyTemperature = function(options: TimedConfigResultOptions): void { getTimed('temperature', options) }
+export const setTimedBodyTemperature: SetTimedBodyTemperature = function(options: SetTimedConfigOptions): void { setTimed('temperature', options) }
+export const getTimedPPG: GetTimedPPG = function(options: TimedConfigResultOptions): void { getTimed('ppg', options) }
+export const setTimedPPG: SetTimedPPG = function(options: SetTimedConfigOptions): void { setTimed('ppg', options) }
+
+export const startRealtimeMeasure: StartRealtimeMeasure = function(options: RealtimeMeasureOptions): void {
+  if (!ensureClient(options)) return
+  const code = measurementCodes[options.metric]
+  if (typeof code !== 'number') { rejectValue(options, 'invalid metric', 'startRealtimeMeasure failed'); return }
+  client!.setHealthMeasurement(code, true).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'startRealtimeMeasure failed'))
+}
+
+export const stopRealtimeMeasure: StopRealtimeMeasure = function(options: RealtimeMeasureOptions): void {
+  if (!ensureClient(options)) return
+  const code = measurementCodes[options.metric]
+  if (typeof code !== 'number') { rejectValue(options, 'invalid metric', 'stopRealtimeMeasure failed'); return }
+  client!.setHealthMeasurement(code, false).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'stopRealtimeMeasure failed'))
+}
+
+export const getWorkoutState: GetWorkoutState = function(options: WorkoutStateResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getWorkoutState().then((state: any) => resolveValue(options, {
+    sportType: state.sportType ?? 0,
+    controlType: state.status ?? 4
+  } as WorkoutState)).catch(error => rejectValue(options, error, 'getWorkoutState failed'))
+}
+
+export const controlWorkout: ControlWorkout = function(options: WorkoutControlOptions): void {
+  if (!ensureClient(options)) return
+  if (options.sportType < 7 || options.sportType > 161 || options.controlType < 1 || options.controlType > 4) {
+    invalidOptions(options, 'sportType must be 7..161 and controlType must be 1..4'); return
+  }
+  client!.controlWorkout(options.sportType, options.controlType)
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'controlWorkout failed'))
+}
+
+export const setWorkoutRealtimeEnabled: SetWorkoutRealtimeEnabled = function(options: EnabledOptions): void {
+  if (!ensureClient(options)) return
+  client!.setWorkoutRealtimePush(options.enabled)
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setWorkoutRealtimeEnabled failed'))
+}
+
+export const getWorkoutReports: GetWorkoutReports = function(options: WorkoutReportListResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getWorkoutReports().then((reports: Array<any>) => resolveValue(options, reports.map(workoutReport)))
+    .catch(error => rejectValue(options, error, 'getWorkoutReports failed'))
+}
+
+export const findDevice: FindDevice = function(options: VoidOptions): void {
+  if (!ensureClient(options)) return
+  client!.findDevice().then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'findDevice failed'))
+}
+
+function powerControl(type: number, options: VoidOptions): void {
+  if (!ensureClient(options)) return
+  client!.setPowerControl(type).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'power control failed'))
+}
+
+export const powerOff: PowerOff = function(options: VoidOptions): void { powerControl(1, options) }
+export const factoryReset: FactoryReset = function(options: VoidOptions): void { powerControl(2, options) }
+
+export const controlPhoto: ControlPhoto = function(options: PhotoControlOptions): void {
+  if (!ensureClient(options)) return
+  client!.controlCamera(options.state).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'controlPhoto failed'))
+}
+
+export const controlPhone: ControlPhone = function(options: PhoneControlOptions): void {
+  const error = new RwfitFailImpl(9201007, 'Phone call control is not supported on WeChat Mini Program', null)
+  options.fail?.(error); options.complete?.(error)
+}
+
+export const getMuslimCountEnabled: GetMuslimCountEnabled = function(options: BooleanResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getRememberEnabled().then((enabled: boolean) => resolveValue(options, enabled))
+    .catch(error => rejectValue(options, error, 'getMuslimCountEnabled failed'))
+}
+
+export const setMuslimCountEnabled: SetMuslimCountEnabled = function(options: EnabledOptions): void {
+  if (!ensureClient(options)) return
+  client!.setRememberEnabled(options.enabled).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setMuslimCountEnabled failed'))
+}
+
+export const getHeartRateAlert: GetHeartRateAlert = function(options: HeartRateAlertResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getHeartRateAlert().then((config: any) => resolveValue(options, {
+    isOpen: config.enabled ?? false,
+    highThreshold: config.upperValue ?? 160,
+    lowThreshold: config.lowerValue == 0xff ? null : config.lowerValue
+  } as HeartRateAlertConfig)).catch(error => rejectValue(options, error, 'getHeartRateAlert failed'))
+}
+
+export const setHeartRateAlert: SetHeartRateAlert = function(options: HeartRateAlertOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as HeartRateAlertConfig
+  if (c.highThreshold < 0 || c.highThreshold > 254 || (c.lowThreshold != null && (c.lowThreshold < 0 || c.lowThreshold > 254))) {
+    invalidOptions(options, 'heart-rate thresholds must be 0..254'); return
+  }
+  client!.setHeartRateAlert(c.isOpen, c.highThreshold, c.lowThreshold ?? 0xff)
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setHeartRateAlert failed'))
+}
+
+export const getBloodOxygenAlert: GetBloodOxygenAlert = function(options: BloodOxygenAlertResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getBloodOxygenAlert().then((config: any) => resolveValue(options, {
+    isOpen: config.enabled ?? false,
+    lowThreshold: config.lowerValue ?? 94
+  } as BloodOxygenAlertConfig)).catch(error => rejectValue(options, error, 'getBloodOxygenAlert failed'))
+}
+
+export const setBloodOxygenAlert: SetBloodOxygenAlert = function(options: BloodOxygenAlertOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as BloodOxygenAlertConfig
+  if (c.lowThreshold < 0 || c.lowThreshold > 254) { invalidOptions(options, 'blood-oxygen threshold must be 0..254'); return }
+  client!.setBloodOxygenAlert(c.isOpen, c.lowThreshold)
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setBloodOxygenAlert failed'))
+}
+
+export const getVibrationInterval: GetVibrationInterval = function(options: NumberResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getVibrationInterval().then((value: number) => resolveValue(options, value))
+    .catch(error => rejectValue(options, error, 'getVibrationInterval failed'))
+}
+
+export const setVibrationInterval: SetVibrationInterval = function(options: SetVibrationIntervalOptions): void {
+  if (!ensureClient(options)) return
+  if (options.intervalMs < 100 || options.intervalMs > 1000) { invalidOptions(options, 'intervalMs must be 100..1000'); return }
+  client!.setVibrationInterval(options.intervalMs).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setVibrationInterval failed'))
+}
+
+export const startHeartRateCalibration: StartHeartRateCalibration = function(options: VoidOptions): void {
+  if (!ensureClient(options)) return
+  client!.startFactoryTest(1).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'startHeartRateCalibration failed'))
+}
+
+export const getFallDetect: GetFallDetect = function(options: BooleanResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getFallDetect().then((value: boolean) => resolveValue(options, value))
+    .catch(error => rejectValue(options, error, 'getFallDetect failed'))
+}
+
+export const setFallDetect: SetFallDetect = function(options: EnabledOptions): void {
+  if (!ensureClient(options)) return
+  client!.setFallDetect(options.enabled).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setFallDetect failed'))
+}
+
+export const getCountReminderInterval: GetCountReminderInterval = function(options: NumberResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getCountReminderInterval().then((value: number) => resolveValue(options, value))
+    .catch(error => rejectValue(options, error, 'getCountReminderInterval failed'))
+}
+
+export const setCountReminderInterval: SetCountReminderInterval = function(options: SetCountReminderIntervalOptions): void {
+  if (!ensureClient(options)) return
+  const value = options.intervalMinutes
+  if (value != 0 && value != 30 && value != 60 && value != 90 && value != 120) { invalidOptions(options, 'intervalMinutes must be 0, 30, 60, 90, or 120'); return }
+  client!.setCountReminderInterval(value).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setCountReminderInterval failed'))
+}
+
+export const controlSensorRaw: ControlSensorRaw = function(options: SensorRawControlOptions): void {
+  if (!ensureClient(options)) return
+  if (!validSensorType(options.sensorType)) { invalidOptions(options, 'unsupported sensorType combination'); return }
+  client!.controlSensorRaw(options.enabled ? 1 : 2, options.sensorType)
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'controlSensorRaw failed'))
+}
+
+export const getSensorRawHistory: GetSensorRawHistory = function(options: SensorRawListResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getSensorHistoryRaw().then((items: Array<any>) => resolveValue(options, items.map(rawPacket)))
+    .catch(error => rejectValue(options, error, 'getSensorRawHistory failed'))
+}
+
+export const getAlarm: GetAlarm = function(options: AlarmListResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getAlarms().then((items: Array<any>) => resolveValue(options, items.map((item: any) => ({
+    alarmId: item.alarmId,
+    startHour: item.hour,
+    startMin: item.minute,
+    isOpen: item.enabled,
+    repeats: item.repeatDays ?? [0, 0, 0, 0, 0, 0, 0]
+  } as Alarm)))).catch(error => rejectValue(options, error, 'getAlarm failed'))
+}
+
+export const setAlarm: SetAlarm = function(options: SetAlarmOptions): void {
+  if (!ensureClient(options)) return
+  const alarms = options.alarms.map((item: any) => ({
+    alarmId: item.alarmId,
+    enabled: item.isOpen,
+    repeatDays: item.repeats,
+    hour: item.startHour,
+    minute: item.startMin,
+    tag: ''
+  }))
+  client!.setAlarms(alarms).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setAlarm failed'))
+}
+
+export const deleteAllAlarm: DeleteAllAlarm = function(options: VoidOptions): void {
+  if (!ensureClient(options)) return
+  client!.deleteAllAlarms().then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'deleteAllAlarm failed'))
+}
+
+function scheduleValue(info: any): ScheduleToggle {
+  return {
+    isOpen: info.enabled ?? false,
+    startHour: info.startHour ?? 0,
+    startMin: info.startMinute ?? 0,
+    endHour: info.endHour ?? 23,
+    endMin: info.endMinute ?? 59
+  } as ScheduleToggle
+}
+
+export const getRaiseBrightScreen: GetRaiseBrightScreen = function(options: ScheduleToggleResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getRaiseToWake().then((value: any) => resolveValue(options, scheduleValue(value)))
+    .catch(error => rejectValue(options, error, 'getRaiseBrightScreen failed'))
+}
+
+export const setRaiseBrightScreen: SetRaiseBrightScreen = function(options: ScheduleToggleOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as ScheduleToggle
+  client!.setRaiseToWake({ enabled: c.isOpen, startHour: c.startHour, startMinute: c.startMin, endHour: c.endHour, endMinute: c.endMin })
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setRaiseBrightScreen failed'))
+}
+
+export const getBrightScreenTime: GetBrightScreenTime = function(options: NumberResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getBackLight().then((value: any) => resolveValue(options, value.seconds ?? 0))
+    .catch(error => rejectValue(options, error, 'getBrightScreenTime failed'))
+}
+
+export const setBrightScreenTime: SetBrightScreenTime = function(options: SetBrightScreenTimeOptions): void {
+  if (!ensureClient(options)) return
+  client!.setBrightDuration(options.timeSecond).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setBrightScreenTime failed'))
+}
+
+export const getBrightScreenSleepTime: GetBrightScreenSleepTime = function(options: ScheduleToggleResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getBackLight().then((value: any) => resolveValue(options, scheduleValue(value)))
+    .catch(error => rejectValue(options, error, 'getBrightScreenSleepTime failed'))
+}
+
+export const setBrightScreenSleepTime: SetBrightScreenSleepTime = function(options: ScheduleToggleOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as ScheduleToggle
+  client!.setScreenSleep({ enabled: c.isOpen, startHour: c.startHour, startMinute: c.startMin, endHour: c.endHour, endMinute: c.endMin })
+    .then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setBrightScreenSleepTime failed'))
+}
+
+export const getRingLedLevel: GetRingLedLevel = function(options: LedLevelResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getLedLevel().then((value: any) => resolveValue(options, {
+    isOpen: value.enabled ?? false,
+    lcdLevel: value.level ?? 0
+  } as LedLevel)).catch(error => rejectValue(options, error, 'getRingLedLevel failed'))
+}
+
+export const setRingLedLevel: SetRingLedLevel = function(options: LedLevelOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as LedLevel
+  client!.setLedLevel(c.isOpen, c.lcdLevel).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setRingLedLevel failed'))
+}
+
+function unsupported(options: any, message: string): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null)
+    options.fail?.(error); options.complete?.(error); return
+  }
+  const error = new RwfitFailImpl(9201007, message, null)
+  options.fail?.(error); options.complete?.(error)
+}
+
+export const getVideoHid: GetVideoHid = function(options: NumberResultOptions): void { unsupported(options, 'Video HID query is not exposed by the WeChat SDK') }
+export const setVideoHid: SetVideoHid = function(options: SetVideoHidOptions): void { unsupported(options, 'Video HID setting is not exposed by the WeChat SDK') }
+export const createOrRemoveBond: CreateOrRemoveBond = function(options: BondOptions): void { unsupported(options, 'HID bonding is not available on WeChat Mini Program') }
+
+export const getRingWearDir: GetRingWearDir = function(options: BooleanResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getWearHand().then((value: any) => resolveValue(options, value.rightHand ?? false))
+    .catch(error => rejectValue(options, error, 'getRingWearDir failed'))
+}
+
+export const setRingWearHand: SetRingWearHand = function(options: WearHandOptions): void {
+  if (!ensureClient(options)) return
+  client!.setWearHand(options.isRight).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setRingWearHand failed'))
+}
+
+export const getVibrationCount: GetVibrationCount = function(options: VibrationResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getVibrationCount().then((value: any) => resolveValue(options, {
+    count: value.count ?? 0,
+    level: value.level ?? 0
+  } as VibrationConfig)).catch(error => rejectValue(options, error, 'getVibrationCount failed'))
+}
+
+export const setVibrationCount: SetVibrationCount = function(options: VibrationOptions): void {
+  if (!ensureClient(options)) return
+  const c = options.config as VibrationConfig
+  client!.setVibrationCount(c.level, c.count).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setVibrationCount failed'))
+}
+
+export const getAlarmVibrationDuration: GetAlarmVibrationDuration = function(options: NumberResultOptions): void {
+  if (!ensureClient(options)) return
+  client!.getAlarmVibrationDuration().then((value: number) => resolveValue(options, value))
+    .catch(error => rejectValue(options, error, 'getAlarmVibrationDuration failed'))
+}
+
+export const setAlarmVibrationDuration: SetAlarmVibrationDuration = function(options: SetAlarmVibrationDurationOptions): void {
+  if (!ensureClient(options)) return
+  client!.setAlarmVibrationDuration(options.duration).then(() => succeed(options.success, options.complete))
+    .catch(error => rejectValue(options, error, 'setAlarmVibrationDuration failed'))
+}
+
+function syncType(nativeType: string): string {
+  const types: UTSJSONObject = {
+    steps: 'step', sleep: 'sleep', heartRate: 'hr', bloodOxygen: 'bo',
+    bloodPressure: 'bp', hrv: 'hrv', stress: 'pressure', bloodSugar: 'bloodSugar',
+    muslimCount: 'muslimCount', temperature: 'temp'
+  }
+  return (types[nativeType] ?? nativeType) as string
+}
+
+function timestampSeconds(value: any): number {
+  const timestamp = Number(value ?? 0)
+  return Math.floor(timestamp > 100000000000 ? timestamp / 1000 : timestamp)
+}
+
+function localDate(timestamp: number): string {
+  const date = new Date(timestamp > 100000000000 ? timestamp : timestamp * 1000)
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+/**
+ * The WeChat SDK exposes BLE_KEY_ACTIVITY_CURRENT_DAY and BLE_KEY_ACTIVITY as
+ * flat HealthRecord entries: one `steps-day-*` total plus `steps-hour-*`
+ * entries. The shared UTS contract uses one day object with nested items, so
+ * group the flat records before emitting them. Zero-step hours are retained.
+ */
+function normalizedStepRecords(records: Array<any>): Array<UTSJSONObject> {
+  const days: Map<string, UTSJSONObject> = new Map()
+  const datesWithTotal: Set<string> = new Set()
+
+  records.forEach((record: any): void => {
+    const detail = (record.detail ?? {}) as UTSJSONObject
+    const recordTime = timestampSeconds(record.measuredAt ?? 0)
+    const date = `${detail['date'] ?? ''}` || localDate(recordTime)
+    let value = days.get(date)
+    if (value == null) {
+      value = {
+        time: recordTime,
+        date,
+        totalSteps: 0,
+        totalCalorie: 0,
+        totalDistance: 0,
+        activityDataInterval: detail['activityDataInterval'] ?? 60,
+        items: []
+      } as UTSJSONObject
+      days.set(date, value)
+    }
+
+    const id = `${record.id ?? ''}`
+    const source = `${detail['source'] ?? ''}`
+    const rawItems = (detail['items'] ?? []) as Array<any>
+    const isDayTotal = id.startsWith('steps-day-') || source == 'todayTotal' || rawItems.length > 0
+
+    if (isDayTotal) {
+      datesWithTotal.add(date)
+      value['time'] = recordTime
+      value['totalSteps'] = Number(record.value ?? 0)
+      value['totalCalorie'] = Number(detail['calorie'] ?? detail['totalCalorie'] ?? 0)
+      value['totalDistance'] = Number(detail['distance'] ?? detail['totalDistance'] ?? 0)
+      value['activityDataInterval'] = Number(detail['activityDataInterval'] ?? 60)
+    } else {
+      const items = value['items'] as Array<UTSJSONObject>
+      items.push({
+        time: recordTime,
+        index: detail['slot'] ?? items.length,
+        steps: Number(record.value ?? 0),
+        calorie: Number(detail['calorie'] ?? 0),
+        distance: Number(detail['distance'] ?? 0)
+      } as UTSJSONObject)
+    }
+
+    if (rawItems.length > 0) {
+      const items = value['items'] as Array<UTSJSONObject>
+      rawItems.forEach((item: any, index: number): void => {
+        items.push({
+          time: timestampSeconds(item.measuredAt ?? item.timestamp ?? item.time ?? 0),
+          index: item.index ?? item.slot ?? index,
+          steps: Number(item.steps ?? item.step ?? 0),
+          calorie: Number(item.calorie ?? 0),
+          distance: Number(item.distance ?? 0)
+        } as UTSJSONObject)
+      })
+    }
+  })
+
+  const result: Array<UTSJSONObject> = []
+  days.forEach((day: UTSJSONObject, date: string): void => {
+    const source = day['items'] as Array<UTSJSONObject>
+    const unique: Map<string, UTSJSONObject> = new Map()
+    source.forEach((item: UTSJSONObject): void => {
+      const key = `${item['time'] ?? 0}:${item['index'] ?? 0}`
+      unique.set(key, item)
+    })
+    const items = Array.from(unique.values()).sort((first: UTSJSONObject, second: UTSJSONObject): number =>
+      Number(first['time'] ?? 0) - Number(second['time'] ?? 0))
+    day['items'] = items
+    if (!datesWithTotal.has(date)) {
+      day['totalSteps'] = items.reduce((total: number, item: UTSJSONObject): number =>
+        total + Number(item['steps'] ?? 0), 0)
+      day['totalCalorie'] = items.reduce((total: number, item: UTSJSONObject): number =>
+        total + Number(item['calorie'] ?? 0), 0)
+      day['totalDistance'] = items.reduce((total: number, item: UTSJSONObject): number =>
+        total + Number(item['distance'] ?? 0), 0)
+    }
+    result.push(day)
+  })
+  return result.sort((first: UTSJSONObject, second: UTSJSONObject): number =>
+    Number(second['time'] ?? 0) - Number(first['time'] ?? 0))
+}
+
+function recordDay(type: string, record: any): UTSJSONObject {
+  const detail = (record.detail ?? {}) as UTSJSONObject
+  const time = Math.floor((record.measuredAt ?? Date.now()) / 1000)
+  const date = `${detail['date'] ?? ''}`
+  if (type == 'step') {
+    const rawItems = (detail['items'] ?? []) as Array<any>
+    const items = rawItems.map((item: any, index: number): UTSJSONObject => ({
+      time: timestampSeconds(item.measuredAt ?? item.timestamp ?? item.time ?? 0),
+      index: item.index ?? index,
+      steps: item.steps ?? item.step ?? 0,
+      calorie: item.calorie ?? 0,
+      distance: item.distance ?? 0
+    } as UTSJSONObject))
+    return { time, date, totalSteps: record.value ?? 0, totalCalorie: detail['calorie'] ?? 0,
+      totalDistance: detail['distance'] ?? 0, activityDataInterval: detail['activityDataInterval'] ?? 60,
+      items } as UTSJSONObject
+  }
+  if (type == 'sleep') {
+    const rawItems = (detail['items'] ?? []) as Array<any>
+    const items = rawItems.map((item: any): UTSJSONObject => ({ len: item.minutes ?? item.len ?? 0, sleepType: item.sleepType ?? 0 } as UTSJSONObject))
+    return { time, date, duration: (detail['totalMinutes'] ?? 0) as number,
+      beginTime: Math.floor(((detail['asleepAt'] ?? 0) as number) / 1000),
+      endTime: Math.floor(((detail['awakeAt'] ?? 0) as number) / 1000), items } as UTSJSONObject
+  }
+  if (type == 'muslimCount') return { time, date, totalCount: record.value ?? 0, items: [{ time, count: record.value ?? 0 }] } as UTSJSONObject
+  let item = { time } as UTSJSONObject
+  if (type == 'hr') item['hr'] = record.value ?? 0
+  else if (type == 'bo') item['bloodOxy'] = record.value ?? 0
+  else if (type == 'bp') {
+    const parts = `${record.value ?? ''}`.split('/')
+    item['systolic'] = detail['systolic'] ?? Number(parts[0] ?? 0)
+    item['diastolic'] = detail['diastolic'] ?? Number(parts[1] ?? 0)
+  } else if (type == 'hrv') item['hrv'] = record.value ?? 0
+  else if (type == 'pressure') item['pressure'] = record.value ?? 0
+  else if (type == 'bloodSugar') item['bloodSugar'] = record.value ?? 0
+  else if (type == 'temp') item['temp'] = record.value ?? 0
+  return { time, date, items: [item] } as UTSJSONObject
+}
+
+function normalizedSyncRecords(nativeType: string, records: Array<any>): SyncResult {
+  const type = syncType(nativeType)
+  const data = type == 'step'
+    ? normalizedStepRecords(records)
+    : records.map((record: any): UTSJSONObject => recordDay(type, record))
+  return { type, data } as SyncResult
+}
+
+export const syncAllHealthData: SyncAllHealthData = function(options: VoidOptions): void {
+  if (!ensureClient(options)) return
+  client!.syncAllHealthData({
+    onProgress: (progress: any) => syncProgressListener?.(progress.percent ?? 0)
+  }).then((result: any) => {
+    Object.keys(result.records ?? {}).forEach(type => {
+      syncResultListener?.(normalizedSyncRecords(type, result.records[type] ?? []))
+    })
+    if (Object.keys(result.errors ?? {}).length > 0) syncErrorListener?.(result.errors as UTSJSONObject)
+    syncProgressListener?.(100); syncFinishListener?.(); succeed(options.success, options.complete)
+  }).catch(error => {
+    syncErrorListener?.({ message: `${error}` } as UTSJSONObject)
+    rejectValue(options, error, 'syncAllHealthData failed')
+  })
+}
+
+export const removeHealthDataCallback: RemoveHealthDataCallback = function(options: VoidOptions): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  syncProgressListener = null; syncResultListener = null; syncFinishListener = null; syncErrorListener = null
+  succeed(options.success, options.complete)
+}
+
+export const ringOta: RingOta = function(options: OtaOptions): void {
+  if (!ensureClient(options)) return
+  wx.getFileSystemManager().readFile({
+    filePath: options.path,
+    success: (result: any): void => {
+      const bytes = new Uint8Array(result.data as ArrayBuffer)
+      client!.upgradeFirmware(bytes, { onProgress: (progress: number) => otaProgressListener?.(progress) })
+        .then(() => {
+          otaFinishListener?.({ success: true } as OtaResult)
+          succeed(options.success, options.complete)
+        }).catch(error => {
+          const code = typeof error?.errCode === 'number' ? error.errCode : undefined
+          otaFinishListener?.({ success: false, code } as OtaResult)
+          rejectValue(options, error, 'ringOta failed')
+        })
+    },
+    fail: (error: any): void => rejectValue(options, error, 'read firmware failed')
+  })
+}
+
+export const unbind: Unbind = function(options: VoidOptions): void {
+  if (!initialized) {
+    const error = new RwfitFailImpl(9201001, null, null); options.fail?.(error); options.complete?.(error); return
+  }
+  if (client == null) { currentDevice = null; succeed(options.success, options.complete); return }
+  client!.disconnect('unbind').then(() => {
+    deviceEventUnsubscribe?.(); deviceEventUnsubscribe = null
+    connectionUnsubscribe?.(); connectionUnsubscribe = null
+    client = null; connected = false; currentDevice = null
+    succeed(options.success, options.complete)
+  }).catch(error => rejectValue(options, error, 'unbind failed'))
+}
+
+export const pushMessage: PushMessage = function(options: PushMessageOptions): void { unsupported(options, 'Message push is not exposed by the WeChat SDK') }
+export const setNotificationSwitch: SetNotificationSwitch = function(options: SetNotificationSwitchOptions): void { unsupported(options, 'Notification switch is not exposed by the WeChat SDK') }
+export const getNotificationSwitch: GetNotificationSwitch = function(options: JsonResultOptions): void { unsupported(options, 'Notification switch is not exposed by the WeChat SDK') }
+
+export const onScanResult: OnScanResult = function(callback: (device: BleDevice) => void): void { scanResultListener = callback }
+export const offScanResult: OffScanResult = function(): void { scanResultListener = null }
+export const onScanFinish: OnScanFinish = function(callback: () => void): void { scanFinishListener = callback }
+export const offScanFinish: OffScanFinish = function(): void { scanFinishListener = null }
+export const onConnectState: OnConnectState = function(callback: (event: ConnectStateEvent) => void): void { connectStateListener = callback }
+export const offConnectState: OffConnectState = function(): void { connectStateListener = null }
+export const onFunctionMenu: OnFunctionMenu = function(callback: (menu: FunctionMenu) => void): void { functionMenuListener = callback }
+export const offFunctionMenu: OffFunctionMenu = function(): void { functionMenuListener = null }
+export const onRealtimeData: OnRealtimeData = function(callback: (data: RealtimeData) => void): void { realtimeDataListener = callback }
+export const offRealtimeData: OffRealtimeData = function(): void { realtimeDataListener = null }
+export const onRealtimeMeasureComplete: OnRealtimeMeasureComplete = function(callback: () => void): void { realtimeCompleteListener = callback }
+export const offRealtimeMeasureComplete: OffRealtimeMeasureComplete = function(): void { realtimeCompleteListener = null }
+export const onWorkoutRealtimeData: OnWorkoutRealtimeData = function(callback: (data: WorkoutRealtimeData) => void): void { workoutRealtimeListener = callback }
+export const offWorkoutRealtimeData: OffWorkoutRealtimeData = function(): void { workoutRealtimeListener = null }
+export const onSyncProgress: OnSyncProgress = function(callback: (progress: number) => void): void { syncProgressListener = callback }
+export const offSyncProgress: OffSyncProgress = function(): void { syncProgressListener = null }
+export const onSyncResult: OnSyncResult = function(callback: (result: SyncResult) => void): void { syncResultListener = callback }
+export const offSyncResult: OffSyncResult = function(): void { syncResultListener = null }
+export const onSyncFinish: OnSyncFinish = function(callback: () => void): void { syncFinishListener = callback }
+export const offSyncFinish: OffSyncFinish = function(): void { syncFinishListener = null }
+export const onSyncError: OnSyncError = function(callback: (error: UTSJSONObject) => void): void { syncErrorListener = callback }
+export const offSyncError: OffSyncError = function(): void { syncErrorListener = null }
+export const onOtaProgress: OnOtaProgress = function(callback: (progress: number) => void): void { otaProgressListener = callback }
+export const offOtaProgress: OffOtaProgress = function(): void { otaProgressListener = null }
+export const onOtaFinish: OnOtaFinish = function(callback: (result: OtaResult) => void): void { otaFinishListener = callback }
+export const offOtaFinish: OffOtaFinish = function(): void { otaFinishListener = null }
+export const onTouchEvent: OnTouchEvent = function(callback: (event: TouchEvent) => void): void { touchEventListener = callback }
+export const offTouchEvent: OffTouchEvent = function(): void { touchEventListener = null }
+// WeChat SDK has no call-control event source. Event registration deliberately
+// remains a safe no-op because the shared on* contract has no failure callback;
+// the command-style controlPhone API reports 9201007 instead.
+export const onCallControl: OnCallControl = function(_callback: (event: CallControlEvent) => void): void {}
+export const offCallControl: OffCallControl = function(): void {}
+export const onHealthAlert: OnHealthAlert = function(callback: (event: HealthAlertEvent) => void): void { healthAlertListener = callback }
+export const offHealthAlert: OffHealthAlert = function(): void { healthAlertListener = null }
+export const onHeartRateCalibration: OnHeartRateCalibration = function(callback: (result: HeartRateCalibrationResult) => void): void { heartRateCalibrationListener = callback }
+export const offHeartRateCalibration: OffHeartRateCalibration = function(): void { heartRateCalibrationListener = null }
+export const onSensorRawData: OnSensorRawData = function(callback: (packet: SensorRawPacket) => void): void { sensorRawListener = callback }
+export const offSensorRawData: OffSensorRawData = function(): void { sensorRawListener = null }
+export const onSensorRawStopped: OnSensorRawStopped = function(callback: (event: SensorRawStoppedEvent) => void): void { sensorStoppedListener = callback }
+export const offSensorRawStopped: OffSensorRawStopped = function(): void { sensorStoppedListener = null }

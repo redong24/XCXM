@@ -1,0 +1,492 @@
+/**
+ * RWFIT BLE public contract.
+ *
+ * Flutter is the canonical facade. UTS uses callback options because callbacks
+ * are the portable asynchronous mechanism across all four target runtimes.
+ */
+
+export type RwfitErrorCode =
+  9201001 | // SDK not initialized
+  9201002 | // Bluetooth unavailable
+  9201003 | // permission denied
+  9201004 | // invalid argument
+  9201005 | // device not connected/ready
+  9201006 | // timeout
+  9201007 | // unsupported on this platform/device
+  9201099   // native SDK error
+
+export interface RwfitFail extends IUniError {
+  errCode: RwfitErrorCode
+  nativeCode?: number | null
+}
+
+export type VoidOptions = {
+  success?: () => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type StringResultOptions = {
+  success?: (result: string) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type BooleanResultOptions = {
+  success?: (result: boolean) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type NumberResultOptions = {
+  success?: (result: number) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type JsonResultOptions = {
+  success?: (result: UTSJSONObject) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type JsonListResultOptions = {
+  success?: (result: Array<UTSJSONObject>) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type BleDevice = {
+  name: string
+  mac: string
+  rssi: number
+  uuid?: string
+  deviceId?: string
+  systemConnected?: boolean
+}
+
+export type ConnectState = 'connecting' | 'connected' | 'disconnected' | 'failed'
+
+export type ConnectStateEvent = {
+  state: ConnectState
+  name?: string
+  mac?: string
+  uuid?: string
+  reason?: string
+}
+
+export type FunctionMenu = {
+  name: string
+  mac: string
+  uuid?: string
+  raw: UTSJSONObject
+}
+
+export type FirmwareInfo = {
+  /** Device model/class used to verify OTA firmware compatibility. */
+  deviceClazz: string
+  /** Firmware version. The legacy Android SDK names this field `deviceNo`. */
+  deviceNo: string
+  /** UI/resource version reported by the device. */
+  uiVersion: string
+}
+
+export type UserInfo = {
+  gender: number
+  age: number
+  height: number
+  weight: number
+}
+
+export type TimedConfig = {
+  isOpen: boolean
+  duration: number
+  startHour: number
+  startMin: number
+  endHour: number
+  endMin: number
+}
+
+export type RealtimeMetric =
+  'hr' | 'bloodOxy' | 'hrv' | 'pressure' | 'bloodSugar' | 'bloodPressure'
+
+export type RealtimeData = {
+  dataType: number
+  dataValue: number
+  diastolic?: number
+  time: number
+}
+
+export type WorkoutState = {
+  sportType: number
+  controlType: number
+}
+
+export type WorkoutRealtimeData = {
+  duration: number
+  steps: number
+  distance: number
+  calorie: number
+  heartRate: number
+  dataType: number
+}
+
+export type WorkoutValueItem = {
+  index: number
+  value: number
+}
+
+export type WorkoutReport = {
+  startTime: number
+  endTime: number
+  date: string
+  sportType: number
+  duration: number
+  step: number
+  distance: number
+  calorie: number
+  height: number
+  pressure: number
+  cadence: number
+  speed: number
+  pace: number
+  averageHeartRate: number
+  maxHeartRate: number
+  minHeartRate: number
+  maxCadence: number
+  minCadence: number
+  maxPace: number
+  minPace: number
+  heartRateCount: number
+  viewType: number
+  heartRateItems: Array<WorkoutValueItem>
+  pacePerKmItems: Array<WorkoutValueItem>
+}
+
+export type HeartRateAlertConfig = {
+  isOpen: boolean
+  highThreshold: number
+  lowThreshold?: number | null
+}
+
+export type BloodOxygenAlertConfig = {
+  isOpen: boolean
+  lowThreshold: number
+}
+
+export type HealthAlertEvent = {
+  type: number
+  value: number
+}
+
+export type HeartRateCalibrationResult = {
+  testMode: number
+  result: number
+}
+
+export type AccRawSample = { x: number, y: number, z: number }
+export type SleepRawSample = { timestampSec: number, mode: number }
+
+export type SensorRawPacket = {
+  type: number
+  sequence?: number
+  timestampSec?: number
+  ppg: Array<number>
+  acc: Array<AccRawSample>
+  ppgRed: Array<number>
+  ir: Array<number>
+  sleep: Array<SleepRawSample>
+}
+
+export type SensorRawStoppedEvent = { reason: number }
+
+export type Alarm = {
+  alarmId: number
+  startHour: number
+  startMin: number
+  isOpen: boolean
+  repeats: Array<number>
+}
+
+export type ScheduleToggle = {
+  isOpen: boolean
+  startHour: number
+  startMin: number
+  endHour: number
+  endMin: number
+}
+
+export type LedLevel = { isOpen: boolean, lcdLevel: number }
+export type VibrationConfig = { count: number, level: number }
+export type SyncResult = { type: string, data: Array<UTSJSONObject> }
+export type OtaResult = { success: boolean, code?: number | null }
+export type TouchEvent = { action: string, keyType: number, touchType: number }
+export type CallControlEvent = { action: string, rawValue: number }
+
+export type FunctionListResult = {
+  code: number
+  msg: string
+  supportMenu: UTSJSONObject
+}
+
+export type FirmwareResultOptions = {
+  success?: (result: FirmwareInfo) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type FunctionListResultOptions = {
+  success?: (result: FunctionListResult) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type TimedConfigResultOptions = {
+  success?: (result: TimedConfig) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type WorkoutStateResultOptions = {
+  success?: (result: WorkoutState) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type WorkoutReportListResultOptions = {
+  // uni-app bridges top-level arrays of complex objects through JS as
+  // Array<any>. Every item still conforms to WorkoutReport.
+  success?: (result: Array<any>) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type AlarmListResultOptions = {
+  // Keep the callback ABI compatible with the JS/Swift bridge. Declaring
+  // Array<Alarm> here makes iOS cast a JS [Any] callback to [Alarm] and abort.
+  success?: (result: Array<any>) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type ScheduleToggleResultOptions = {
+  success?: (result: ScheduleToggle) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type LedLevelResultOptions = {
+  success?: (result: LedLevel) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type VibrationResultOptions = {
+  success?: (result: VibrationConfig) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type HeartRateAlertResultOptions = {
+  success?: (result: HeartRateAlertConfig) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type BloodOxygenAlertResultOptions = {
+  success?: (result: BloodOxygenAlertConfig) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type SensorRawListResultOptions = {
+  // Every item still conforms to SensorRawPacket; Array<any> is required only
+  // at the uni-app JS/native callback boundary.
+  success?: (result: Array<any>) => void
+  fail?: (error: RwfitFail) => void
+  complete?: (result: any | null) => void
+}
+
+export type ConnectOptions = { device: BleDevice, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type ReconnectOptions = { device?: BleDevice | null, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetBindedOptions = { isBinded: boolean, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetUserInfoOptions = { info: UserInfo, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetTimeFormatOptions = { format: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetRingBtNameOptions = { name: string, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetTimedConfigOptions = { config: TimedConfig, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type RealtimeMeasureOptions = { metric: RealtimeMetric, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type WorkoutControlOptions = { sportType: number, controlType: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type EnabledOptions = { enabled: boolean, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type PowerControlOptions = { type: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type PhotoControlOptions = { state: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type PhoneControlOptions = { action: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type HeartRateAlertOptions = { config: HeartRateAlertConfig, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type BloodOxygenAlertOptions = { config: BloodOxygenAlertConfig, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetVibrationIntervalOptions = { intervalMs: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetCountReminderIntervalOptions = { intervalMinutes: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetBrightScreenTimeOptions = { timeSecond: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetVideoHidOptions = { hidOpen: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetAlarmVibrationDurationOptions = { duration: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SensorRawControlOptions = { enabled: boolean, sensorType: number, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+// uni-app exposes complex arrays from JS as Array<any>. Each item must conform
+// to Alarm and is normalized by the platform implementation before SDK use.
+export type SetAlarmOptions = { alarms: Array<any>, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type ScheduleToggleOptions = { config: ScheduleToggle, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type LedLevelOptions = { config: LedLevel, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type BondOptions = { type: number, mac: string, success?: (result: boolean) => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type WearHandOptions = { isRight: boolean, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type VibrationOptions = { config: VibrationConfig, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type OtaOptions = { path: string, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type PushMessageOptions = { message: UTSJSONObject, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+export type SetNotificationSwitchOptions = { switches: UTSJSONObject, success?: () => void, fail?: (error: RwfitFail) => void, complete?: (result: any | null) => void }
+
+// Core lifecycle and connection.
+export type Initialize = (options: VoidOptions) => void
+export type GetSdkVersion = (options: StringResultOptions) => void
+export type GetPluginVersion = (options: StringResultOptions) => void
+export type StartScan = (options: VoidOptions) => void
+export type StopScan = (options: VoidOptions) => void
+export type Connect = (options: ConnectOptions) => void
+export type Disconnect = (options: VoidOptions) => void
+export type IosSetBindedStatus = (options: SetBindedOptions) => void
+export type Reconnect = (options: ReconnectOptions) => void
+export type IsConnected = (options: BooleanResultOptions) => void
+export type GetPower = (options: NumberResultOptions) => void
+export type GetFirmwareVersion = (options: FirmwareResultOptions) => void
+export type SetUserInfo = (options: SetUserInfoOptions) => void
+export type SetTimeFormat = (options: SetTimeFormatOptions) => void
+export type GetFunctionList = (options: FunctionListResultOptions) => void
+export type SetRingBtName = (options: SetRingBtNameOptions) => void
+
+// Events use explicit on/off pairs so pages can release long-lived callbacks.
+export type OnScanResult = (callback: (device: BleDevice) => void) => void
+export type OffScanResult = () => void
+export type OnScanFinish = (callback: () => void) => void
+export type OffScanFinish = () => void
+export type OnConnectState = (callback: (event: ConnectStateEvent) => void) => void
+export type OffConnectState = () => void
+export type OnFunctionMenu = (callback: (menu: FunctionMenu) => void) => void
+export type OffFunctionMenu = () => void
+
+// Remaining commands and events. Keeping every public function here gives all
+// platform implementations the same compile-time contract and IDE hints.
+export type GetTimedHeartRate = (options: TimedConfigResultOptions) => void
+export type GetTimedBloodOxygen = (options: TimedConfigResultOptions) => void
+export type GetTimedHRV = (options: TimedConfigResultOptions) => void
+export type GetTimedStress = (options: TimedConfigResultOptions) => void
+export type GetTimedBloodSugar = (options: TimedConfigResultOptions) => void
+export type GetTimedBloodPressure = (options: TimedConfigResultOptions) => void
+export type GetTimedBodyTemperature = (options: TimedConfigResultOptions) => void
+export type GetTimedPPG = (options: TimedConfigResultOptions) => void
+export type SetTimedHeartRate = (options: SetTimedConfigOptions) => void
+export type SetTimedBloodOxygen = (options: SetTimedConfigOptions) => void
+export type SetTimedHRV = (options: SetTimedConfigOptions) => void
+export type SetTimedStress = (options: SetTimedConfigOptions) => void
+export type SetTimedBloodSugar = (options: SetTimedConfigOptions) => void
+export type SetTimedBloodPressure = (options: SetTimedConfigOptions) => void
+export type SetTimedBodyTemperature = (options: SetTimedConfigOptions) => void
+export type SetTimedPPG = (options: SetTimedConfigOptions) => void
+export type StartRealtimeMeasure = (options: RealtimeMeasureOptions) => void
+export type StopRealtimeMeasure = (options: RealtimeMeasureOptions) => void
+export type GetWorkoutState = (options: WorkoutStateResultOptions) => void
+export type ControlWorkout = (options: WorkoutControlOptions) => void
+export type SetWorkoutRealtimeEnabled = (options: EnabledOptions) => void
+export type GetWorkoutReports = (options: WorkoutReportListResultOptions) => void
+export type FindDevice = (options: VoidOptions) => void
+export type PowerOff = (options: VoidOptions) => void
+export type FactoryReset = (options: VoidOptions) => void
+export type ControlPhoto = (options: PhotoControlOptions) => void
+export type ControlPhone = (options: PhoneControlOptions) => void
+export type GetMuslimCountEnabled = (options: BooleanResultOptions) => void
+export type SetMuslimCountEnabled = (options: EnabledOptions) => void
+export type GetHeartRateAlert = (options: HeartRateAlertResultOptions) => void
+export type SetHeartRateAlert = (options: HeartRateAlertOptions) => void
+export type GetBloodOxygenAlert = (options: BloodOxygenAlertResultOptions) => void
+export type SetBloodOxygenAlert = (options: BloodOxygenAlertOptions) => void
+export type GetVibrationInterval = (options: NumberResultOptions) => void
+export type SetVibrationInterval = (options: SetVibrationIntervalOptions) => void
+export type GetFallDetect = (options: BooleanResultOptions) => void
+export type SetFallDetect = (options: EnabledOptions) => void
+export type GetCountReminderInterval = (options: NumberResultOptions) => void
+export type SetCountReminderInterval = (options: SetCountReminderIntervalOptions) => void
+export type StartHeartRateCalibration = (options: VoidOptions) => void
+export type GetAlarm = (options: AlarmListResultOptions) => void
+export type SetAlarm = (options: SetAlarmOptions) => void
+export type DeleteAllAlarm = (options: VoidOptions) => void
+export type GetRaiseBrightScreen = (options: ScheduleToggleResultOptions) => void
+export type SetRaiseBrightScreen = (options: ScheduleToggleOptions) => void
+export type GetBrightScreenTime = (options: NumberResultOptions) => void
+export type SetBrightScreenTime = (options: SetBrightScreenTimeOptions) => void
+export type GetBrightScreenSleepTime = (options: ScheduleToggleResultOptions) => void
+export type SetBrightScreenSleepTime = (options: ScheduleToggleOptions) => void
+export type GetRingLedLevel = (options: LedLevelResultOptions) => void
+export type SetRingLedLevel = (options: LedLevelOptions) => void
+export type GetVideoHid = (options: NumberResultOptions) => void
+export type SetVideoHid = (options: SetVideoHidOptions) => void
+export type GetRingWearDir = (options: BooleanResultOptions) => void
+export type SetRingWearHand = (options: WearHandOptions) => void
+export type GetVibrationCount = (options: VibrationResultOptions) => void
+export type SetVibrationCount = (options: VibrationOptions) => void
+export type GetAlarmVibrationDuration = (options: NumberResultOptions) => void
+export type SetAlarmVibrationDuration = (options: SetAlarmVibrationDurationOptions) => void
+export type ControlSensorRaw = (options: SensorRawControlOptions) => void
+export type GetSensorRawHistory = (options: SensorRawListResultOptions) => void
+export type CreateOrRemoveBond = (options: BondOptions) => void
+export type SyncAllHealthData = (options: VoidOptions) => void
+export type RemoveHealthDataCallback = (options: VoidOptions) => void
+export type RingOta = (options: OtaOptions) => void
+export type Unbind = (options: VoidOptions) => void
+export type PushMessage = (options: PushMessageOptions) => void
+export type SetNotificationSwitch = (options: SetNotificationSwitchOptions) => void
+export type GetNotificationSwitch = (options: JsonResultOptions) => void
+export type OnRealtimeData = (callback: (data: RealtimeData) => void) => void
+export type OffRealtimeData = () => void
+export type OnRealtimeMeasureComplete = (callback: () => void) => void
+export type OffRealtimeMeasureComplete = () => void
+export type OnWorkoutRealtimeData = (callback: (data: WorkoutRealtimeData) => void) => void
+export type OffWorkoutRealtimeData = () => void
+export type OnSyncProgress = (callback: (progress: number) => void) => void
+export type OffSyncProgress = () => void
+export type OnSyncResult = (callback: (result: SyncResult) => void) => void
+export type OffSyncResult = () => void
+export type OnSyncFinish = (callback: () => void) => void
+export type OffSyncFinish = () => void
+export type OnSyncError = (callback: (error: UTSJSONObject) => void) => void
+export type OffSyncError = () => void
+export type OnOtaProgress = (callback: (progress: number) => void) => void
+export type OffOtaProgress = () => void
+export type OnOtaFinish = (callback: (result: OtaResult) => void) => void
+export type OffOtaFinish = () => void
+export type OnTouchEvent = (callback: (event: TouchEvent) => void) => void
+export type OffTouchEvent = () => void
+export type OnCallControl = (callback: (event: CallControlEvent) => void) => void
+export type OffCallControl = () => void
+export type OnHealthAlert = (callback: (event: HealthAlertEvent) => void) => void
+export type OffHealthAlert = () => void
+export type OnHeartRateCalibration = (callback: (result: HeartRateCalibrationResult) => void) => void
+export type OffHeartRateCalibration = () => void
+export type OnSensorRawData = (callback: (packet: SensorRawPacket) => void) => void
+export type OffSensorRawData = () => void
+export type OnSensorRawStopped = (callback: (event: SensorRawStoppedEvent) => void) => void
+export type OffSensorRawStopped = () => void
+
+export const RWFIT_REALTIME_METRICS = {
+  hr: 'hr',
+  bloodOxy: 'bloodOxy',
+  hrv: 'hrv',
+  pressure: 'pressure',
+  bloodSugar: 'bloodSugar',
+  bloodPressure: 'bloodPressure'
+}
+
+export const RWFIT_SENSOR_RAW_SELECTION = {
+  acc: 1,
+  ppgGreen: 2,
+  ppgGreenAndAcc: 3,
+  ppgRed: 4,
+  ppgRedAndAcc: 5,
+  ppgGreenAndIr: 10,
+  ppgGreenAccAndIr: 11,
+  ppgRedAndIr: 12,
+  ppgRedAccAndIr: 13
+}
