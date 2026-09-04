@@ -131,6 +131,24 @@ export type RawPpgCallback = (result: RawPpgResult) => void
 export const SENSOR_ACC = 1
 export const SENSOR_PPG_GREEN = 2
 export const SENSOR_PPG_GREEN_AND_ACC = 3
+export const SENSOR_PPG_RED = 4
+export const SENSOR_PPG_RED_AND_ACC = 5
+
+// 规则（官方 §5.2.5）：绿光与红光不能共存；红外不能单独启动，须与绿光/红光组合。
+//
+// ⚠️ 易踩坑：控制接口的 sensorType 与返回数据的 type 编号定义**不同**。
+//    sensorType=1 表示开启 ACC，但历史数据 type=1 表示 PPG。
+// 历史数据 type：1=PPG(绿光)  2=ACC  3=PPG Red  4=IR
+export const RAW_TYPE_PPG = 1
+export const RAW_TYPE_ACC = 2
+export const RAW_TYPE_PPG_RED = 3
+export const RAW_TYPE_IR = 4
+
+// 采样率：官方 SDK 文档与代码中**均无任何记载**（已全仓库核查）。
+// 下面这个值是占位假设，**不具备真实性**，仅供 mock 链路联调。
+// 硬件到位后必须实测标定：fs ≈ 一次完整采集的 PPG 总点数 / 实际采集秒数。
+// 标定完成前，任何频域算法（HR/HRV/呼吸率）结果都不可信。
+export const FS_UNCALIBRATED = 125
 
 // ---------------------------------------------------------------------------
 // 原始 PPG 采样率
@@ -1266,6 +1284,10 @@ export function startRawPpgCapture(
   if (USE_MOCK) {
     console.log(`[RwBle] mock 开始原始波形采集（通道 ${channel}）`)
     setTimeout(() => {
+      // RAW_PPG_FS 是**未标定占位值**，不是实测采样率（官方文档无记载，
+      // 且 SDK 文档另一处写 100Hz）。远端 baaf07b 把它更名为
+      // FS_UNCALIBRATED 以强调这一点 —— 语义完全一致，此处沿用本地
+      // 既有名字避免波及其余 6 处引用，但语义按「未标定」理解。
       const fs = RAW_PPG_FS
       const n = fs * 60
       const data: number[] = []
@@ -1280,6 +1302,25 @@ export function startRawPpgCapture(
     }, 3000) // mock 缩短为 3s，避免真等 60s
     return
   }
+  // 【冲突解决记录：本地实现 vs 远端 baaf07b】
+  //   远端该文件是并入 main 前的旧版（387 行），真实采集仍是
+  //   onError('真实模式需先接入插件') 桩；本地是 1357 行、22:06 真机
+  //   已跑通的实现。故此处保留本地代码 —— 机械「优先远端」会删掉
+  //   已验证可用的链路。
+  //
+  // 【但远端带来一条必须保留的权威事实】
+  //   已核实官方文档 blesdkandroid_zh.md §5.2.5：
+  //     原始 PPG/ACC/PPG Red/IR **不支持实时推送，仅支持历史获取**；
+  //     onSensorRawData 实时通道实际只推送 type=5 睡眠状态数据。
+  //   即真实链路应为：
+  //     controlSensorRaw 启动 -> 等停止事件 -> getSensorRawHistory 取历史
+  //   且设备只存最近约 1 分钟数据，收到停止事件必须立即取，否则被覆盖。
+  //   官方另注（§5.2.5）：绿光与红光不能共存；红外不能单独启动。
+  //
+  //   ⚠️ 这解释了 20:08 那轮「命令下发成功但一直静默」：本代码在等
+  //   实时推送，而该通道本就不推 PPG。不过 22:06 的 [CAP] 显示五个
+  //   原始采集能力位全为 false，所以当前固件连历史也取不到 ——
+  //   下方看门狗的结论仍然成立，改走历史通道要等厂家开权限后再做。
   // 真实链路是「启动采集 -> 收流 -> 收到停止事件 -> 再取历史补齐」。
   // 收流与停止事件都由 registerListeners 里的监听处理，这里只负责启动。
   rawCb = callback
