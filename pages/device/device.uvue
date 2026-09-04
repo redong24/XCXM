@@ -67,7 +67,6 @@ import {
   startScan,
   stopScan,
   connect,
-  probeRawAdvertising,
   type BleDevice
 } from '../../utils/rwble.uts'
 
@@ -107,11 +106,6 @@ function onScan() {
   setTimeout(() => {
     setScanning(false)
     stopScan()
-    // 若 SDK 一条都没上报，立刻用系统 BLE 旁路扫一遍：
-    // 用于区分「附近真没设备」与「设备被 SDK 原生广播过滤器丢掉」。
-    if (deviceState.nearbyDevices.length === 0) {
-      probeRawAdvertising(8000)
-    }
   }, 15000)
 }
 
