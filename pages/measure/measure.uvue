@@ -29,7 +29,7 @@
         <text class="result-value">{{ boResult }}%</text>
       </view>
       <view class="result-item">
-        <text class="result-label">样本数</text>
+        <text class="result-label">{{ vitalsMode ? '上报条数' : '样本数' }}</text>
         <text class="result-value">{{ sampleCount }}</text>
       </view>
     </view>
@@ -43,10 +43,10 @@
         :disabled="!deviceState.connected"
         @click="onStart"
       >
-        {{ deviceState.connected ? '开始采集' : '请先连接设备' }}
+        {{ startBtnText }}
       </button>
       <button v-else class="stop-btn" @click="onStop">
-        {{ probing ? '停止探测' : '停止采集' }}
+        {{ probing ? '停止探测' : (vitalsMode ? '停止测量' : '停止采集') }}
       </button>
       <!-- 诊断入口：仅在空闲且设备已连接时出现。
            放在主按钮下方并用弱化样式，避免被误当成正常采集入口。 -->
@@ -66,7 +66,11 @@
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（ref/onUnmounted 等），无需 import
 import { deviceState } from '../../store/device.uts'
-import { dataApi, type RawPPGPayload } from '../../api/index.uts'
+import {
+  dataApi,
+  type RawPPGPayload,
+  type HardwareResultPayload
+} from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 import {
   initSDK,
@@ -75,9 +79,12 @@ import {
   isRawAccSupported,
   startRawPpgCapture,
   stopRawPpgCapture,
+  startHealthData,
+  stopHealthData,
   SENSOR_PPG_GREEN,
   SENSOR_ACC,
-  type RawPpgResult
+  type RawPpgResult,
+  type HardwareResultValue
 } from '../../utils/rwble.uts'
 
 const measuring = ref(false)
@@ -90,6 +97,32 @@ const sampleCount = ref('--')
 // 用来把按钮文案和状态文字区分开 —— 探测不产生业务数据，
 // 如果沿用「采集中」会让用户以为拿到了 PPG。
 const probing = ref(false)
+
+// 是否处于「结果值测量」（HR/血氧/HRV），区别于原始波形采集。
+//
+// 【为什么要有这条路】
+//   [CAP] 实测该固件 PPG/ACC 等原始通道全 false，但 HR/血氧/HRV 全 true。
+//   原先本页只有原始波形一条路，能力位闸门弹完窗就 return，页面变成
+//   只会拒绝用户的死页面 —— 而设备明明能出数。这是 APP 侧的设计漏洞。
+const vitalsMode = ref(false)
+
+// 本次结果值测量已收到的上报条数，用来给用户「在动」的反馈。
+const vitalsCount = ref(0)
+
+// 结果值测量窗口定时器（60 秒，与 Q22 锁定的窗口一致）。
+// 0 表示未启动 —— UTS 里 setTimeout 返回 number，不能用 null 判空。
+let vitalsTimer = 0
+const VITALS_WINDOW_MS = 60000
+
+// 主按钮文案：直说这一下会做什么，别让用户猜。
+// 原始波形不可用时写「测量心率/血氧」而不是含糊的「开始采集」——
+// 名不符实的按钮文案就是在骗用户。
+const startBtnText = computed((): string => {
+  if (!deviceState.connected) {
+    return '请先连接设备'
+  }
+  return isRawPpgSupported() ? '开始采集（原始波形）' : '测量心率/血氧（60 秒）'
+})
 
 // 原始 PPG 采集结果处理（async）
 // 注意：UTS 不存在函数声明提升，必须先定义、后使用，故放在 onStart 之前
@@ -131,6 +164,117 @@ async function handleRawPpgResult(raw: RawPpgResult) {
   }
 }
 
+// 单条结果值上传。
+//
+// 与 home.uvue 的 onResultValue 走同一条后端链路
+// （/api/data/hardware-result），不需要新接口 —— 后端和首页早就在用。
+// 上传失败只记日志、不打断测量：测量本身的价值高于单条上传成败。
+async function uploadVital(r: HardwareResultValue) {
+  // reactive 属性是 getter，判空后必须先提到局部 const，
+  // 否则 Kotlin 侧访问 .id 会报 nullable receiver。
+  const dev = deviceState.currentDevice
+  if (dev == null) {
+    return
+  }
+  try {
+    clearApiError()
+    await dataApi.uploadHardwareResult({
+      device_id: dev.id,
+      type: r.type,
+      value: r.value,
+      timestamp: new Date(r.timestamp).toISOString()
+    } as HardwareResultPayload)
+  } catch (e) {
+    console.error(`[measure] 结果值上传失败：${takeApiErrorText('')}`)
+  }
+}
+
+// 结果值测量的订阅回调。
+//
+// 【为什么必须是命名函数】
+//   rwble 用 indexOf 比对引用来退订。内联箭头函数每次都是新对象，
+//   退订会失败并造成引用计数泄漏（设备永远停不下来）。
+//   声明位置也有讲究：必须在 startVitals 之前，UTS 没有函数提升。
+function onVitalValue(r: HardwareResultValue) {
+  vitalsCount.value = vitalsCount.value + 1
+  if (r.type == 'hr') {
+    hrResult.value = `${r.value}`
+  } else if (r.type == 'bo') {
+    boResult.value = `${r.value}`
+  }
+  // HRV 不在本页展示（首页同样的取舍：界面上常年显示 -- 是在消耗信任），
+  // 但照常上传，数据本身有价值。
+  sampleCount.value = `${vitalsCount.value}`
+  hasResult.value = true
+  uploadVital(r)
+}
+
+// 结束结果值测量（正常到点或用户中止都走这里）。
+// 必须声明在 startVitals 之前：UTS 没有函数提升。
+function finishVitals(byUser: boolean) {
+  if (vitalsTimer != 0) {
+    clearTimeout(vitalsTimer)
+    vitalsTimer = 0
+  }
+  stopHealthData(onVitalValue)
+  measuring.value = false
+  vitalsMode.value = false
+  if (vitalsCount.value > 0) {
+    hasResult.value = true
+    statusText.value = byUser ? '已停止' : '测量完成'
+  } else {
+    // 一条都没收到必须说清楚，不能显示「完成」——
+    // 那等于告诉用户成功了，而他手上什么都没有。
+    statusText.value = byUser ? '已停止（未取到数据）' : '未取到数据'
+    uni.showModal({
+      title: '未取到测量数据',
+      content: '60 秒内手环没有上报任何心率/血氧数据。\n\n'
+        + '请确认：手环已戴稳贴合手腕、处于已连接状态。\n\n'
+        + '若反复如此，请把日志发回排查。',
+      showCancel: false
+    })
+  }
+}
+
+// 结果值测量：走设备开放的 HR/血氧/HRV 通道。
+function startVitals() {
+  if (!isDeviceReady()) {
+    uni.showModal({
+      title: '设备未就绪',
+      content: '尚未连接手环，或连接后尚未收到设备功能菜单。\n\n'
+        + '请先到「设备」页连接手环，看到「设备已连接」提示后再回来。',
+      showCancel: false
+    })
+    return
+  }
+  vitalsMode.value = true
+  measuring.value = true
+  probing.value = false
+  hasResult.value = false
+  vitalsCount.value = 0
+  hrResult.value = '--'
+  boResult.value = '--'
+  sampleCount.value = '--'
+  statusText.value = '测量中...（60 秒）'
+
+  // 回调不能是 async：会得到 UTSPromise<Unit> 触发 error17，
+  // 故非 async 包一层，内部调 async 函数且不 await。
+  startHealthData(
+    onVitalValue,
+    (errMsg: string) => {
+      // 注意：rwble 在设备未就绪时会把请求暂存并从这里回一次提示
+      // （v11 的 pendingRealtime），那不是终态失败，所以这里只更新
+      // 状态文字、不退出测量态，等它自动重放。
+      statusText.value = errMsg != '' ? errMsg : '测量未开始'
+    }
+  )
+
+  vitalsTimer = setTimeout(() => {
+    vitalsTimer = 0
+    finishVitals(false)
+  }, VITALS_WINDOW_MS)
+}
+
 // 启动采集的公共实现，通道由调用方给出。
 //
 // 【为什么要参数化通道】
@@ -156,13 +300,21 @@ function startCapture(channel: number) {
   // 原始数据整族关掉了（连 PPG监测 也是 false），属消费级固件。
   // 这不是 APP 能绕过的，jar 里也确认没有任何 unlock/授权命令。
   if (channel != SENSOR_ACC && !isRawPpgSupported()) {
+    // 【这里以前是死路】v11 弹完这个窗就 return，页面对用户毫无用处。
+    // 现在改成：说明清楚，然后**直接改走结果值测量** ——
+    // 设备开放的 HR/血氧/HRV 本来就能用，没有理由让用户空手而归。
     uni.showModal({
-      title: '该设备无法采集原始波形',
-      content: '手环固件上报：不支持原始 PPG 波形输出。\n\n'
-        + '心率/血氧/HRV 可以正常使用，但哮喘预警模型需要原始波形，'
-        + '需厂家提供开启原始数据的固件。\n\n'
-        + '请把日志中 [CAP] 开头的两行发给厂家。',
-      showCancel: false
+      title: '该设备不支持原始波形',
+      content: '手环固件上报：不支持原始 PPG 波形输出（哮喘预警模型需要它，'
+        + '需厂家提供开启原始数据的固件，请把日志中 [CAP] 两行发给厂家）。\n\n'
+        + '心率/血氧可以正常测量，现在改为测量这两项，用时 60 秒。',
+      confirmText: '开始测量',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          startVitals()
+        }
+      }
     })
     return
   }
@@ -198,8 +350,18 @@ function startCapture(channel: number) {
   )
 }
 
+// 主按钮：按设备实际能力选路径。
+//
+// 【为什么要自适应而不是给两个按钮】
+//   用户要的是「测一次」，不该由他判断固件支持什么。
+//   原始波形可用就走科研链路（信息量最大），不可用就退到结果值测量 ——
+//   点主按钮永远有事发生，不会撞墙。
 function onStart() {
-  startCapture(SENSOR_PPG_GREEN)
+  if (isRawPpgSupported()) {
+    startCapture(SENSOR_PPG_GREEN)
+  } else {
+    startVitals()
+  }
 }
 
 // ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
@@ -237,6 +399,13 @@ function onProbeAcc() {
 }
 
 function onStop() {
+  // 两条链路的停止方式不同，必须分流：
+  // 结果值测量要停三个 metric 并清定时器，原始采集要下发停止命令。
+  // 走错分支的后果是设备继续在发数据而界面已经退出测量态。
+  if (vitalsMode.value) {
+    finishVitals(true)
+    return
+  }
   stopRawPpgCapture()
   measuring.value = false
   probing.value = false
@@ -262,8 +431,18 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  // 定时器必须无条件清，否则页面卸载后仍会触发 finishVitals，
+  // 对着已销毁的页面 setState 并弹窗。
+  if (vitalsTimer != 0) {
+    clearTimeout(vitalsTimer)
+    vitalsTimer = 0
+  }
   if (measuring.value) {
-    stopRawPpgCapture()
+    if (vitalsMode.value) {
+      stopHealthData(onVitalValue)
+    } else {
+      stopRawPpgCapture()
+    }
   }
 })
 </script>

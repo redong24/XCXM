@@ -526,11 +526,20 @@ async function onResultValue(r: HardwareResultValue) {
 // 开启实时测量。
 // 必须声明在 onMounted 之前：UTS/Kotlin 没有函数提升，被调用者若写在
 // 调用者之后会直接编译失败（这是 utscheck 的 U05 检查项）。
+// 实时测量订阅回调。
+//
+// 【为什么必须是命名函数而不是内联箭头函数】
+//   rwble 的订阅/退订用 indexOf 比对引用相等。内联箭头函数每次求值
+//   都是新对象，退订时 indexOf 找不到，订阅者会永远留在数组里 ——
+//   引用计数泄漏，设备再也停不下来（持续耗电）。
+//   订阅与退订必须传同一个引用。
+function onRealtimeValue(r: HardwareResultValue) {
+  onResultValue(r)
+}
+
 function startRealtime() {
   startHealthData(
-    (r: HardwareResultValue) => {
-      onResultValue(r)
-    },
+    onRealtimeValue,
     (errMsg: string) => {
       // 最常见的原因是设备还没 ready（等手环上报功能菜单）。
       // 这属于正常时序而非故障，不打扰用户，只留日志。
@@ -566,7 +575,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  stopHealthData()
+  // 传入自己的回调 = 只退订本页，不影响其它页面的订阅
+  // （采集页可能正在做手动加测）。
+  stopHealthData(onRealtimeValue)
   // 只断开本页回调，不销毁 SDK（见 device.uvue 同处注释）。
   // 首页尤其不能销毁：用户从首页进入测量页是主路径，
   // 在这里销毁等于每次走主路径都把刚连好的设备状态清掉。

@@ -200,7 +200,18 @@ let deviceReady = false
 // 类型带 | null 是 UTS 空安全的要求，调用处必须用 ?.() 或判空。
 let connCb: ConnectionCallback | null = null
 let scanFoundCb: ((device: BleDevice) => void) | null = null
-let resultCb: ResultValueCallback | null = null
+// 实时测量订阅者列表。
+//
+// 【为什么从单槽改成数组】
+//   首页常驻订阅实时测量，采集页做「手动加测」时也要订阅。单槽的后果是
+//   后订阅者顶掉前一个，而且采集页测完 stopHealthData 会把槽清空并停掉
+//   三个 metric —— 首页心率从此永久断流。两个页面对同一份数据流各有
+//   合法用途，本来就该同时收到。
+//
+// 这与 registerListeners 注释里「SDK 的 onXxx 是单监听者」是同一类问题，
+// 区别在于那一层由 SDK 决定、我们只能集中注册转发；而这一层是我们自己的
+// 转发层，可以做成多订阅。
+let resultSubs: ResultValueCallback[] = []
 let rawCb: RawPpgCallback | null = null
 
 // 待重放的「启动实时测量」意图。
@@ -348,7 +359,34 @@ export function isConnected(): boolean {
 // 声明位置有讲究：它被 destroySDK 和 startHealthData 调用，而 UTS/Kotlin
 // 没有函数提升，被调用者必须先声明，否则编译直接失败。
 // 这不是风格问题，是硬约束（utscheck 的 U05 检查项就抓到过这里）。
-export function stopHealthData(): void {
+// 加入订阅者，返回加入后的订阅者总数。
+//
+// 去重是必须的：同一个回调被重复订阅会让引用计数虚高，
+// 结果是最后一个页面退订时计数仍 > 0，设备永远停不下来（耗电）。
+function addResultSub(cb: ResultValueCallback): number {
+  if (resultSubs.indexOf(cb) < 0) {
+    resultSubs.push(cb)
+  }
+  return resultSubs.length
+}
+
+// 移除订阅者，返回移除后的剩余数量。
+function removeResultSub(cb: ResultValueCallback): number {
+  const i = resultSubs.indexOf(cb)
+  if (i >= 0) {
+    resultSubs.splice(i, 1)
+  }
+  return resultSubs.length
+}
+
+// 停止实时测量。
+//
+// 【参数 callback 的意义】
+//   传入本页当初订阅时用的那个回调，表示「本页不再需要数据」。
+//   只有当所有订阅者都退订后，才真的向设备下发停止命令 ——
+//   否则采集页测完就会把首页的数据流一起掐断。
+//   不传（null）表示强制全停，仅用于 SDK 销毁等全局场景。
+export function stopHealthData(callback: ResultValueCallback | null = null): void {
   if (mockRealtimeTimer != 0) {
     clearInterval(mockRealtimeTimer)
     mockRealtimeTimer = 0
@@ -356,20 +394,29 @@ export function stopHealthData(): void {
   if (USE_MOCK) {
     return
   }
+  // 退订并判断是否还有别人在用。
+  if (callback != null) {
+    const left = removeResultSub(callback!)
+    if (left > 0) {
+      console.log(`[RwBle] 订阅者退订，仍有 ${left} 个在用，不停止设备测量`)
+      return
+    }
+  }
   // SDK 未初始化时不能碰原生：三条 stopRealtimeMeasure 会各抛一次
   // NoClassDefFoundError。但回调槽必须照清，否则状态永久残留。
   if (!sdkInitialized) {
-    resultCb = null
+    resultSubs = []
     pendingRealtime = null
     pendingRealtimeError = null
     return
   }
   // 三个 metric 是分别启停的（index.uts 的 controlHealth 按 metric 换
   // healthKey 下发指令），所以停的时候也要逐个停，不能只停 hr。
+  console.log('[RwBle] 无订阅者，停止实时测量 hr/bloodOxy/hrv')
   stopRealtimeMeasure({ metric: 'hr' })
   stopRealtimeMeasure({ metric: 'bloodOxy' })
   stopRealtimeMeasure({ metric: 'hrv' })
-  resultCb = null
+  resultSubs = []
   // 用户/页面明确要求停止，排队中的请求当然也要撤销，
   // 否则设备一就绪又自己启动起来了。
   pendingRealtime = null
@@ -392,7 +439,14 @@ function beginRealtime(
   // metric 合法值见 interface.uts:110 RealtimeMetric：
   //   'hr' | 'bloodOxy' | 'hrv' | 'pressure' | 'bloodSugar' | 'bloodPressure'
   // 本项目只用前三个；回调里是 dataType(number)，由 mapDataType 映射。
-  resultCb = callback
+  // 引用计数：只有第一个订阅者才需要真的下发启动命令。
+  // 已经在测了就只登记订阅者，不重复下发（重复下发既浪费命令队列，
+  // 也可能被设备当成异常）。
+  const cnt = addResultSub(callback)
+  if (cnt > 1) {
+    console.log(`[RwBle] 实时测量已在运行，新增订阅者（当前 ${cnt} 个）`)
+    return
+  }
   console.log('[RwBle] 启动实时测量 hr/bloodOxy/hrv')
   // 只对第一个 metric 上报错误，避免三条失败弹三次同样的提示。
   startRealtimeMeasure({
@@ -520,7 +574,14 @@ function registerListeners(): void {
       // 本项目不消费的指标（血压/压力/血糖/计数）直接丢，不伪造成 hr。
       return
     }
-    resultCb?.({ type: t, value: d.dataValue, timestamp: d.time } as HardwareResultValue)
+    // 逐个投递给所有订阅者。
+    // 遍历前先取长度快照：订阅者可能在回调里退订（例如采集页测满
+    // 60 秒后自行结束），边遍历边改数组会漏投或越界。
+    const subs = resultSubs
+    const v = { type: t, value: d.dataValue, timestamp: d.time } as HardwareResultValue
+    for (let i = 0; i < subs.length; i++) {
+      subs[i](v)
+    }
   })
 
   // ---- 原始波形实时流 ----
@@ -684,7 +745,12 @@ export function initSDK(onDone: (ok: boolean, errMsg: string) => void): void {
 export function releasePageCallbacks(): void {
   connCb = null
   scanFoundCb = null
-  resultCb = null
+  // 注意：这里**不清空 resultSubs**。
+  //
+  // 订阅者的生命周期由各页面自己用 stopHealthData(cb) 管理；
+  // 在这里一把清空会把别的页面的订阅也删掉 —— 这正是本次要修的 bug。
+  // connCb/scanFoundCb/rawCb 是真正的单槽（只有发起方一个使用者），
+  // 清掉是对的；resultSubs 是共享的。
   rawCb = null
   // 待重放意图也必须清掉：页面已经卸载了，重放到一个不存在的页面上
   // 等于把数据写进空气，还会让人误以为测量在跑。
@@ -741,7 +807,7 @@ export function destroySDK(): void {
     listenersBound = false
     connCb = null
     scanFoundCb = null
-    resultCb = null
+    resultSubs = []
     rawCb = null
     pendingRealtime = null
     pendingRealtimeError = null
@@ -758,7 +824,7 @@ export function destroySDK(): void {
   listenersBound = false
   connCb = null
   scanFoundCb = null
-  resultCb = null
+  resultSubs = []
   rawCb = null
   pendingRealtime = null
   pendingRealtimeError = null
