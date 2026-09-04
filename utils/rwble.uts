@@ -299,6 +299,12 @@ export function stopHealthData(): void {
   if (USE_MOCK) {
     return
   }
+  // SDK 未初始化时不能碰原生：三条 stopRealtimeMeasure 会各抛一次
+  // NoClassDefFoundError。但回调槽必须照清，否则状态永久残留。
+  if (!sdkInitialized) {
+    resultCb = null
+    return
+  }
   // 三个 metric 是分别启停的（index.uts 的 controlHealth 按 metric 换
   // healthKey 下发指令），所以停的时候也要逐个停，不能只停 hr。
   stopRealtimeMeasure({ metric: 'hr' })
@@ -481,21 +487,41 @@ export function initSDK(onDone: (ok: boolean, errMsg: string) => void): void {
     return
   }
   console.log('[RwBle] 真实模式：开始初始化 rwfit-ble')
-  // initialize 内部会自己申请蓝牙权限（index.uts:418 requestBluetoothPermissions），
-  // 所以这里不需要再手动申请一遍，权限弹窗由 SDK 触发。
-  initialize({
-    success: () => {
-      sdkInitialized = true
-      registerListeners()
-      console.log('[RwBle] 初始化成功，监听已注册')
-      onDone(true, '')
-    },
-    fail: (e: RwfitFail) => {
-      const msg = failText(e.errCode, e.errMsg)
-      console.error(`[RwBle] 初始化失败 ${msg}`)
-      onDone(false, msg)
+  // 为什么要 try/catch：
+  //   NoClassDefFoundError 是 Java Error，不走 SDK 的 fail 回调，
+  //   直接从 initialize() 调用点抛出。不接住的话 onDone 永远不被调用，
+  //   页面那个 showToast 一次都弹不出来，用户只能看到后续「SDK 未初始化」
+  //   —— 那是结果不是原因，据此无法行动。
+  //   SDK 自己的 app-android/index.uts:419/445 也是这么写的，语法可用。
+  try {
+    // initialize 内部会自己申请蓝牙权限（index.uts:418 requestBluetoothPermissions），
+    // 所以这里不需要再手动申请一遍，权限弹窗由 SDK 触发。
+    initialize({
+      success: () => {
+        sdkInitialized = true
+        registerListeners()
+        console.log('[RwBle] 初始化成功，监听已注册')
+        onDone(true, '')
+      },
+      fail: (e: RwfitFail) => {
+        const msg = failText(e.errCode, e.errMsg)
+        console.error(`[RwBle] 初始化失败 ${msg}`)
+        onDone(false, msg)
+      }
+    })
+  } catch (error) {
+    const raw = `${error}`
+    // 把最常见的两类原生失败翻译成「用户下一步该做什么」
+    let msg = raw
+    if (raw.indexOf('NoClassDefFoundError') >= 0) {
+      msg = '原生 SDK 未打入基座：请重新制作自定义调试基座（须云端打包），'
+        + '仅覆盖工程文件不生效'
+    } else if (raw.indexOf('UnsatisfiedLinkError') >= 0) {
+      msg = '原生库与当前设备架构不匹配：请检查基座打包的 CPU 架构'
     }
-  })
+    console.error(`[RwBle] 初始化异常（原生层）：${raw}`)
+    onDone(false, msg)
+  }
 }
 
 export function destroySDK(): void {
@@ -505,6 +531,20 @@ export function destroySDK(): void {
     deviceConnected = false
     deviceReady = false
     console.log('[RwBle] mock 销毁完成')
+    return
+  }
+  // 这里最要紧：destroySDK 挂在 device.uvue:228 / home.uvue:565 的 onUnload 上，
+  // SDK 没起来时用户每次离开页面都会连抛 6 次 NoClassDefFoundError。
+  // 监听本来就没注册成功，没有什么可注销的，直接跳到状态清理。
+  if (!sdkInitialized) {
+    console.log('[RwBle] 跳过注销监听：SDK 未初始化，监听从未注册成功')
+    listenersBound = false
+    connCb = null
+    scanFoundCb = null
+    resultCb = null
+    rawCb = null
+    deviceConnected = false
+    deviceReady = false
     return
   }
   offScanResult()
@@ -561,12 +601,25 @@ export function stopScan(): void {
     console.log('[RwBle] mock 停止扫描')
     return
   }
+  // SDK 没初始化成功时，startScan 早就 return 了，根本没扫过。
+  // 此处若继续往下走，会打印一个恒为 0 的「0 条」并给出整段排查建议，
+  // 把「原生库没加载」误导成「附近没有设备」；随后 sdkStopScan 还会
+  // 再抛一次 NoClassDefFoundError。必须在这里挡住。
+  if (!sdkInitialized) {
+    console.warn('[RwBle] 跳过停止扫描：SDK 未初始化，本轮从未真正开始扫描。'
+      + '请先解决初始化失败（如 NoClassDefFoundError 表示原生 .aar 未打进基座，'
+      + '需重新制作自定义调试基座；模拟器则通常是没有蓝牙硬件）。')
+    scanFoundCb = null
+    return
+  }
   console.log(`[RwBle] 停止扫描，本轮共上报 ${scanSeen} 条`)
   if (scanSeen == 0) {
     // 明确区分故障方向，避免把「SDK 没扫到」误判成「页面 bug」。
+    // 前提：能走到这里说明 SDK 已初始化成功、扫描确实执行过。
     // 下面 4 条的排序与措辞来自对 blesdk-rwfit-2.260724.aar 的反编译，
     // 不是猜测。依据见本文件顶部 SDK_NATIVE_FILTER 注释块。
-    console.warn('[RwBle] 本轮扫描 0 条。按可能性排序：'
+    console.warn('[RwBle] 本轮扫描 0 条（SDK 已就绪，确实没收到广播）。按可能性排序：'
+      + '0) 若跑在模拟器上，模拟器不提供蓝牙适配器，永远扫不到，必须用真机；'
       + '1) 戒指仍被厂家 APP 占用连接 —— BLE 同一时刻只能连一个主机，'
       + '请先在厂家 APP 里断开或解绑，这是最常见原因；'
       + '2) 戒指不在广播态（久置休眠，需摇晃或放上充电器激活）；'
@@ -616,6 +669,13 @@ export function connect(device: BleDevice, onStatus: ConnectionCallback): void {
     }, 1000)
     return
   }
+  // 与 startScan 对称：SDK 没起来就别发起连接，直接把失败态回给页面，
+  // 否则 sdkConnect 抛 NoClassDefFoundError，页面会一直卡在「连接中」。
+  if (!sdkInitialized) {
+    console.error('[RwBle] 无法连接：SDK 未初始化')
+    onStatus('failed', null)
+    return
+  }
   // 真实链路是三段式，不能省中间一段：
   //   sdkConnect() -> onConnectState('connected') -> onFunctionMenu() -> 才可用
   // 后两段由 registerListeners 里的监听转发，所以这里只存回调 + 发起连接。
@@ -643,6 +703,10 @@ export function disconnect(): void {
   deviceReady = false
   if (USE_MOCK) {
     console.log('[RwBle] mock 断开')
+    return
+  }
+  if (!sdkInitialized) {
+    console.log('[RwBle] 跳过断开：SDK 未初始化，本来就没有连接')
     return
   }
   console.log('[RwBle] 主动断开')
@@ -750,6 +814,11 @@ export function startRawPpgCapture(
 export function stopRawPpgCapture(): void {
   if (USE_MOCK) {
     console.log('[RwBle] mock 停止原始波形采集')
+    return
+  }
+  if (!sdkInitialized) {
+    console.log('[RwBle] 跳过停止原始采集：SDK 未初始化，本来就没在采')
+    rawCb = null
     return
   }
   console.log('[RwBle] 停止原始波形采集')
