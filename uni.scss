@@ -1,9 +1,84 @@
-/* 全局样式变量 */
-$brand-primary: #3B82F6;
-$brand-success: #10B981;
-$brand-warning: #F59E0B;
-$brand-danger: #EF4444;
-$text-main: #1F2937;
-$text-sub: #6B7280;
-$bg-page: #F5F7FA;
-$bg-card: #FFFFFF;
+/**
+ * 设计 token 单一来源（SCSS 侧）
+ *
+ * 依据 docs/REDESIGN_PLAN.md §4.2 / §4.3 / §4.4。
+ * 脚本侧的同名副本在 styles/tokens.uts，两处必须同时改。
+ *
+ * 约束（技能 Colour Consistency Lock / Theme Lock）：
+ * 1. $accent 是全应用唯一强调色，10 个页面里取值完全一致。
+ * 2. $accent 与三个分区色都不相同，普通按钮不会被误读成报警。
+ * 3. 应用只有一个主题。唯一例外是预警详情页的换肤（$alert-bg），
+ *    换肤本身即报警语义，不得用于任何非报警场景。
+ * 4. 禁止在页面里写裸十六进制色值，一律引用本文件的变量。
+ */
+
+/* ── 基础 6 色 ───────────────────────────────────────── */
+$paper: #F7F8F7; /* 页面底色，极浅冷绿白（不是米白，也不是纯白） */
+$ink: #14181A; /* 主文字，近黑（刻意不是纯黑） */
+$ink-2: #5A6468; /* 次级文字，石板灰 */
+$hairline: #E2E6E4; /* 发丝分隔线，替代卡片堆叠 */
+$accent: #2C6E8F; /* 唯一强调色，克制的临床蓝青 */
+$card: #FFFFFF; /* 仅在抬升确实表达层级时才用 */
+
+/* ── 分区 3 色（源自哮喘行动计划卡，降饱和到医疗观感）── */
+$zone-green: #1F8A5F; /* 安全区 */
+$zone-amber: #C9821B; /* 关注区 */
+$zone-red: #C43A2F; /* 红区，全局保留给报警 */
+
+/* 分区色的浅色衬底，用于哨兵条与状态点 */
+$zone-green-wash: #E8F3EE;
+$zone-amber-wash: #F7EEDC;
+$zone-red-wash: #F7E7E5;
+
+/* ── 预警换肤（全应用唯一的深色界面）─────────────────── */
+$alert-bg: #2A1210; /* 深氧化红，不是黑 */
+$alert-fg: #FFF4F2;
+$alert-fg-2: #E6C4BF;
+$alert-hairline: #4A2320;
+
+/* ── 字体角色（§4.3）──────────────────────────────────
+ * body / utility 走系统 CJK 字栈；metric 走等宽数字。
+ * 等宽是功能理由：心率 98 跳到 101 时数字不左右抖动。
+ */
+$font-body: 'PingFang SC', 'HarmonyOS Sans SC', 'Source Han Sans SC',
+  'Noto Sans CJK SC', 'Microsoft Yahei', sans-serif;
+$font-metric: 'IBM Plex Mono', 'DIN Alternate', ui-monospace, monospace;
+
+/* ── 字号（VISUAL_DENSITY = 5，偏紧凑）─────────────── */
+$fs-metric-xl: 44px; /* 哨兵条下的主数字 */
+$fs-metric: 30px;
+$fs-title: 19px;
+$fs-body: 15px;
+$fs-label: 13px;
+$fs-utility: 11px; /* 时间戳 / 来源标注 */
+
+/* ── 间距（4 的倍数，密度 5）─────────────────────────── */
+$sp-1: 4px;
+$sp-2: 8px;
+$sp-3: 12px;
+$sp-4: 16px;
+$sp-5: 20px;
+$sp-6: 28px;
+$sp-7: 40px;
+
+/* ── 圆角（克制现代医疗风：小圆角，不是胶囊）─────────── */
+$r-sm: 4px;
+$r-md: 8px;
+$r-lg: 12px;
+
+/* ── 线宽 ────────────────────────────────────────────── */
+$hair-w: 1px;
+
+/* ── 命中区（消费级健康 APP，家长可能在慌乱中点击）───── */
+$tap-min: 44px;
+$tap-primary: 56px; /* 预警页「我知道了」主按钮 */
+
+/* ── 旧变量别名（过渡期兼容，页面改造完成后删除）─────── */
+$brand-primary: $accent;
+$brand-success: $zone-green;
+$brand-warning: $zone-amber;
+$brand-danger: $zone-red;
+$text-main: $ink;
+$text-sub: $ink-2;
+$bg-page: $paper;
+$bg-card: $card;

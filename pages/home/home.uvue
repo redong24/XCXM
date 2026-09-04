@@ -1,75 +1,154 @@
 <template>
-  <view class="home-page">
-    <!-- 顶部问候 -->
-    <view class="header">
-      <view>
-        <text class="greeting">你好，{{ userState.user?.name ?? '用户' }}</text>
-        <text class="sub-greeting">实时监测中</text>
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="home-page" :scroll-y="true">
+    <!-- ① 是谁 + 哨兵在不在岗 -->
+    <view class="topbar">
+      <!-- 孩子切换：一击展开，不进二级页。多孩家庭最频繁的操作 -->
+      <view class="who" @click="toggleSwitcher">
+        <text class="who-name">{{ view.personName }}</text>
+        <text class="who-caret">{{ switcherOpen ? '收起' : '切换' }}</text>
       </view>
-      <view class="status-badge" :class="deviceState.connected ? 'online' : 'offline'">
-        <text>{{ deviceState.connected ? '设备已连接' : '设备未连接' }}</text>
+
+      <!-- 哨兵状态：形状 + 文字 + 颜色三重编码。
+           知识库 ux-guidelines 命中「Don't encode status with color alone」(High)，
+           所以 ● ◐ ○ 的形状差异与文字标签都必须在。 -->
+      <view class="sentinel" @click="goAlarmSettings">
+        <text class="sentinel-dot" :style="'color:' + sentinelDotColor">{{ sentinelDot }}</text>
+        <text class="sentinel-text">{{ sentinelText }}</text>
       </view>
     </view>
 
-    <!-- 实时指标卡片 -->
+    <!-- 孩子切换展开层 -->
+    <view v-if="switcherOpen" class="switcher">
+      <view
+        v-for="p in people"
+        :key="p.id"
+        class="switcher-row"
+        @click="selectPerson(p.id)"
+      >
+        <text class="switcher-name" :class="p.id == currentId ? 'switcher-on' : ''">{{ p.name }}</text>
+        <text v-if="p.isSelf" class="switcher-tag">我自己</text>
+        <text class="switcher-zone" :style="'color:' + p.zoneColor">{{ p.hasRing ? p.zoneText : '未绑戒指' }}</text>
+      </view>
+      <view class="switcher-row" @click="goChildren">
+        <text class="switcher-manage">管理看护对象</text>
+      </view>
+    </view>
+
+    <!-- ② 有事吗：哨兵条（唯一记忆点，§4.5） -->
+    <view class="sentinel-block">
+      <view class="bar-track">
+        <!-- 连续带：绿→黄→红 三段等分，是行动计划卡的实体隐喻 -->
+        <view class="bar-seg bar-green"></view>
+        <view class="bar-seg bar-amber"></view>
+        <view class="bar-seg bar-red"></view>
+      </view>
+      <!-- 标记层：单独一行，用左侧留白把标记推到当前风险位置。
+           uvue 不支持 CSS Grid，也不用百分比数学（技能 C19），
+           所以留白宽度在脚本里按 fillPercent 算成 px 再传进来。 -->
+      <view class="bar-marker-row">
+        <view class="bar-marker-gap" :style="'width:' + markerGapPx + 'px'"></view>
+        <view class="bar-marker" :style="'background-color:' + view.zoneColor"></view>
+      </view>
+
+      <text class="zone-text" :style="'color:' + view.zoneColor">{{ view.zoneText }}</text>
+
+      <!-- 数据新鲜度：与风险等级同等重要（§4.4）。
+           无数据时整行不渲染，而不是显示「--」。 -->
+      <text v-if="view.freshText != ''" class="fresh" :class="view.stale ? 'fresh-stale' : ''">
+        {{ view.freshText }}
+      </text>
+      <text v-if="!view.hasRing" class="fresh fresh-stale">这位还没有绑定戒指，哨兵无法值守</text>
+    </view>
+
+    <!-- ③ 数据新不新：两个数字，等宽字，发丝线分隔，无卡片。
+         原先的三张等宽指标卡被技能明确禁止，HRV 卡已删（它常年显示 --）。 -->
     <view class="metrics">
-      <view class="metric-card">
+      <view class="metric">
         <text class="metric-label">心率</text>
-        <text class="metric-value">{{ hrDisplay }}</text>
-        <text class="metric-unit">bpm</text>
+        <view class="metric-line">
+          <text class="metric-value">{{ view.hrText }}</text>
+          <text class="metric-unit">bpm</text>
+        </view>
       </view>
-      <view class="metric-card metric-card-mid">
+      <view class="metric metric-right">
         <text class="metric-label">血氧</text>
-        <text class="metric-value">{{ boDisplay }}</text>
-        <text class="metric-unit">%</text>
-      </view>
-      <view class="metric-card">
-        <text class="metric-label">HRV</text>
-        <text class="metric-value">{{ hrvDisplay }}</text>
-        <text class="metric-unit">ms</text>
+        <view class="metric-line">
+          <text class="metric-value">{{ view.boText }}</text>
+          <text class="metric-unit">%</text>
+        </view>
       </view>
     </view>
 
-    <!-- 预警提示 -->
-    <view v-if="latestAlert != null" class="alert-banner" :class="latestAlertLevelClass">
-      <text class="alert-title">⚠️ 预警提醒</text>
-      <text class="alert-desc">{{ latestAlertLabel }}</text>
+    <!-- ④ 现在做什么 -->
+    <view class="now" @click="goPlan">
+      <text class="now-title">现在要做的</text>
+      <text class="now-body">{{ nowText }}</text>
+      <text class="now-more">查看行动计划</text>
     </view>
 
-    <!-- 手动检测按钮 -->
-    <view class="action-area">
-      <button class="measure-btn" @click="goMeasure">
-        <text>🫁 开始手动检测</text>
-      </button>
+    <!-- ⑤ 过去怎样 -->
+    <view class="recent">
+      <view class="recent-head">
+        <text class="recent-title">最近</text>
+        <text class="recent-more" @click="goHistory">全部日志</text>
+      </view>
+
+      <view v-if="errText != ''" class="state">
+        <text class="state-text">{{ errText }}</text>
+        <text class="state-action" @click="reload">重试</text>
+      </view>
+
+      <view v-if="errText == '' && recent.length == 0" class="state">
+        <text class="state-text">还没有预警记录</text>
+      </view>
+
+      <view v-for="a in recent" :key="a.id" class="recent-row" @click="openAlert(a.id)">
+        <text class="recent-label">{{ a.label }}</text>
+        <text class="recent-time">{{ a.time }}</text>
+        <text class="recent-status">{{ a.status }}</text>
+      </view>
     </view>
 
-    <!-- 最近记录 -->
-    <view class="section">
-      <view class="section-header">
-        <text class="section-title">最近记录</text>
-        <text class="section-more" @click="goHistory">查看全部 ›</text>
-      </view>
-      <view v-if="alertError != ''" class="empty">
-        <text>加载失败：{{ alertError }}</text>
-      </view>
-      <view v-if="alertError == '' && recentAlerts.length === 0" class="empty">
-        <text>暂无记录</text>
-      </view>
-      <view v-for="a in recentAlerts" :key="a.id" class="record-item">
-        <text class="record-type">{{ a.label }}</text>
-        <text class="record-time">{{ a.time }}</text>
-        <text class="record-status">{{ a.status }}</text>
-      </view>
+    <view class="actions">
+      <text class="measure" @click="goMeasure">手动加测</text>
     </view>
-  </view>
+
+    <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
 import { userState, restore as restoreUser } from '../../store/user.uts'
 import { deviceState, restore as restoreDevice } from '../../store/device.uts'
-import { alertApi, dataApi, type AlertInfo, type AlertDisplay, type HardwareResultPayload } from '../../api/index.uts'
+import {
+  alertApi,
+  childApi,
+  dataApi,
+  type AlertInfo,
+  type AlertDisplay,
+  type LatestReadingResp,
+  type HardwareResultPayload
+} from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+import {
+  DISCLAIMER_SHORT,
+  STALE_AFTER_SEC,
+  relativeTimeText,
+  zoneColor,
+  zoneLabel,
+  zoneFromLevel,
+  sentinelColor,
+  type Zone,
+  type SentinelState
+} from '../../styles/tokens.uts'
+import type { ChildDisplay, SentinelView } from '../../types/display.uts'
 import {
   initSDK,
   destroySDK,
@@ -78,31 +157,70 @@ import {
   type HardwareResultValue
 } from '../../utils/rwble.uts'
 
-const hr = ref<number | null>(null)
-const bo = ref<number | null>(null)
-const hrv = ref<number | null>(null)
-const recentAlerts = ref<AlertDisplay[]>([])
-const latestAlert = ref<AlertInfo | null>(null)
-const latestAlertLabel = ref('')
-const latestAlertLevelClass = ref('')
-// 预警加载失败原因（如 role=user 时 /api/alerts 返回 403）。
-// 此前失败只打日志，列表为空，用户会误以为「暂无记录」。
-const alertError = ref('')
+/* ── 哨兵条的宽度常量 ──
+ * uvue 只有 flex 与绝对定位，没有 Grid；技能 C19 禁止百分比数学。
+ * 因此哨兵条用固定像素宽，标记位置在脚本里算成 px。
+ * 值与 <style> 里的 .bar-track 宽度必须一致，改一处必须改另一处。 */
+const BAR_W: number = 300
+const MARKER_W: number = 3
 
-// 注意：UTS 的 String() 不支持 number 参数（Kotlin 侧仅有 CharArray/StringBuffer/StringBuilder 重载），
-// 数字转字符串统一使用模板字符串 `${}`。
-const hrDisplay = computed(() => (hr.value !== null ? `${hr.value}` : '--'))
-const boDisplay = computed(() => (bo.value !== null ? `${bo.value}` : '--'))
-const hrvDisplay = computed(() => (hrv.value !== null ? `${hrv.value}` : '--'))
+const people = ref<ChildDisplay[]>([])
+const currentId = ref<number>(0)
+const switcherOpen = ref<boolean>(false)
+const recent = ref<AlertDisplay[]>([])
+const errText = ref<string>('')
+
+// 实时读数（蓝牙回调写入，只对「当前选中的人」有意义）
+const liveHr = ref<number | null>(null)
+const liveBo = ref<number | null>(null)
+
+// 后端最新读数与预警的原始缓存，切换孩子时本地重算，不重新请求
+const latestCache = ref<LatestReadingResp[]>([])
+const alertCache = ref<AlertInfo[]>([])
+
+const view = ref<SentinelView>({
+  personId: 0,
+  personName: '',
+  zone: 'green' as Zone,
+  zoneColor: zoneColor('green' as Zone),
+  zoneText: '无预警',
+  hasPending: false,
+  fillPercent: 0,
+  freshText: '',
+  stale: false,
+  hrText: '--',
+  boText: '--',
+  hasRing: false
+} as SentinelView)
+
+/* ── 哨兵状态灯 ──
+ * §7.7 的硬约束：本轮只有两个输入（通知权限、网络可达），
+ * 所以算不出「在岗」，值域硬编码为 'amber' | 'gray'。
+ * TODO(§7.3 厂商离线推送落地后): 增加 'green' 分支。在那之前，
+ * 任何人想加绿灯都必须先让离线链路真的通，否则就是假装值守。
+ */
+const sentinelState = ref<SentinelState>('amber')
+const sentinelDot = ref<string>('')
+const sentinelText = ref<string>('')
+const sentinelDotColor = ref<string>('')
+
+function applySentinel(s: SentinelState) {
+  sentinelState.value = s
+  // 形状与颜色分别编码，色盲用户与黑白截图下同样可读
+  sentinelDot.value = s == 'amber' ? '◐' : '○'
+  sentinelDotColor.value = sentinelColor(s)
+  // 不用「运行中」这类含糊词：黄态必须说清它的失效场景
+  sentinelText.value = s == 'amber' ? '仅前台值守' : '哨兵已离岗'
+}
 
 function alertTypeLabel(type: string): string {
   const map = new Map<string, string>()
-  map.set('hr_high', '心率过高')
-  map.set('hr_low', '心率过低')
-  map.set('bo_low', '血氧过低')
+  map.set('hr_high', '心率偏高')
+  map.set('hr_low', '心率偏低')
+  map.set('bo_low', '血氧偏低')
   map.set('cv_hr', '心率互验告警')
   map.set('cv_bo', '血氧互验告警')
-  map.set('cv_hrv', 'HRV互验告警')
+  map.set('cv_hrv', 'HRV 互验告警')
   return map.get(type) ?? type
 }
 
@@ -117,6 +235,255 @@ function formatTime(iso: string): string {
   }
 }
 
+/** ISO 串距今多少秒。解析失败返回 -1，调用方据此判定「无有效时间」。 */
+function secondsAgo(iso: string): number {
+  if (iso == '') { return -1 }
+  try {
+    const t = new Date(iso).getTime()
+    if (t <= 0) { return -1 }
+    return (Date.now() - t) / 1000
+  } catch (e) {
+    return -1
+  }
+}
+
+/**
+ * 风险位置 -> 哨兵条上的百分比。
+ *
+ * 刻意用三个离散档位而不是连续插值：
+ * 后端目前把所有预警都写成 level=3（分档要等 C6 的 B5），
+ * 连续插值会让标记停在一个看起来精确、实则编造的位置。
+ * 离散档位至少是诚实的。
+ */
+function fillOf(hasPending: boolean, z: Zone): number {
+  if (!hasPending) { return 8 }        // 无预警：停在绿段起点附近
+  if (z == 'red') { return 88 }
+  if (z == 'amber') { return 50 }
+  return 16
+}
+
+/**
+ * 按人筛出最近 5 条预警。
+ *
+ * reload 与 selectPerson 都要用它，抽成函数而不是抄两遍：
+ * 两份副本必然漂移，而这里一旦漂移就是「切了人但记录没跟着换」。
+ */
+function recentOf(personId: number): AlertDisplay[] {
+  const out: AlertDisplay[] = []
+  const all = alertCache.value
+  let count: number = 0
+  for (let i = 0; i < all.length; i++) {
+    const a = all[i]
+    if (a.user_id != personId) { continue }
+    if (count >= 5) { break }
+    count = count + 1
+    out.push({
+      id: a.id,
+      status: a.status,
+      label: alertTypeLabel(a.alert_type),
+      valueText: '',
+      time: formatTime(a.created_at),
+      statusClass: ''
+    } as AlertDisplay)
+  }
+  return out
+}
+
+/** 标记左侧留白的像素值。模板里不做算术，一律脚本算完。 */
+const markerGapPx = computed<number>(() => {
+  const pct = view.value.fillPercent
+  const raw = (BAR_W - MARKER_W) * pct / 100
+  return Math.floor(raw)
+})
+
+/** 「现在要做的」文案。取自行动计划的当前分区。 */
+const nowText = computed<string>(() => {
+  const v = view.value
+  if (!v.hasRing) { return '先给这位绑定戒指，哨兵才能开始值守' }
+  if (!v.hasPending) { return '保持安静 · 坐直 · 观察呼吸' }
+  if (v.zone == 'red') { return '让孩子坐直不要躺下 · 按行动计划使用缓解药' }
+  return '减少活动 · 坐直休息 · 留意呼吸是否变快'
+})
+
+/**
+ * 用当前选中的人重算哨兵视图。
+ *
+ * 纯本地计算，不发请求：切换孩子必须是瞬时的，
+ * 否则「一击切换」的意义就没了。
+ */
+function recompute() {
+  const list = people.value
+  if (list.length == 0) { return }
+
+  // 找当前选中的人；找不到就回落到第一项（后端保证第一项是「我自己」）
+  let me: ChildDisplay | null = null
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id == currentId.value) { me = list[i] }
+  }
+  if (me == null) {
+    me = list[0]
+    currentId.value = list[0].id
+  }
+  const p = me!
+
+  // 该人未处理预警的最高 level
+  let maxLevel: number = 0
+  const alerts = alertCache.value
+  for (let i = 0; i < alerts.length; i++) {
+    const a = alerts[i]
+    if (a.user_id != p.id) { continue }
+    if (a.status != '待处理') { continue }
+    if (a.level > maxLevel) { maxLevel = a.level }
+  }
+  const hasPending = maxLevel > 0
+  const z = hasPending ? zoneFromLevel(maxLevel) : ('green' as Zone)
+
+  // 该人的最新读数。实时蓝牙值只在「当前选中的人正是戒指主人」时才覆盖，
+  // 否则会把 A 的实时心率显示在 B 的名下。
+  let hrText: string = '--'
+  let boText: string = '--'
+  let newestSec: number = -1
+  const readings = latestCache.value
+  for (let i = 0; i < readings.length; i++) {
+    const r = readings[i]
+    if (r.user_id != p.id) { continue }
+    if (r.type == 'hr') { hrText = `${Math.round(r.value)}` }
+    else if (r.type == 'bo') { boText = `${Math.round(r.value)}` }
+    const sec = secondsAgo(r.timestamp)
+    if (sec >= 0 && (newestSec < 0 || sec < newestSec)) { newestSec = sec }
+  }
+
+  // 实时值覆盖，但**只在戒指真的绑在这个人身上时**才覆盖。
+  // 必须比 device.bind_user_id 与当前选中的人，不能只判「设备存在」：
+  // 家长用自己的手机连着孩子的戒指看自己的页面时，
+  // 孩子的实时心率会被显示成家长的。这与 C3 在 data.py 修的
+  // 归属错误是同一个 bug 的界面侧版本。
+  // 注意：reactive 属性是 getter，Kotlin 不做智能转换，必须先提取局部 const。
+  const dev = deviceState.currentDevice
+  if (dev != null && dev!.bind_user_id == p.id) {
+    const h = liveHr.value
+    const b = liveBo.value
+    if (h != null) { hrText = `${Math.round(h!)}`; newestSec = 0 }
+    if (b != null) { boText = `${Math.round(b!)}`; newestSec = 0 }
+  }
+
+  const fresh = newestSec >= 0 ? relativeTimeText(newestSec) : ''
+  const stale = newestSec < 0 || newestSec > STALE_AFTER_SEC
+
+  view.value = {
+    personId: p.id,
+    personName: p.name,
+    zone: z,
+    zoneColor: hasPending ? zoneColor(z) : zoneColor('green' as Zone),
+    // 无预警时说「无预警」，不说「安全区」：我们只知道没触发阈值，
+    // 不知道这个人此刻是否安全，界面不该替医生下结论（§11.1）
+    zoneText: hasPending ? zoneLabel(z) : '无预警',
+    hasPending: hasPending,
+    fillPercent: fillOf(hasPending, z),
+    // 有戒指但从未上传过，与「上传过但很久了」是两件事，
+    // 前者留空让界面隐藏该行，后者显示相对时间并标记过期
+    freshText: fresh,
+    stale: stale,
+    hrText: hrText,
+    boText: boText,
+    hasRing: p.hasRing
+  } as SentinelView
+}
+
+// 注意：UTS 不存在函数声明提升（必须先声明后使用）
+async function reload() {
+  errText.value = ''
+  clearApiError()
+  try {
+    const ps = await childApi.mine()
+
+    // 三个请求都拉全量，之后全部本地归组。
+    // 切换孩子时不再发任何请求（N+1 会让切换有可见延迟，
+    // 而「一击切换」是多孩家庭最频繁的操作）。
+    alertCache.value = await alertApi.list()
+    latestCache.value = await dataApi.latest()
+
+    // 一次构建到位：先前写成「先建默认再整表覆盖」，
+    // 两份构建逻辑并存迟早漂移，合并成一次。
+    const rows: ChildDisplay[] = []
+    const alerts = alertCache.value
+    for (let i = 0; i < ps.length; i++) {
+      const p = ps[i]
+      let lv: number = 0
+      for (let j = 0; j < alerts.length; j++) {
+        const a = alerts[j]
+        if (a.user_id == p.id && a.status == '待处理' && a.level > lv) { lv = a.level }
+      }
+      const has = lv > 0
+      const z = has ? zoneFromLevel(lv) : ('green' as Zone)
+      const age = p.age
+
+      // 每个人的「最近一次上传」：C3 时这里是 TODO，B10 之后有真实数据源了
+      let newest: number = -1
+      const readings = latestCache.value
+      for (let j = 0; j < readings.length; j++) {
+        const r = readings[j]
+        if (r.user_id != p.id) { continue }
+        const sec = secondsAgo(r.timestamp)
+        if (sec >= 0 && (newest < 0 || sec < newest)) { newest = sec }
+      }
+
+      rows.push({
+        id: p.id,
+        name: p.name,
+        isSelf: p.is_self,
+        age: age,
+        ageText: age == null ? '未填年龄' : `${age} 岁`,
+        hasRing: p.has_ring,
+        zone: z,
+        zoneColor: has ? zoneColor(z) : zoneColor('green' as Zone),
+        zoneText: has ? zoneLabel(z) : '无预警',
+        lastUploadText: newest >= 0 ? relativeTimeText(newest) : ''
+      } as ChildDisplay)
+    }
+    people.value = rows
+    if (currentId.value == 0 && rows.length > 0) {
+      currentId.value = rows[0].id      // 后端保证第一项是「我自己」
+    }
+
+    // 最近记录：只显示当前这个人的，避免家长看到一串不知道是谁的预警
+    recent.value = recentOf(currentId.value)
+
+    recompute()
+  } catch (e) {
+    errText.value = takeApiErrorText('读取失败')
+  }
+}
+
+function toggleSwitcher() {
+  switcherOpen.value = !switcherOpen.value
+}
+
+function selectPerson(id: number) {
+  currentId.value = id
+  switcherOpen.value = false
+  // 切人后最近记录跟着换，但不重新请求，用缓存重算（切换必须是瞬时的）
+  recent.value = recentOf(id)
+  recompute()
+}
+
+function goChildren() {
+  switcherOpen.value = false
+  uni.navigateTo({ url: '/pages/children/children' })
+}
+
+function goAlarmSettings() {
+  uni.navigateTo({ url: '/pages/settings/alarm' })
+}
+
+function goPlan() {
+  uni.navigateTo({ url: '/pages/plan/plan' })
+}
+
+function openAlert(id: number) {
+  uni.navigateTo({ url: `/pages/alert/detail?id=${id}` })
+}
+
 function goMeasure() {
   uni.navigateTo({ url: '/pages/measure/measure' })
 }
@@ -125,49 +492,16 @@ function goHistory() {
   uni.switchTab({ url: '/pages/history/history' })
 }
 
-// 拉取预警列表，并预计算展示字段
-// 注意：UTS 不存在函数声明提升（必须先声明、后使用），
-// 因此 loadAlerts 必须定义在调用它的 onResultValue 之前
-async function loadAlerts() {
-  alertError.value = ''
-  clearApiError()
-  try {
-    const alerts = await alertApi.list()
-    // 预计算显示字段（label/time），避免模板内调用函数
-    const displayList: AlertDisplay[] = []
-    const top = alerts.slice(0, 5)
-    for (let i = 0; i < top.length; i++) {
-      const a = top[i]
-      displayList.push({
-        id: a.id,
-        status: a.status,
-        label: alertTypeLabel(a.alert_type),
-        valueText: '',
-        time: formatTime(a.created_at),
-        statusClass: ''
-      } as AlertDisplay)
-    }
-    recentAlerts.value = displayList
-    // 取最新的待处理预警
-    const pending = alerts.find((a) => a.status === '待处理')
-    latestAlert.value = pending ?? null
-    latestAlertLabel.value = pending != null ? alertTypeLabel(pending.alert_type) : ''
-    latestAlertLevelClass.value = pending != null ? `level-${pending.level}` : ''
-  } catch (e) {
-    // 透传真实原因（典型：role 为 user 时 /api/alerts 返回 403「权限不足」）
-    alertError.value = takeApiErrorText('未知错误')
-  }
-}
-
-// 结果值回调：更新实时指标 + 上传后端
+// 结果值回调：更新实时读数 + 上传后端
 async function onResultValue(r: HardwareResultValue) {
-  if (r.type === 'hr') hr.value = r.value
-  else if (r.type === 'bo') bo.value = r.value
-  else if (r.type === 'hrv') hrv.value = r.value
+  // HRV 不再进入界面（alert_engine 的 hrv 分支直接返回不触发，
+  // 界面上常年显示 -- 是在消耗信任）。仍然照常上传，数据本身有价值。
+  if (r.type == 'hr') { liveHr.value = r.value }
+  else if (r.type == 'bo') { liveBo.value = r.value }
+  recompute()
 
-  // 上传后端（实时预警链路）
   // 注意：reactive 对象是 getter 访问，Kotlin 无法智能转换为非空，
-  // 必须先提取到局部 val，否则后续 .id 会报 "nullable receiver"
+  // 必须先提取到局部 const，否则后续 .id 会报 nullable receiver
   const dev = deviceState.currentDevice
   if (dev != null) {
     try {
@@ -177,30 +511,53 @@ async function onResultValue(r: HardwareResultValue) {
         value: r.value,
         timestamp: new Date(r.timestamp).toISOString()
       } as HardwareResultPayload)
-      // 若触发预警，刷新预警列表
-      if (resp.alert != null && resp.alert.triggered) {
-        await loadAlerts()
+      // 注意（勿回退）：resp.alert 是可变属性，Kotlin 无法智能转换为非空，
+      // 直接写 resp.alert != null && resp.alert.triggered 会报 smart cast impossible
+      const brief = resp.alert
+      if (brief != null && brief.triggered) {
+        await reload()
       }
     } catch (e) {
-      // 透传真实原因（如 404 设备不存在 / 401 token 失效）
       console.error('结果值上传失败', takeApiErrorText(''))
     }
   }
 }
 
-onMounted(() => {
-  // 恢复登录态与设备态
-  if (!userState.loggedIn) restoreUser()
-  restoreDevice()
+// 开启实时测量。
+// 必须声明在 onMounted 之前：UTS/Kotlin 没有函数提升，被调用者若写在
+// 调用者之后会直接编译失败（这是 utscheck 的 U05 检查项）。
+function startRealtime() {
+  startHealthData(
+    (r: HardwareResultValue) => {
+      onResultValue(r)
+    },
+    (errMsg: string) => {
+      // 最常见的原因是设备还没 ready（等戒指上报功能菜单）。
+      // 这属于正常时序而非故障，不打扰用户，只留日志。
+      console.log(`[home] 实时测量未开启：${errMsg}`)
+    }
+  )
+}
 
-  // 初始化蓝牙 SDK + 开始实时结果值接收
-  initSDK()
-  // 注意：UTS 中「函数声明」不支持作为值传递，故此处用箭头函数包裹一层
-  startHealthData((r: HardwareResultValue) => {
-    onResultValue(r)
+onMounted(() => {
+  if (!userState.loggedIn) { restoreUser() }
+  restoreDevice()
+  applySentinel('amber' as SentinelState)
+
+  // 适配层已改为回调式：初始化在真实模式下是异步的（要等原生 SDK 起来）。
+  // 注意：UTS 中函数声明不支持作为值传递，故用箭头函数包一层。
+  initSDK((ok: boolean, errMsg: string) => {
+    if (!ok) {
+      // 刻意不弹 toast：首页一进来就报蓝牙错误会盖住主要信息，
+      // 而「戒指此刻没连上」本身是常态（在充电、不在身边）。
+      // 连接状态的呈现与引导由「戒指」页负责。
+      console.log(`[home] 蓝牙初始化未完成：${errMsg}`)
+      return
+    }
+    startRealtime()
   })
 
-  loadAlerts()
+  reload()
 })
 
 onUnmounted(() => {
@@ -209,176 +566,328 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
 .home-page {
-  padding: 40rpx 32rpx;
-  background: #f5f7fa;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32rpx;
-}
-
-.greeting {
-  font-size: 40rpx;
-  font-weight: bold;
-  color: #1f2937;
-}
-
-.sub-greeting {
-  font-size: 24rpx;
-  color: #6b7280;
-  margin-top: 8rpx;
-}
-
-.status-badge {
-  padding: 8rpx 20rpx;
-  border-radius: 20rpx;
-  font-size: 24rpx;
-}
-
-.status-badge.online {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-badge.offline {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.metrics {
-  display: flex;
-  margin-bottom: 32rpx;
-}
-
-.metric-card {
   flex: 1;
-  background: #ffffff;
-  border-radius: 20rpx;
-  padding: 32rpx 20rpx;
-  text-align: center;
-  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
 }
 
-.metric-card-mid {
-  margin-left: 20rpx;
-  margin-right: 20rpx;
+/* ── ① 顶栏 ── */
+.topbar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: $sp-5;
+  padding-bottom: $sp-3;
+}
+
+.who {
+  flex-direction: row;
+  align-items: center;
+  min-height: $tap-min;
+}
+
+.who-name {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.who-caret {
+  font-size: $fs-utility;
+  color: $accent;
+  margin-left: $sp-2;
+}
+
+.sentinel {
+  flex-direction: row;
+  align-items: center;
+  min-height: $tap-min;
+}
+
+.sentinel-dot {
+  font-size: $fs-label;
+}
+
+.sentinel-text {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-1;
+}
+
+/* ── 孩子切换层 ── */
+.switcher {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-2;
+  padding-bottom: $sp-2;
+}
+
+.switcher-row {
+  flex-direction: row;
+  align-items: center;
+  min-height: $tap-min;
+}
+
+.switcher-name {
+  font-size: $fs-body;
+  color: $ink;
+}
+
+.switcher-on {
+  color: $accent;
+  font-weight: 600;
+}
+
+.switcher-tag {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-2;
+}
+
+.switcher-zone {
+  font-size: $fs-label;
+  margin-left: $sp-3;
+}
+
+.switcher-manage {
+  font-size: $fs-label;
+  color: $accent;
+}
+
+/* ── ② 哨兵条（签名）── */
+.sentinel-block {
+  padding-top: $sp-5;
+  padding-bottom: $sp-5;
+}
+
+.bar-track {
+  flex-direction: row;
+  width: 300px;
+  height: 10px;
+  border-radius: $r-sm;
+  overflow: hidden;
+}
+
+.bar-seg {
+  flex: 1;
+  height: 10px;
+}
+
+.bar-green {
+  background-color: $zone-green-wash;
+}
+
+.bar-amber {
+  background-color: $zone-amber-wash;
+}
+
+.bar-red {
+  background-color: $zone-red-wash;
+}
+
+/* 标记单独一行，用留白推位置：uvue 无 Grid，且不用百分比数学 */
+.bar-marker-row {
+  flex-direction: row;
+  width: 300px;
+  margin-top: $sp-1;
+}
+
+.bar-marker-gap {
+  height: 6px;
+}
+
+.bar-marker {
+  width: 3px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+.zone-text {
+  font-size: $fs-metric;
+  font-weight: 600;
+  margin-top: $sp-3;
+}
+
+.fresh {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-1;
+}
+
+/* 过期不只靠颜色：文案本身也会变（relativeTimeText 给出真实时距） */
+.fresh-stale {
+  color: $zone-amber;
+}
+
+/* ── ③ 两个数字 ── */
+.metrics {
+  flex-direction: row;
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.metric {
+  flex: 1;
+}
+
+.metric-right {
+  border-left-width: $hair-w;
+  border-left-style: solid;
+  border-left-color: $hairline;
+  padding-left: $sp-4;
 }
 
 .metric-label {
-  font-size: 24rpx;
-  color: #6b7280;
+  font-size: $fs-label;
+  color: $ink-2;
 }
 
+.metric-line {
+  flex-direction: row;
+  align-items: flex-end;
+  margin-top: $sp-1;
+}
+
+/* 等宽数字是功能理由：心率 98 跳到 101 时不左右抖动 */
 .metric-value {
-  font-size: 56rpx;
-  font-weight: bold;
-  color: #1f2937;
-  margin: 8rpx 0;
+  font-size: $fs-metric-xl;
+  font-family: $font-metric;
+  color: $ink;
 }
 
 .metric-unit {
-  font-size: 22rpx;
-  color: #9ca3af;
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-1;
+  margin-bottom: $sp-2;
 }
 
-.alert-banner {
-  border-radius: 20rpx;
-  padding: 24rpx;
-  margin-bottom: 32rpx;
+/* ── ④ 现在要做的 ── */
+.now {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
 }
 
-.alert-banner.level-2 {
-  background: #fef3c7;
-}
-.alert-banner.level-3 {
-  background: #fee2e2;
+.now-title {
+  font-size: $fs-label;
+  color: $ink-2;
 }
 
-.alert-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #b91c1c;
+.now-body {
+  font-size: $fs-body;
+  color: $ink;
+  line-height: 22px;
+  margin-top: $sp-2;
 }
 
-.alert-desc {
-  font-size: 26rpx;
-  color: #7f1d1d;
-  margin-top: 8rpx;
+.now-more {
+  font-size: $fs-utility;
+  color: $accent;
+  margin-top: $sp-2;
 }
 
-.action-area {
-  margin-bottom: 32rpx;
+/* ── ⑤ 最近 ── */
+.recent {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
 }
 
-.measure-btn {
-  width: 100%;
-  height: 100rpx;
-  background: #3b82f6;
-  color: #ffffff;
-  border-radius: 20rpx;
-  font-size: 32rpx;
-  font-weight: bold;
-  display: flex;
+.recent-head {
+  flex-direction: row;
   align-items: center;
+  justify-content: space-between;
+}
+
+.recent-title {
+  font-size: $fs-label;
+  color: $ink-2;
+}
+
+.recent-more {
+  font-size: $fs-utility;
+  color: $accent;
+}
+
+.recent-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: $tap-min;
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+}
+
+.recent-label {
+  font-size: $fs-body;
+  color: $ink;
+  flex: 1;
+}
+
+.recent-time {
+  font-size: $fs-utility;
+  color: $ink-2;
+}
+
+.recent-status {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-3;
+}
+
+.state {
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.state-text {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+}
+
+.state-action {
+  font-size: $fs-label;
+  color: $accent;
+  margin-top: $sp-2;
+}
+
+/* ── 次级操作 ── */
+.actions {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  min-height: $tap-min;
   justify-content: center;
 }
 
-.section {
-  background: #ffffff;
-  border-radius: 20rpx;
-  padding: 24rpx;
+.measure {
+  font-size: $fs-body;
+  color: $accent;
 }
 
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16rpx;
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-5;
+  margin-bottom: $sp-5;
 }
-
-.section-title {
-  font-size: 30rpx;
-  font-weight: bold;
-  color: #1f2937;
-}
-
-.section-more {
-  font-size: 24rpx;
-  color: #3b82f6;
-}
-
-.empty {
-  padding: 40rpx 0;
-  text-align: center;
-  color: #9ca3af;
-  font-size: 26rpx;
-}
-
-.record-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
-}
-
-.record-type {
-  font-size: 26rpx;
-  color: #1f2937;
-}
-
-.record-time {
-  font-size: 24rpx;
-  color: #6b7280;
-}
-
-.record-status {
-  font-size: 24rpx;
-  color: #f59e0b;
+.tail {
+  height: $sp-6;
 }
 </style>

@@ -1,5 +1,9 @@
 <template>
-  <view class="profile-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="profile-page" :scroll-y="true">
     <!-- 用户信息 -->
     <view class="user-card">
       <view class="avatar">
@@ -14,12 +18,10 @@
     <!-- 功能菜单 -->
     <view class="menu-card">
       <view class="menu-item" @click="onFeedback">
-        <text class="menu-icon">📝</text>
         <text class="menu-label">健康反馈</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-item" @click="onAbout">
-        <text class="menu-icon">ℹ️</text>
         <text class="menu-label">关于哮卫</text>
         <text class="menu-arrow">›</text>
       </view>
@@ -27,12 +29,14 @@
 
     <!-- 退出登录 -->
     <button class="logout-btn" @click="onLogout">退出登录</button>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
 // 注意：uni-app x 会自动引入 vue 公开 API（computed/onMounted 等），无需 import
-import { userState, userId, logout, restore } from '../../store/user.uts'
+import { userState, logout, restore } from '../../store/user.uts'
 import { feedbackApi, type FeedbackPayload } from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 
@@ -46,9 +50,15 @@ const initial = computed(() => {
 async function submitFeedback(level: number) {
   clearApiError()
   try {
+    // user_id 传 null = 记到「我自己」名下，由后端按 token 判定（C3）。
+    // 旧版从本地取 userId() 再传给后端，而后端当时不做归属校验，
+    // 等于把「这条记录属于谁」交给客户端决定。
     await feedbackApi.submit({
-      user_id: userId() ?? 0,
-      feedback_level: level
+      user_id: null,
+      feedback_level: level,
+      saba_usage: null,
+      remark: null,
+      alert_id: null
     } as FeedbackPayload)
     uni.showToast({ title: '反馈已提交', icon: 'success' })
   } catch (e) {
@@ -157,11 +167,6 @@ onMounted(() => {
   border-bottom: 1rpx solid #f3f4f6;
 }
 
-.menu-icon {
-  font-size: 36rpx;
-  margin-right: 20rpx;
-}
-
 .menu-label {
   flex: 1;
   font-size: 30rpx;
@@ -180,5 +185,8 @@ onMounted(() => {
   color: #ef4444;
   border-radius: 20rpx;
   font-size: 30rpx;
+}
+.tail {
+  height: 48rpx;
 }
 </style>

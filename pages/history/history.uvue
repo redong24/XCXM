@@ -1,5 +1,9 @@
 <template>
-  <view class="history-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="history-page" :scroll-y="true">
     <view class="tabs">
       <text
         class="tab"
@@ -51,7 +55,9 @@
         </view>
       </view>
     </view>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -108,8 +114,14 @@ async function loadAlerts() {
     const list: AlertDisplay[] = []
     for (let i = 0; i < raw.length; i++) {
       const a = raw[i]
-      const valueText = a.value != null ? `值：${a.value}` : '值：--'
-      const thresholdText = a.threshold != null ? `（阈值 ${a.threshold}）` : '（阈值 --）'
+      // Math.round 取整：value 与 threshold 在库里都是 float 列，
+      // 而 UTS 的 number 是浮点，直接内插在 Kotlin 侧会渲染成「85.0」。
+      // 心率血氧都是整数语义，小数点纯属噪音。
+      // 这与 C4 的「3.5166 分钟前」、C5 的阈值渲染是同一类问题。
+      const v = a.value
+      const th = a.threshold
+      const valueText = v != null ? `值：${Math.round(v!)}` : '值：--'
+      const thresholdText = th != null ? `（阈值 ${Math.round(th!)}）` : '（阈值 --）'
       list.push({
         id: a.id,
         status: a.status,
@@ -242,5 +254,8 @@ onMounted(() => {
   text-align: center;
   color: #9ca3af;
   font-size: 26rpx;
+}
+.tail {
+  height: 48rpx;
 }
 </style>

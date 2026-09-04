@@ -1,6 +1,27 @@
 // 后端 API 客户端（与 backend-product 对齐）
-
-import { post, get } from '../common/request.uts'
+//
+// 【关键设计（09-02 18:20 定案，勿回退）】
+// 本文件**不使用泛型请求**，也**不使用 `res.data as 具名type`** 强制转换。
+//
+// 原因（官方文档 uni-app x / request 注意事项）：
+//   「request 接口内部通过特殊方式读取了泛型类型，不支持传入动态的泛型：
+//     比如将外层方法的普通泛型参数传入 request。所以目前尽量直接使用
+//     uni.request 而不是封装。如确需封装，可不使用 type，改用 UTSJSONObject。」
+//
+// 旧写法 `post<TokenResp>(...)` 正是被点名的反例：泛型在 Kotlin 侧被擦除，
+// uni.request 实际回传的是 io.dcloud.uts.UTSJSONObject，
+// 底层再 `as TokenResp` 就会抛：
+//   java.lang.ClassCastException:
+//     io.dcloud.uts.UTSJSONObject cannot be cast to uni.UNIASTHMAGUARD.TokenResp
+//
+// 现在的做法：
+//   common/request.uts 原样返回 res.data（any）；
+//   本文件用 asObject / asObjectArray 拿到 UTSJSONObject，
+//   再由手写 mapper（toUserInfo / toTokenResp / ...）逐字段 get 出来，
+//   构造真正的具名 type 对象。
+//   全程没有跨类型强转，从原理上不可能再出 ClassCastException，
+//      并且后端多字段/少字段/字段为 null 都不会崩。
+import { post, get, put, del, asObject, asObjectArray } from '../common/request.uts'
 
 // ---------- 类型定义（统一用 type，UTS 对象字面量需 as type 而非 interface） ----------
 
@@ -30,10 +51,12 @@ export type DeviceInfo = {
   created_at: string
 }
 
+// 注意（09-02 18:20）：原先 id/message 写成可选属性（id?: number），
+// 手写 mapper 需要显式赋 null，故统一改为 `| null`，语义等价且赋值更直观。
 export type AlertBrief = {
-  id?: number
+  id: number | null
   triggered: boolean
-  message?: string
+  message: string | null
 }
 
 export type HardwareResultResp = {
@@ -64,22 +87,59 @@ export type FeedbackResp = {
   feedback_level: number
   saba_usage: number | null
   remark: string | null
+  /** 关联的预警 id（后端 B4）；手动记录时为 null */
+  alert_id: number | null
+  timestamp: string
+}
+
+/** 看护对象（后端 B1 `GET /api/users/my-children` 的元素）。
+ *  只承载事实字段；颜色与中文文案由 store/页面用 styles/tokens.uts 算出，
+ *  最终组装成 types/display.uts 的 ChildDisplay 再交给模板。 */
+export type ChildResp = {
+  id: number
+  name: string
+  age: number | null
+  gender: number
+  is_self: boolean
+  has_ring: boolean
+  device_id: number | null
+}
+
+/**
+ * 某人某项指标的最新读数（B10 GET /api/data/latest 的元素）。
+ *
+ * 只有事实，没有判断：后端刻意不返回「是否偏高」或分区颜色，
+ * 阈值归 alert_engine，颜色归 styles/tokens.uts。
+ * 注意返回集合里不含 hrv（alert_engine 的 hrv 分支直接返回不触发），
+ * 这与「删掉首页 HRV 卡」是同一个决定的两侧。
+ */
+export type LatestReadingResp = {
+  user_id: number
+  device_id: number
+  /** 'hr' | 'bo'（'hrv' 不参与预警，界面已删） */
+  type: string
+  value: number
+  /** ISO 时间串，客户端据此算「N 秒前」 */
   timestamp: string
 }
 
 // ---------- 请求体类型（用 type，UTS 对象字面量需 as type 而非 interface） ----------
 
 // 注册载荷
-// role 说明：后端 /api/alerts 要求 admin/doctor/guardian 角色，
-// 而注册接口若不传 role 会默认给 'user'，导致注册后首页/历史页查预警必 403。
-// 移动端注册的是家长/监护人账号，故默认 'guardian'。
+//
+// 历史说明（C3 已修正）：这里原先硬塞 ``role: 'guardian'``，因为旧的
+// ``GET /api/alerts`` 用**角色**做门禁，不传就 403。那个做法把角色变成了
+// 越权的载体：客户端既然能自报角色，就能自报 ``admin``（已实测：
+// 公开注册带 role=admin 返回 200，登录后可读全库用户）。
+//
+// 后端已改为按**数据归属**鉴权（自己 + 名下孩子），并且 register 端点
+// 不再接受 role，因此客户端**不需要也不应该**再传角色。
 export type RegisterPayload = {
   phone: string
   name: string
   password: string
   age: number | null
   gender: number | null
-  role: string
 }
 
 export type HardwareResultPayload = {
@@ -98,11 +158,26 @@ export type RawPPGPayload = {
   captured_at?: string
 }
 
+/** 新建 / 修改看护对象档案（C-2 纯档案：无手机号、无密码）。
+ *
+ *  刻意不含 guardian_id 与 role：这两个字段由服务端强制写死，
+ *  客户端连传的机会都不该有（详见后端 schemas.ChildCreate 的注释）。 */
+export type ChildCreatePayload = {
+  name: string
+  age: number | null
+  gender: number | null
+}
+
+/** 提交一次发作记录（预警详情页的 D 段）。
+ *
+ *  ``user_id`` 为 null 时后端视为「我自己」；给了值也会过归属校验。
+ *  ``alert_id`` 把这次发作挂回触发它的那条预警（B4）。 */
 export type FeedbackPayload = {
-  user_id: number
+  user_id: number | null
   feedback_level: number
-  saba_usage?: number
-  remark?: string
+  saba_usage: number | null
+  remark: string | null
+  alert_id: number | null
 }
 
 // ---------- 页面显示层类型 ----------
@@ -145,48 +220,421 @@ export type UniInputEventLike = {
   detail: UniInputEventDetail
 }
 
+// ============================================================
+// 响应解析层（UTSJSONObject -> 具名 type）
+// ------------------------------------------------------------
+// 全部手写，不用泛型 parse<T>()，不用 as 强转。
+// 每个字段都走 getString / getNumber / getBoolean / getJSON，
+// 缺字段时回落到安全默认值，避免解析期崩溃。
+// ============================================================
+
+/** 把 any 响应体转成 UTSJSONObject，失败则抛出带上下文的错误 */
+function mustObject(raw: any | null, what: string): UTSJSONObject {
+  const obj = asObject(raw)
+  if (obj == null) {
+    throw new Error(`${what}：响应不是 JSON 对象`)
+  }
+  return obj!
+}
+
+function toUserInfo(o: UTSJSONObject): UserInfo {
+  return {
+    id: o.getNumber('id') ?? 0,
+    phone: o.getString('phone'),
+    name: o.getString('name') ?? '',
+    age: o.getNumber('age'),
+    gender: o.getNumber('gender') ?? 0,
+    guardian_id: o.getNumber('guardian_id'),
+    role: o.getString('role') ?? 'user',
+    created_at: o.getString('created_at') ?? ''
+  } as UserInfo
+}
+
+function toTokenResp(o: UTSJSONObject): TokenResp {
+  // 嵌套对象：user 需要单独取 JSON 再递归解析
+  const userObj = o.getJSON('user')
+  if (userObj == null) {
+    throw new Error('登录响应缺少 user 字段')
+  }
+  return {
+    access_token: o.getString('access_token') ?? '',
+    token_type: o.getString('token_type') ?? 'bearer',
+    user: toUserInfo(userObj!)
+  } as TokenResp
+}
+
+function toDeviceInfo(o: UTSJSONObject): DeviceInfo {
+  return {
+    id: o.getNumber('id') ?? 0,
+    mac: o.getString('mac') ?? '',
+    firmware: o.getString('firmware'),
+    bind_user_id: o.getNumber('bind_user_id'),
+    status: o.getNumber('status') ?? 0,
+    created_at: o.getString('created_at') ?? ''
+  } as DeviceInfo
+}
+
+function toAlertBrief(o: UTSJSONObject): AlertBrief {
+  return {
+    id: o.getNumber('id'),
+    triggered: o.getBoolean('triggered') ?? false,
+    message: o.getString('message')
+  } as AlertBrief
+}
+
+function toHardwareResultResp(o: UTSJSONObject): HardwareResultResp {
+  // alert 允许为 null（未触发预警时后端可能不返回该对象）
+  const alertObj = o.getJSON('alert')
+  let brief: AlertBrief | null = null
+  if (alertObj != null) {
+    brief = toAlertBrief(alertObj!)
+  }
+  return {
+    result_id: o.getNumber('result_id') ?? 0,
+    alert: brief
+  } as HardwareResultResp
+}
+
+function toRawPPGResp(o: UTSJSONObject): RawPPGResp {
+  return {
+    record_id: o.getNumber('record_id') ?? 0,
+    storage_key: o.getString('storage_key') ?? '',
+    sample_count: o.getNumber('sample_count') ?? 0
+  } as RawPPGResp
+}
+
+function toAlertInfo(o: UTSJSONObject): AlertInfo {
+  return {
+    id: o.getNumber('id') ?? 0,
+    user_id: o.getNumber('user_id') ?? 0,
+    alert_type: o.getString('alert_type') ?? '',
+    level: o.getNumber('level') ?? 0,
+    value: o.getNumber('value'),
+    threshold: o.getNumber('threshold'),
+    status: o.getString('status') ?? '',
+    created_at: o.getString('created_at') ?? ''
+  } as AlertInfo
+}
+
+function toFeedbackResp(o: UTSJSONObject): FeedbackResp {
+  return {
+    id: o.getNumber('id') ?? 0,
+    user_id: o.getNumber('user_id') ?? 0,
+    feedback_level: o.getNumber('feedback_level') ?? 0,
+    saba_usage: o.getNumber('saba_usage'),
+    remark: o.getString('remark'),
+    alert_id: o.getNumber('alert_id'),
+    timestamp: o.getString('timestamp') ?? ''
+  } as FeedbackResp
+}
+
+function toChildResp(o: UTSJSONObject): ChildResp {
+  return {
+    id: o.getNumber('id') ?? 0,
+    name: o.getString('name') ?? '',
+    age: o.getNumber('age'),
+    gender: o.getNumber('gender') ?? 0,
+    is_self: o.getBoolean('is_self') ?? false,
+    has_ring: o.getBoolean('has_ring') ?? false,
+    device_id: o.getNumber('device_id')
+  } as ChildResp
+}
+
+function toLatestReadingResp(o: UTSJSONObject): LatestReadingResp {
+  return {
+    user_id: o.getNumber('user_id') ?? 0,
+    device_id: o.getNumber('device_id') ?? 0,
+    type: o.getString('type') ?? '',
+    value: o.getNumber('value') ?? 0,
+    timestamp: o.getString('timestamp') ?? ''
+  } as LatestReadingResp
+}
+
+// ============================================================
+// 本地存储解析入口（供 store 使用）
+// ------------------------------------------------------------
+// 说明（09-02 18:20）：store/user.uts、store/device.uts 原先写的是
+//   JSON.parse(userStr) as UserInfo
+// 这与登录崩溃是**同一个 CCE 隐患**：JSON.parse 在 Kotlin 侧返回的是
+// UTSJSONObject，`as UserInfo` 属于跨类型强转，同样会抛
+//   UTSJSONObject cannot be cast to uni.UNIASTHMAGUARD.UserInfo
+// （之前没暴露出来，只因为登录先崩了，restore 分支还没跑到。）
+// 统一改为走下面这两个函数：解析失败返回 null，由调用方视作未登录。
+// ============================================================
+
+/** 从本地存储字符串还原 UserInfo；失败返回 null（不抛异常） */
+export function parseUserInfoJSON(text: string): UserInfo | null {
+  if (text == '') { return null }
+  try {
+    const o = asObject(JSON.parse(text))
+    if (o == null) { return null }
+    return toUserInfo(o!)
+  } catch (e) {
+    console.log(`[api] UserInfo 本地缓存解析失败: ${e}`)
+    return null
+  }
+}
+
+/** 从本地存储字符串还原 DeviceInfo；失败返回 null（不抛异常） */
+export function parseDeviceInfoJSON(text: string): DeviceInfo | null {
+  if (text == '') { return null }
+  try {
+    const o = asObject(JSON.parse(text))
+    if (o == null) { return null }
+    return toDeviceInfo(o!)
+  } catch (e) {
+    console.log(`[api] DeviceInfo 本地缓存解析失败: ${e}`)
+    return null
+  }
+}
+
+// ============================================================
+// 请求实现层（顶层 async 函数）
+// ------------------------------------------------------------
+// 【为什么不把 async 直接写在 class 方法上】（09-02 18:30，勿回退）
+// UTS 在 Android(Kotlin) 侧对「类成员 async 方法」的支持不如顶层 async 函数
+// 稳妥（本工程已验证可用的是 store/user.uts 里的顶层 export async function）。
+// 为避免又一轮盲编译试错，这里统一把 await 逻辑放在顶层 async 函数中，
+// class 方法只做一层同步转发（直接 return Promise，不加 async）。
+//
+// 另外：UTS 不支持函数提升（no hoisting），故这些函数必须声明在
+// 下方 class 之前。
+// ============================================================
+
+async function doLogin(phone: string, password: string): Promise<TokenResp> {
+  const raw = await post('/api/auth/login', { phone, password }, false)
+  return toTokenResp(mustObject(raw, '登录'))
+}
+
+async function doRegister(payload: RegisterPayload): Promise<UserInfo> {
+  const raw = await post('/api/auth/register', payload, false)
+  return toUserInfo(mustObject(raw, '注册'))
+}
+
+async function doMe(): Promise<UserInfo> {
+  const raw = await get('/api/auth/me')
+  return toUserInfo(mustObject(raw, '获取用户信息'))
+}
+
+async function doDeviceList(path: string): Promise<DeviceInfo[]> {
+  const raw = await get(path)
+  const arr = asObjectArray(raw)
+  const out: DeviceInfo[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toDeviceInfo(arr[i]))
+  }
+  return out
+}
+
+async function doDeviceDetail(deviceId: number): Promise<DeviceInfo> {
+  const raw = await get(`/api/devices/${deviceId}`)
+  return toDeviceInfo(mustObject(raw, '设备详情'))
+}
+
+async function doDeviceBind(deviceId: number, userId: number): Promise<DeviceInfo> {
+  const raw = await post(`/api/devices/${deviceId}/bind`, { user_id: userId })
+  return toDeviceInfo(mustObject(raw, '绑定设备'))
+}
+
+async function doDeviceUnbind(deviceId: number): Promise<DeviceInfo> {
+  const raw = await post(`/api/devices/${deviceId}/unbind`, null)
+  return toDeviceInfo(mustObject(raw, '解绑设备'))
+}
+
+async function doUploadHardwareResult(payload: HardwareResultPayload): Promise<HardwareResultResp> {
+  const raw = await post('/api/data/hardware-result', payload)
+  return toHardwareResultResp(mustObject(raw, '上报结果值'))
+}
+
+async function doUploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
+  const raw = await post('/api/data/raw-ppg', payload)
+  return toRawPPGResp(mustObject(raw, '上报波形'))
+}
+
+/** 可见范围内每人每指标的最新读数（一次取全，客户端本地按人切换，避免 N+1）。 */
+async function doLatestReadings(): Promise<LatestReadingResp[]> {
+  const raw = await get('/api/data/latest')
+  const arr = asObjectArray(raw)
+  const out: LatestReadingResp[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toLatestReadingResp(arr[i]))
+  }
+  return out
+}
+
+/** 预警列表。userId 为 null 时后端返回「自己 + 名下孩子」的全部预警。 */
+async function doAlertList(userId: number | null): Promise<AlertInfo[]> {
+  // 不用模板字符串拼接参数：UTS 不支持 String(number)，而 ${} 内插在数字上
+  // 是安全的，但仍然把分支写成两条路径，便于阅读也避开空参拼出 `?user_id=null`。
+  const path = userId == null ? '/api/alerts' : `/api/alerts?user_id=${userId}`
+  const raw = await get(path)
+  const arr = asObjectArray(raw)
+  const out: AlertInfo[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toAlertInfo(arr[i]))
+  }
+  return out
+}
+
+/** 单条预警（预警详情页按 alert_id 直取）。 */
+async function doAlertDetail(alertId: number): Promise<AlertInfo> {
+  const raw = await get(`/api/alerts/${alertId}`)
+  return toAlertInfo(mustObject(raw, '预警详情'))
+}
+
+/** 「已处理」的 URL 编码形式（UTF-8 百分号编码，常量固化）。 */
+const STATUS_RESOLVED = '已处理'
+const STATUS_RESOLVED_ENC = '%E5%B7%B2%E5%A4%84%E7%90%86'
+/** 「已忽略」的 URL 编码形式。 */
+const STATUS_IGNORED = '已忽略'
+const STATUS_IGNORED_ENC = '%E5%B7%B2%E5%BF%BD%E7%95%A5'
+
+/**
+ * 处理预警。后端把 status 放在 query 而非 body（既有接口形状，不改），
+ * 中文必须 URL 编码，否则拼出的 URL 会带非 ASCII 字符。
+ *
+ * 这里刻意**不调用 `encodeURIComponent`**，有两个理由：
+ *   1. UTS 的 `encodeURIComponent` 返回 `string | null`，直接内插进模板字符串
+ *      就是「Any? 传给 Any」，本项目栽过一次的那类 Kotlin 严格空安全编译错误。
+ *   2. 后端 `handle_alert` 的取值是白名单（只有 已处理 / 已忽略），
+ *      既然是闭集，编码结果就是常量，没有任何运行时计算的必要。
+ *
+ * 分支同时充当客户端侧的白名单镜像：传入白名单外的值直接抛错，
+ * 而不是拼出一个后端必然 400 的请求再等网络往返。
+ */
+async function doAlertHandle(alertId: number, status: string): Promise<boolean> {
+  let encoded = ''
+  if (status == STATUS_RESOLVED) {
+    encoded = STATUS_RESOLVED_ENC
+  } else if (status == STATUS_IGNORED) {
+    encoded = STATUS_IGNORED_ENC
+  } else {
+    throw new Error(`预警状态只能为 ${STATUS_RESOLVED} 或 ${STATUS_IGNORED}`)
+  }
+  await put(`/api/alerts/${alertId}/handle?status=${encoded}`, null)
+  return true
+}
+
+async function doFeedbackSubmit(payload: FeedbackPayload): Promise<FeedbackResp> {
+  const raw = await post('/api/feedbacks/', payload)
+  return toFeedbackResp(mustObject(raw, '提交反馈'))
+}
+
+/** 反馈列表。userId 为 null 时返回「自己 + 名下孩子」。 */
+async function doFeedbackList(userId: number | null): Promise<FeedbackResp[]> {
+  const path = userId == null ? '/api/feedbacks/' : `/api/feedbacks/?user_id=${userId}`
+  const raw = await get(path)
+  const arr = asObjectArray(raw)
+  const out: FeedbackResp[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toFeedbackResp(arr[i]))
+  }
+  return out
+}
+
+// ---------- 看护对象（B1 / B2） ----------
+
+async function doMyChildren(): Promise<ChildResp[]> {
+  const raw = await get('/api/users/my-children')
+  const arr = asObjectArray(raw)
+  const out: ChildResp[] = []
+  for (let i = 0; i < arr.length; i++) {
+    out.push(toChildResp(arr[i]))
+  }
+  return out
+}
+
+async function doChildCreate(payload: ChildCreatePayload): Promise<ChildResp> {
+  const raw = await post('/api/users/children', payload)
+  return toChildResp(mustObject(raw, '新建档案'))
+}
+
+async function doChildUpdate(childId: number, payload: ChildCreatePayload): Promise<ChildResp> {
+  const raw = await put(`/api/users/children/${childId}`, payload)
+  return toChildResp(mustObject(raw, '修改档案'))
+}
+
+async function doChildDelete(childId: number): Promise<boolean> {
+  await del(`/api/users/children/${childId}`)
+  return true
+}
+
 // ---------- 认证 ----------
 
 export class AuthApi {
   /** 登录 */
   login(phone: string, password: string): Promise<TokenResp> {
-    return post<TokenResp>('/api/auth/login', { phone, password }, false)
+    return doLogin(phone, password)
   }
+
   /** 注册 */
   register(payload: RegisterPayload): Promise<UserInfo> {
-    return post<UserInfo>('/api/auth/register', payload, false)
+    return doRegister(payload)
   }
+
   /** 当前用户 */
   me(): Promise<UserInfo> {
-    return get<UserInfo>('/api/auth/me')
+    return doMe()
   }
 }
+
 export const authApi = new AuthApi()
+
+// ---------- 看护对象（B1 / B2） ----------
+
+export class ChildApi {
+  /** 看护对象列表：「我自己」恒为第一项，其后是名下孩子 */
+  mine(): Promise<ChildResp[]> {
+    return doMyChildren()
+  }
+
+  /** 新建孩子档案 */
+  create(payload: ChildCreatePayload): Promise<ChildResp> {
+    return doChildCreate(payload)
+  }
+
+  /** 修改孩子档案 */
+  update(childId: number, payload: ChildCreatePayload): Promise<ChildResp> {
+    return doChildUpdate(childId, payload)
+  }
+
+  /** 删除孩子档案（同时解绑其戒指；历史健康记录不删） */
+  remove(childId: number): Promise<boolean> {
+    return doChildDelete(childId)
+  }
+}
+
+export const childApi = new ChildApi()
 
 // ---------- 设备 ----------
 
 export class DeviceApi {
   /** 列出所有设备（admin/doctor 后台管理） */
   list(): Promise<DeviceInfo[]> {
-    return get<DeviceInfo[]>('/api/devices/')
+    return doDeviceList('/api/devices/')
   }
+
   /** 查询当前用户的设备（移动端个人视角） */
   mine(): Promise<DeviceInfo[]> {
-    return get<DeviceInfo[]>('/api/devices/mine')
+    return doDeviceList('/api/devices/mine')
   }
+
   /** 设备详情 */
   detail(deviceId: number): Promise<DeviceInfo> {
-    return get<DeviceInfo>(`/api/devices/${deviceId}`)
+    return doDeviceDetail(deviceId)
   }
+
   /** 绑定设备到用户（user/guardian 绑定自己或孩子，admin/doctor 绑定任意） */
   bind(deviceId: number, userId: number): Promise<DeviceInfo> {
-    return post<DeviceInfo>(`/api/devices/${deviceId}/bind`, { user_id: userId })
+    return doDeviceBind(deviceId, userId)
   }
+
   /** 解绑设备（user 解绑自己的，admin/doctor 解绑任意） */
   unbind(deviceId: number): Promise<DeviceInfo> {
-    return post<DeviceInfo>(`/api/devices/${deviceId}/unbind`)
+    return doDeviceUnbind(deviceId)
   }
 }
+
 export const deviceApi = new DeviceApi()
 
 // ---------- 数据上报 ----------
@@ -194,23 +642,51 @@ export const deviceApi = new DeviceApi()
 export class DataApi {
   /** 上报硬件结果值（实时预警） */
   uploadHardwareResult(payload: HardwareResultPayload): Promise<HardwareResultResp> {
-    return post<HardwareResultResp>('/api/data/hardware-result', payload)
+    return doUploadHardwareResult(payload)
   }
+
   /** 上报原始 PPG 波形 */
   uploadRawPPG(payload: RawPPGPayload): Promise<RawPPGResp> {
-    return post<RawPPGResp>('/api/data/raw-ppg', payload)
+    return doUploadRawPPG(payload)
+  }
+
+  /** 最新读数（哨兵条的数据新鲜度来源） */
+  latest(): Promise<LatestReadingResp[]> {
+    return doLatestReadings()
   }
 }
+
 export const dataApi = new DataApi()
 
 // ---------- 预警 ----------
 
 export class AlertApi {
-  /** 拉取当前用户预警列表 */
+  /** 拉取预警列表（自己 + 名下孩子） */
   list(): Promise<AlertInfo[]> {
-    return get<AlertInfo[]>('/api/alerts')
+    return doAlertList(null)
+  }
+
+  /** 拉取单个看护对象的预警 */
+  listOf(userId: number): Promise<AlertInfo[]> {
+    return doAlertList(userId)
+  }
+
+  /** 单条预警详情 */
+  detail(alertId: number): Promise<AlertInfo> {
+    return doAlertDetail(alertId)
+  }
+
+  /** 消除预警（「我知道了，消除警报」） */
+  resolve(alertId: number): Promise<boolean> {
+    return doAlertHandle(alertId, STATUS_RESOLVED)
+  }
+
+  /** 忽略预警 */
+  ignore(alertId: number): Promise<boolean> {
+    return doAlertHandle(alertId, STATUS_IGNORED)
   }
 }
+
 export const alertApi = new AlertApi()
 
 // ---------- 反馈 ----------
@@ -218,11 +694,18 @@ export const alertApi = new AlertApi()
 export class FeedbackApi {
   /** 提交用户反馈（四级） */
   submit(payload: FeedbackPayload): Promise<FeedbackResp> {
-    return post<FeedbackResp>('/api/feedbacks/', payload)
+    return doFeedbackSubmit(payload)
   }
-  /** 拉取当前用户反馈列表 */
+
+  /** 拉取反馈列表（自己 + 名下孩子） */
   list(): Promise<FeedbackResp[]> {
-    return get<FeedbackResp[]>('/api/feedbacks/')
+    return doFeedbackList(null)
+  }
+
+  /** 拉取单个看护对象的反馈 */
+  listOf(userId: number): Promise<FeedbackResp[]> {
+    return doFeedbackList(userId)
   }
 }
+
 export const feedbackApi = new FeedbackApi()

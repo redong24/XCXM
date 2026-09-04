@@ -120,7 +120,9 @@ export const BASE_URL = 'https://39.183.171.185:9443'
 ## 七、云打包注意事项
 
 - uni-app x 目前只支持打包 APK（Android），不支持 iOS 云打包
-- 需在 manifest.json 配置好 AppID（替换 `__UNI__ASTHMAGUARD` 为正式 AppID）
+- AppID 已配置为 DCloud 正式签发值 `__UNI__9E0A6C2`（应用名 Asthma Guard，类型 uni-app x）
+  - ⚠️ **切勿再点「重新获取 AppID」**：会导致已购插件（rw 蓝牙，market id 27471）无法关联，且旧 AppID 云打包报「AppID 无效」
+- 如需 uni-push：uni-app x 靠**摇树机制**，不在 `modules` 勾 Push，须先在代码中写 `uni.getPushClientId` 再打**自定义调试基座**
 - 蓝牙权限已在 manifest.json 配置（Android 12+ 的 BLUETOOTH_SCAN/CONNECT 已包含）
 
 ## 八、当前状态

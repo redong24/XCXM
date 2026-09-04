@@ -2,7 +2,7 @@
 // 使用 uni-app x 官方推荐的「全局 reactive 变量」方案。
 
 import { reactive } from 'vue'
-import type { DeviceInfo } from '../api/index.uts'
+import { parseDeviceInfoJSON, type DeviceInfo } from '../api/index.uts'
 import type { BleDevice } from '../utils/rwble.uts'
 
 // state 结构类型（用 type，UTS 中 reactive 的对象字面量需 as type 断言）
@@ -36,11 +36,13 @@ export function setCurrentDevice(device: DeviceInfo | null) {
 export function restore() {
   const devStr = uni.getStorageSync('currentDevice') as string
   if (devStr != '') {
-    try {
-      deviceState.currentDevice = JSON.parse(devStr) as DeviceInfo
+    // 注意（09-02 18:20，勿回退）：同 store/user.uts，
+    // JSON.parse(...) as DeviceInfo 会抛 UTSJSONObject 的 ClassCastException，
+    // 必须走 api 层的逐字段解析。
+    const cached = parseDeviceInfoJSON(devStr)
+    if (cached != null) {
+      deviceState.currentDevice = cached
       deviceState.connected = true
-    } catch (e) {
-      // 忽略
     }
   }
 }

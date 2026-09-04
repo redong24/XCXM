@@ -1,0 +1,165 @@
+/**
+ * 设计 token 单一来源（脚本侧）
+ *
+ * 依据 docs/REDESIGN_PLAN.md §4.2 / §4.3 / §4.5。
+ * 与 uni.scss 是同一份数值的两种载体：模板/样式里用 uni.scss 的 $ 变量，
+ * 需要在 <script> 里计算颜色（例如按分区决定状态色）时用本文件。
+ * 两处必须同时改，取值必须逐字一致。
+ *
+ * UTS 约束备忘：
+ * - 只导出 const 与 top-level function，不用 class，避免成员 async 的坑。
+ * - 不用嵌套对象字面量的 type（UTS110111101）。
+ * - 不用 String(number)，需要转字符串时用模板串。
+ */
+
+/* ── 基础 6 色 ───────────────────────────────────────── */
+export const PAPER: string = '#F7F8F7'
+export const INK: string = '#14181A'
+export const INK_2: string = '#5A6468'
+export const HAIRLINE: string = '#E2E6E4'
+export const ACCENT: string = '#2C6E8F'
+export const CARD: string = '#FFFFFF'
+
+/* ── 分区 3 色 ───────────────────────────────────────── */
+export const ZONE_GREEN: string = '#1F8A5F'
+export const ZONE_AMBER: string = '#C9821B'
+export const ZONE_RED: string = '#C43A2F'
+
+export const ZONE_GREEN_WASH: string = '#E8F3EE'
+export const ZONE_AMBER_WASH: string = '#F7EEDC'
+export const ZONE_RED_WASH: string = '#F7E7E5'
+
+/* ── 预警换肤（全应用唯一深色界面）───────────────────── */
+export const ALERT_BG: string = '#2A1210'
+export const ALERT_FG: string = '#FFF4F2'
+export const ALERT_FG_2: string = '#E6C4BF'
+export const ALERT_HAIRLINE: string = '#4A2320'
+
+/**
+ * 风险分区。取自哮喘行动计划卡的绿/黄/红三分区。
+ * 'green' 安全区 | 'amber' 关注区 | 'red' 红区
+ */
+export type Zone = 'green' | 'amber' | 'red'
+
+/**
+ * 行动计划的来源。可信度的关键：界面必须标出来源与日期。
+ * 'doctor' 医生录入（优先并覆盖默认） | 'default' 内置通用非药物安抚措施
+ *
+ * 为什么定义在这里而不是 types/display.uts：
+ *   planDisclaimer() 要按来源给出责任口径文案，而依赖方向是
+ *   display.uts -> tokens.uts（单向）。若 tokens 反过来 import PlanSource
+ *   就会形成循环依赖。PlanSource 与 Zone / SentinelState 同属值域枚举，
+ *   本来就该和它们放在一起。
+ */
+export type PlanSource = 'doctor' | 'default'
+
+/** 分区 -> 主色 */
+export function zoneColor(z: Zone): string {
+  if (z == 'red') { return ZONE_RED }
+  if (z == 'amber') { return ZONE_AMBER }
+  return ZONE_GREEN
+}
+
+/** 分区 -> 浅色衬底 */
+export function zoneWash(z: Zone): string {
+  if (z == 'red') { return ZONE_RED_WASH }
+  if (z == 'amber') { return ZONE_AMBER_WASH }
+  return ZONE_GREEN_WASH
+}
+
+/** 分区 -> 中文名。界面上只出现「区」，不出现「风险等级」（§11.1 术语表） */
+export function zoneLabel(z: Zone): string {
+  if (z == 'red') { return '红区' }
+  if (z == 'amber') { return '关注区' }
+  return '安全区'
+}
+
+/**
+ * 后端 alerts.level（1/2/3）映射到分区。
+ * 注意：当前 alert_engine 把所有预警都写成 level=3，
+ * 分档要等 C6（后端 B5 年龄分档 + 去抖）落地后才有意义。
+ */
+export function zoneFromLevel(level: number): Zone {
+  if (level >= 3) { return 'red' }
+  if (level == 2) { return 'amber' }
+  return 'green'
+}
+
+/**
+ * 哨兵状态。
+ *
+ * 本轮（推送方案 b：在线推送 + 本地通知兜底）只有两个输入：
+ * 通知权限、网络可达。没有第三个输入，所以算不出「在岗」。
+ * 因此值域本轮硬编码为 'amber' | 'gray'，见 REDESIGN_PLAN §7.7。
+ *
+ * 'amber' 仅前台值守 | 'gray' 已离岗
+ * TODO(§7.3 离线厂商推送落地后): 增加 'green' 在岗，并解除下面的不可达约束。
+ */
+export type SentinelState = 'amber' | 'gray'
+
+export function sentinelLabel(s: SentinelState): string {
+  if (s == 'amber') { return '仅前台值守' }
+  return '已离岗'
+}
+
+export function sentinelColor(s: SentinelState): string {
+  if (s == 'amber') { return ZONE_AMBER }
+  return INK_2
+}
+
+/* ── 数据新鲜度（哨兵条的活性证明，§4.5）─────────────
+ *
+ * 放在 token 层而不是各页面里，因为首页哨兵条与看护对象页
+ * 都要显示「上次上传 N 秒前」。两处若各写一版，迟早出现
+ * 同一时刻两个页面显示不同时间的情况，而哨兵条的可信度
+ * 恰恰建立在这种一致性上。
+ */
+
+/** 超过这个秒数就认为数据不新鲜。5 分钟 = 计划书里最慢的上传档位。 */
+export const STALE_AFTER_SEC: number = 300
+
+/**
+ * 把「距今多少秒」渲染成中文相对时间。
+ *
+ * 刻意不显示「0 秒前」：读数落库与客户端取值之间必然有间隔，
+ * 显示 0 会让人以为界面卡住了。小于 5 秒统一说「刚刚」。
+ */
+export function relativeTimeText(secAgo: number): string {
+  if (secAgo < 5) { return '刚刚' }   // 含负数：本机时钟快于服务器时也走这里
+  // 全程 Math.floor 取整：UTS 的 number 是浮点，
+  // 直接内插 secAgo / 60 会渲染出「3.5166 分钟前」这种东西。
+  const s = Math.floor(secAgo)
+  if (s < 60) { return `${s} 秒前` }
+  const min = Math.floor(s / 60)
+  if (min < 60) { return `${min} 分钟前` }
+  const hour = Math.floor(min / 60)
+  if (hour < 24) { return `${hour} 小时前` }
+  return `${Math.floor(hour / 24)} 天前`
+}
+
+/* ── 责任口径文案（§11.1，6 处硬约束的单一来源）───────
+ * 集中在这里，避免各页面各写一版导致口径漂移。
+ * 禁止改成「已保护 / 守护中 / 安心睡」这类过度承诺的说法。
+ */
+export const DISCLAIMER_SHORT: string = '本应用提供健康参考，不构成医疗建议'
+export const DISCLAIMER_LONG: string =
+  '本应用提供健康参考，不构成医疗建议。本应用不是医疗器械，不用于疾病的诊断或治疗。'
+export const DISCLAIMER_ALERT: string = '以下为设备监测到的数值变化，供参考'
+export const DISCLAIMER_SEEK_CARE: string = '如症状持续请及时就医'
+/** 医生录入的行动计划专用。只有确实存在医生录入的内容时才允许出现这句。 */
+export const DISCLAIMER_PLAN_DOCTOR: string = '本内容由您的医生录入'
+/** 内置通用安抚措施专用。
+ * 为什么必须有这一条：§5 规定默认来源是内置文案，医生 AAP 只是可选覆盖，
+ * 而后端 B6（action_plans 表）本批不做，所以首个版本里所有用户看到的都是内置内容。
+ * 此时若沿用「本内容由您的医生录入」，就是把本应用自己写的内容伪装成医嘱，
+ * 这比没有免责声明更糟，正是 §11.1 要防的事。 */
+export const DISCLAIMER_PLAN_DEFAULT: string =
+  '通用参考内容，非医生医嘱。请让医生把行动计划录入本应用'
+export const DISCLAIMER_THRESHOLD: string = '阈值为参考区间，请以医生意见为准'
+
+/** 按来源返回行动计划的责任口径文案。
+ * 收在 tokens 里而不是写在页面上：预警详情页与行动计划页都要用同一句，
+ * 分开写就会漂移，而这一页的全部可信度都建立在来源标注的准确上。 */
+export function planDisclaimer(src: PlanSource): string {
+  return src == 'doctor' ? DISCLAIMER_PLAN_DOCTOR : DISCLAIMER_PLAN_DEFAULT
+}

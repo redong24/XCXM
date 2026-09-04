@@ -1,0 +1,172 @@
+<template>
+  <!-- 必须是 scroll-view，不能是 view：
+       官方明确 App 端 vdom 模式的页面默认不可滚动，需显式写 scroll-view
+       （doc.dcloud.net.cn/uni-app-x/page.html）。本页渲染 3 个分区，
+       每个分区有标题 + 依据 + 3 到 6 步，共约 40 个文本节点，必然超一屏。
+       用 view 的后果是红区那一组（排在最后）永远看不到。 -->
+  <scroll-view class="plan-page" :scroll-y="true">
+    <view class="intro">
+      <text class="intro-title">行动计划</text>
+      <text class="intro-desc">
+        安全区、关注区、红区各对应一组动作。这套分区沿用医生给的哮喘行动计划卡。
+      </text>
+      <text class="intro-source">{{ sourceText }}</text>
+    </view>
+
+    <view v-for="z in zones" :key="z.zone" class="zone">
+      <view class="zone-head">
+        <!-- 分区标识：色块 + 文字并用，不单靠颜色 -->
+        <view class="chip" :style="'background-color:' + z.zoneColor"></view>
+        <text class="zone-name">{{ z.zoneText }}</text>
+      </view>
+      <text v-if="z.criteria != ''" class="criteria">{{ z.criteria }}</text>
+      <view v-for="s in z.steps" :key="s.order" class="step">
+        <text class="step-no">{{ s.order }}</text>
+        <text class="step-text">{{ s.text }}</text>
+      </view>
+    </view>
+
+    <!-- 不再有「还没有行动计划」的空态：currentPlanZones() 在没有医生录入时
+         回落到内置通用安抚措施，恒返回三个分区。空态分支会成为死代码，
+         而红区预警时打开这一页看到空白是不可接受的。 -->
+
+    <text class="disclaimer">{{ planNote }}</text>
+    <text class="disclaimer">{{ DISCLAIMER_SEEK_CARE }}</text>
+    <!-- 尾部留白：滚到底时免责文案不贴在屏幕最下沿 -->
+    <view class="tail"></view>
+  </scroll-view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import { DISCLAIMER_SEEK_CARE, planDisclaimer } from '../../styles/tokens.uts'
+import type { PlanZone } from '../../types/display.uts'
+import { currentPlanZones, currentPlanSource, doctorPlanDate } from '../../store/plan.uts'
+
+const zones = ref<PlanZone[]>([])
+// 来源与日期。医生录入时形如「医生行动计划 · 2026-08-12」，
+// 否则形如「内置通用安抚措施」。
+const sourceText = ref<string>('')
+// 责任口径。医生录入与内置文案必须是两句不同的话：
+// 内置内容套上「本内容由您的医生录入」，等于把本应用写的东西伪装成医嘱。
+const planNote = ref<string>('')
+
+function refresh() {
+  zones.value = currentPlanZones()
+  const src = currentPlanSource()
+  planNote.value = planDisclaimer(src)
+  if (src == 'doctor') {
+    const d = doctorPlanDate()
+    sourceText.value = d != '' ? `医生行动计划 · ${d}` : '医生行动计划'
+  } else {
+    sourceText.value = '内置通用安抚措施'
+  }
+}
+
+// 用 onPageShow 而不是 onMounted：B6（医生录入页）落地后从录入页返回时
+// 本页不会重新 mount，只会触发 onPageShow，用 onMounted 会看到旧内容。
+onPageShow(() => {
+  refresh()
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.plan-page {
+  flex: 1;
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.tail {
+  height: $sp-6;
+}
+
+.intro {
+  padding-top: $sp-5;
+  padding-bottom: $sp-4;
+}
+
+.intro-title {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.intro-desc {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+}
+
+.intro-source {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-2;
+}
+
+.zone {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.zone-head {
+  flex-direction: row;
+  align-items: center;
+}
+
+.chip {
+  width: 10px;
+  height: 10px;
+  border-radius: $r-sm;
+  margin-right: $sp-2;
+}
+
+.zone-name {
+  font-size: $fs-body;
+  color: $ink;
+  font-weight: 600;
+}
+
+.criteria {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+  margin-bottom: $sp-2;
+}
+
+.step {
+  flex-direction: row;
+  align-items: flex-start;
+  margin-top: $sp-2;
+}
+
+.step-no {
+  font-size: $fs-label;
+  color: $ink-2;
+  font-family: $font-metric;
+  width: 20px;
+}
+
+.step-text {
+  flex: 1;
+  font-size: $fs-body;
+  color: $ink;
+  line-height: 22px;
+}
+
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-4;
+}
+</style>

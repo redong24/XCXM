@@ -1,0 +1,596 @@
+<template>
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="children-page" :scroll-y="true">
+    <!-- 数据来自后端 B1（GET /api/users/my-children），
+         读取路径已接后端 B1。新建/编辑表单属 C4：
+         后端 POST/PUT /api/users/children 已就绪，只差表单。 -->
+
+    <view class="intro">
+      <text class="intro-title">看护对象</text>
+      <text class="intro-desc">
+        戒指佩戴在谁身上，就把它绑到这里的哪一位。一枚戒指同时只能属于一个人。
+      </text>
+    </view>
+
+    <view v-if="loading" class="state">
+      <text class="state-text">正在读取</text>
+    </view>
+
+    <view v-if="!loading && errText != ''" class="state">
+      <text class="state-text">{{ errText }}</text>
+      <text class="state-action" @click="reload">重试</text>
+    </view>
+
+    <!-- 理论上不应出现：后端总把「我自己」作为第一项返回。
+         保留它是因为空白屏幕比一句话更难排查。 -->
+    <view v-if="!loading && errText == '' && rows.length == 0" class="state">
+      <text class="state-text">没有读到任何档案。可能需要重新登录。</text>
+      <text class="state-action" @click="reload">重试</text>
+    </view>
+
+    <view v-for="r in rows" :key="r.id" class="row" @click="openChild(r.id)">
+      <view class="row-main">
+        <text class="row-name">{{ r.name }}</text>
+        <text v-if="r.isSelf" class="row-tag">我自己</text>
+      </view>
+      <view class="row-meta">
+        <!-- 状态同时用文字与颜色表达，不单靠颜色 -->
+        <text class="row-ring" :style="'color:' + r.zoneColor">
+          {{ r.hasRing ? r.zoneText : '未绑戒指' }}
+        </text>
+        <text class="row-time">{{ r.ageText }}</text>
+        <text v-if="r.lastUploadText != ''" class="row-time">{{ r.lastUploadText }}</text>
+      </view>
+    </view>
+
+    <view v-if="!formOpen" class="add" @click="openCreate">
+      <text class="add-text">添加看护对象</text>
+    </view>
+
+    <!-- C-2 纯档案表单：只有姓名 / 年龄 / 性别。
+         没有手机号、没有密码。孩子不是一个能登录的账号，
+         而是家长名下的一份档案。归属由后端按 token 写死。 -->
+    <view v-if="formOpen" class="form">
+      <text class="form-title">{{ editingId == 0 ? '新建档案' : '编辑档案' }}</text>
+
+      <view class="field">
+        <text class="field-label">姓名</text>
+        <!-- 必须用 v-model：手动受控(:value + @input)在 uni-app x Android 上
+             state 不随输入更新（登录页已实测过这个坑，勿回退） -->
+        <input class="field-input" v-model="fName" placeholder="孩子的名字或称呼" />
+      </view>
+
+      <view class="field">
+        <text class="field-label">年龄</text>
+        <!-- type 用 text 而非 number：官方提示 type=number 在不同 ROM 行为不一致；
+             inputmode=numeric 仍会弹数字键盘 -->
+        <input
+          class="field-input"
+          type="text"
+          inputmode="numeric"
+          v-model="fAge"
+          placeholder="用于按年龄匹配参考区间"
+        />
+      </view>
+
+      <view class="field">
+        <text class="field-label">性别</text>
+        <view class="seg">
+          <text
+            class="seg-item"
+            :class="fGender == 1 ? 'seg-on' : ''"
+            @click="pickGender(1)"
+          >男</text>
+          <text
+            class="seg-item"
+            :class="fGender == 2 ? 'seg-on' : ''"
+            @click="pickGender(2)"
+          >女</text>
+          <text
+            class="seg-item"
+            :class="fGender == 0 ? 'seg-on' : ''"
+            @click="pickGender(0)"
+          >不填</text>
+        </view>
+      </view>
+
+      <!-- 年龄的用途要说清楚，否则家长不知道为什么要填 -->
+      <text class="field-note">
+        年龄用于匹配同龄孩子的心率参考区间。不填也能建档，但哨兵只能套用成人区间。
+      </text>
+
+      <text v-if="formErr != ''" class="form-err">{{ formErr }}</text>
+
+      <view class="form-actions">
+        <text class="btn-primary" @click="submitForm">{{ saving ? '保存中' : '保存' }}</text>
+        <text class="btn-plain" @click="closeForm">取消</text>
+      </view>
+
+      <!-- 删除只在编辑既有档案时出现，且必须二次确认。
+           文案明确说清健康记录不会被删：静默销毁健康数据比留着更糟。 -->
+      <text v-if="editingId != 0" class="btn-danger" @click="confirmDelete">删除这份档案</text>
+    </view>
+
+    <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import {
+  childApi,
+  alertApi,
+  dataApi,
+  type ChildCreatePayload
+} from '../../api/index.uts'
+import { takeApiErrorText, clearApiError } from '../../common/request.uts'
+import {
+  DISCLAIMER_SHORT,
+  relativeTimeText,
+  zoneColor,
+  zoneLabel,
+  zoneFromLevel,
+  type Zone
+} from '../../styles/tokens.uts'
+import type { ChildDisplay } from '../../types/display.uts'
+
+const loading = ref<boolean>(false)
+const errText = ref<string>('')
+const rows = ref<ChildDisplay[]>([])
+
+/* ── 表单状态 ──
+ * editingId == 0 表示新建，否则是在编辑那个 id。
+ * 用 0 而不是 null 是因为模板里要和它比较，
+ * UTS 里可空数字进模板比较会引入不必要的空断言。 */
+const formOpen = ref<boolean>(false)
+const editingId = ref<number>(0)
+const fName = ref<string>('')
+// 年龄用字符串存：input 给的是 string，转数字只在提交时做一次。
+// 提前转会导致输入过程中的中间态（如空串）被转成 0。
+const fAge = ref<string>('')
+const fGender = ref<number>(0)
+const formErr = ref<string>('')
+const saving = ref<boolean>(false)
+
+/** 把「未处理预警的最高级别」折算成分区。
+ *
+ *  没有未处理预警时刻意显示「无预警」而不是「安全区」：
+ *  我们只知道「没有触发阈值」，不知道这个人此刻是否安全，
+ *  两者不是一回事，界面不该替医生下结论（§11.1 责任口径）。 */
+function zoneTextOf(hasPending: boolean, z: Zone): string {
+  if (!hasPending) { return '无预警' }
+  return zoneLabel(z)
+}
+
+/** ISO 串距今多少秒。解析失败返回 -1，调用方据此判定「无有效时间」。 */
+function secondsAgo(iso: string): number {
+  if (iso == '') { return -1 }
+  try {
+    const t = new Date(iso).getTime()
+    if (t <= 0) { return -1 }
+    return (Date.now() - t) / 1000
+  } catch (e) {
+    return -1
+  }
+}
+
+async function reload() {
+  loading.value = true
+  errText.value = ''
+  clearApiError()
+  try {
+    const people = await childApi.mine()
+
+    // 一次拉全量预警再按 user_id 归组，而不是每人一个请求（N+1）。
+    // 后端已把可见范围限制为「自己 + 名下孩子」，所以这一把就够。
+    const alerts = await alertApi.list()
+    // 最新读数（B10）。C3 时这里没有数据源，lastUploadText 只能留空。
+    const readings = await dataApi.latest()
+
+    const pendingLevel = new Map<number, number>()
+    for (let i = 0; i < alerts.length; i++) {
+      const a = alerts[i]
+      if (a.status != '待处理') { continue }
+      const prev = pendingLevel.get(a.user_id)
+      if (prev == null || a.level > prev!) {
+        pendingLevel.set(a.user_id, a.level)
+      }
+    }
+
+    const out: ChildDisplay[] = []
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i]
+      const lv = pendingLevel.get(p.id)
+      const hasPending = lv != null
+      const z = hasPending ? zoneFromLevel(lv!) : ('green' as Zone)
+      const age = p.age
+
+      // 这个人最近一次上传（取该人所有指标里时间最近的那条）
+      let newest: number = -1
+      for (let j = 0; j < readings.length; j++) {
+        const r = readings[j]
+        if (r.user_id != p.id) { continue }
+        const sec = secondsAgo(r.timestamp)
+        if (sec >= 0 && (newest < 0 || sec < newest)) { newest = sec }
+      }
+
+      out.push({
+        id: p.id,
+        name: p.name,
+        isSelf: p.is_self,
+        age: age,
+        // 模板里不做字符串拼接，也不用 String(number)：一律在脚本里算完
+        ageText: age == null ? '未填年龄' : `${age} 岁`,
+        hasRing: p.has_ring,
+        zone: z,
+        zoneColor: zoneColor(z),
+        zoneText: zoneTextOf(hasPending, z),
+        // 从未上传过时仍然留空（界面隐藏该行），不显示「--」也不编造时间
+        lastUploadText: newest >= 0 ? relativeTimeText(newest) : ''
+      } as ChildDisplay)
+    }
+    rows.value = out
+  } catch (e) {
+    errText.value = takeApiErrorText('读取看护对象失败')
+  }
+  loading.value = false
+}
+
+function closeForm() {
+  formOpen.value = false
+  editingId.value = 0
+  fName.value = ''
+  fAge.value = ''
+  fGender.value = 0
+  formErr.value = ''
+}
+
+function openCreate() {
+  closeForm()
+  formOpen.value = true
+}
+
+function pickGender(g: number) {
+  fGender.value = g
+}
+
+/** 点列表行 = 编辑那份档案。 */
+function openChild(id: number) {
+  // 「我自己」不能在这里编辑：它是登录账号本身，
+  // 改名/改年龄属于「我」页的账号资料，后端的 children 路由
+  // 也只接受名下孩子（guardian_id 必须等于当前用户）。
+  let target: ChildDisplay | null = null
+  const list = rows.value
+  for (let i = 0; i < list.length; i++) {
+    if (list[i].id == id) { target = list[i] }
+  }
+  if (target == null) { return }
+  const t = target!
+  if (t.isSelf) {
+    uni.showToast({ title: '本人资料请在「我」页面修改', icon: 'none' })
+    return
+  }
+
+  editingId.value = t.id
+  fName.value = t.name
+  const a = t.age
+  fAge.value = a == null ? '' : `${a}`
+  fGender.value = 0
+  formErr.value = ''
+  formOpen.value = true
+}
+
+/**
+ * 校验并归一化年龄输入。
+ * 返回 -1 表示输入非法（调用方给提示），返回 -2 表示留空（合法，存 null）。
+ */
+function normalizeAge(raw: string): number {
+  if (raw == '') { return -2 }
+  // parseInt 在 UTS 里只接受 string（传其它类型是编译错误），这里正好是 string
+  const n = parseInt(raw)
+  if (isNaN(n)) { return -1 }
+  // 上界取 120：这是档案而不是体检表，只需拦住明显的误输入
+  if (n < 0 || n > 120) { return -1 }
+  return n
+}
+
+async function submitForm() {
+  if (saving.value) { return }
+  formErr.value = ''
+
+  const name = fName.value.trim()
+  if (name == '') {
+    formErr.value = '请填写姓名'
+    return
+  }
+
+  const ageNorm = normalizeAge(fAge.value.trim())
+  if (ageNorm == -1) {
+    formErr.value = '年龄请填 0 到 120 之间的整数，或留空'
+    return
+  }
+
+  saving.value = true
+  clearApiError()
+  try {
+    const payload = {
+      name: name,
+      age: ageNorm == -2 ? null : ageNorm,
+      gender: fGender.value
+    } as ChildCreatePayload
+
+    if (editingId.value == 0) {
+      await childApi.create(payload)
+    } else {
+      await childApi.update(editingId.value, payload)
+    }
+    closeForm()
+    await reload()
+  } catch (e) {
+    formErr.value = takeApiErrorText('保存失败')
+  }
+  saving.value = false
+}
+
+// 注意（勿调换顺序）：UTS 不存在函数声明提升，
+// doDelete 必须定义在调用它的 confirmDelete 之前。
+async function doDelete(id: number) {
+  clearApiError()
+  try {
+    await childApi.remove(id)
+    closeForm()
+    await reload()
+  } catch (e) {
+    formErr.value = takeApiErrorText('删除失败')
+  }
+}
+
+function confirmDelete() {
+  const id = editingId.value
+  if (id == 0) { return }
+  uni.showModal({
+    title: '删除档案',
+    // 说清后果：戒指会解绑，但健康记录保留。
+    // 不写「此操作不可恢复」这类模板话，写真正会发生的事。
+    content: '将删除这份档案并解绑其戒指。已产生的健康记录会保留，不会被删除。',
+    confirmText: '删除',
+    cancelText: '返回',
+    success: (res) => {
+      if (res.confirm) {
+        doDelete(id)
+      }
+    }
+  })
+}
+
+onMounted(() => {
+  reload()
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.children-page {
+  flex: 1;
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.intro {
+  padding-top: $sp-5;
+  padding-bottom: $sp-4;
+}
+
+.intro-title {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.intro-desc {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+}
+
+/* 发丝线分层，不用卡片堆叠 */
+.row {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-3;
+  padding-bottom: $sp-3;
+  min-height: $tap-min;
+  justify-content: center;
+}
+
+.row-main {
+  flex-direction: row;
+  align-items: center;
+}
+
+.row-name {
+  font-size: $fs-body;
+  color: $ink;
+}
+
+.row-tag {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-2;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-sm;
+  padding-left: $sp-1;
+  padding-right: $sp-1;
+}
+
+.row-meta {
+  flex-direction: row;
+  align-items: center;
+  margin-top: $sp-1;
+}
+
+.row-ring {
+  font-size: $fs-label;
+}
+
+.row-time {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-left: $sp-2;
+}
+
+.add {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  min-height: $tap-min;
+  justify-content: center;
+}
+
+.add-text {
+  font-size: $fs-body;
+  color: $accent;
+}
+
+.state {
+  padding-top: $sp-4;
+  padding-bottom: $sp-4;
+}
+
+.state-text {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+}
+
+.state-action {
+  font-size: $fs-label;
+  color: $accent;
+  margin-top: $sp-2;
+}
+
+/* ── C-2 纯档案表单 ── */
+.form {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+}
+
+.form-title {
+  font-size: $fs-body;
+  color: $ink;
+  font-weight: 600;
+}
+
+.field {
+  margin-top: $sp-4;
+}
+
+.field-label {
+  font-size: $fs-label;
+  color: $ink-2;
+}
+
+.field-input {
+  font-size: $fs-body;
+  color: $ink;
+  height: $tap-min;
+  border-bottom-width: $hair-w;
+  border-bottom-style: solid;
+  border-bottom-color: $hairline;
+}
+
+.field-note {
+  font-size: $fs-utility;
+  color: $ink-2;
+  line-height: 18px;
+  margin-top: $sp-4;
+}
+
+/* 分段选择器：不用 picker，三个选项直接摊开，少一次弹层 */
+.seg {
+  flex-direction: row;
+  margin-top: $sp-2;
+}
+
+.seg-item {
+  font-size: $fs-label;
+  color: $ink-2;
+  border-width: $hair-w;
+  border-style: solid;
+  border-color: $hairline;
+  border-radius: $r-sm;
+  padding-top: $sp-2;
+  padding-bottom: $sp-2;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+  margin-right: $sp-2;
+}
+
+/* 选中态同时改文字色与边框色，不只靠背景 */
+.seg-on {
+  color: $accent;
+  border-color: $accent;
+}
+
+.form-err {
+  font-size: $fs-label;
+  color: $zone-red;
+  margin-top: $sp-3;
+}
+
+.form-actions {
+  flex-direction: row;
+  align-items: center;
+  margin-top: $sp-5;
+}
+
+.btn-primary {
+  font-size: $fs-body;
+  color: $card;
+  background-color: $accent;
+  border-radius: $r-md;
+  padding-top: $sp-3;
+  padding-bottom: $sp-3;
+  padding-left: $sp-6;
+  padding-right: $sp-6;
+}
+
+.btn-plain {
+  font-size: $fs-body;
+  color: $ink-2;
+  margin-left: $sp-5;
+}
+
+/* 删除用红字而非红底按钮：红底会与预警的红抢注意力，
+ * 而 $zone-red 是全局保留给报警的（uni.scss 的 Colour Lock）。 */
+.btn-danger {
+  font-size: $fs-label;
+  color: $zone-red;
+  margin-top: $sp-6;
+}
+
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-6;
+  margin-bottom: $sp-5;
+}
+.tail {
+  height: $sp-6;
+}
+</style>

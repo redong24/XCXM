@@ -1,5 +1,9 @@
 <template>
-  <view class="device-page">
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="device-page" :scroll-y="true">
     <!-- 当前设备状态 -->
     <view class="current-device card">
       <text class="card-title">当前设备</text>
@@ -46,7 +50,9 @@
         <text>点击「开始扫描」搜索附近的戒指设备</text>
       </view>
     </view>
-  </view>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
 </template>
 
 <script setup lang="uts">
@@ -66,23 +72,32 @@ import {
 
 const connectingMac = ref('')
 
-async function onScan() {
+// 扫描不再是 Promise：官方 rwfit-ble 的 startScan 只负责「开始扫描」，
+// 设备是通过独立的 onScanResult 事件陆续到达的，没有一个「扫描完成」的
+// 时刻可以 await。原来的 await + try/finally 会在第一个设备到达前就
+// 走到 finally，语义是错的。改为「开始扫描 + 固定 5s 后收摊」。
+function onScan() {
   setScanning(true)
   setNearbyDevices([] as BleDevice[])
-  try {
-    await startScan((device: BleDevice) => {
+
+  startScan(
+    (device: BleDevice) => {
       const list = deviceState.nearbyDevices.slice()
       if (!list.some((d) => d.mac === device.mac)) {
         list.push(device)
         setNearbyDevices(list)
       }
-    })
-  } finally {
-    setTimeout(() => {
+    },
+    (errMsg: string) => {
       setScanning(false)
-      stopScan()
-    }, 5000)
-  }
+      uni.showToast({ title: errMsg != '' ? errMsg : '扫描失败', icon: 'none' })
+    }
+  )
+
+  setTimeout(() => {
+    setScanning(false)
+    stopScan()
+  }, 5000)
 }
 
 // 向后端解析设备的真实 id（按 MAC 在「我的设备」中匹配）
@@ -145,11 +160,20 @@ async function onConnected(mac: string): Promise<boolean> {
 function onConnect(device: BleDevice) {
   connectingMac.value = device.mac
   connect(device.mac, (status) => {
-    if (status === 'connected') {
+    // 状态取值必须与适配层/SDK 对齐，否则会静默失效。
+    // 这里原来判断的是 'error' / 'timeout'，而适配层从不发出这两个值。
+    // 官方 ConnectState 是 'connecting'|'connected'|'disconnected'|'failed'，
+    // 结果是连接失败时用户什么提示都看不到，只能干等。
+    //
+    // 另外「connected」并不等于「可用」：真实链路要等戒指上报功能菜单
+    // （onFunctionMenu）才算就绪，适配层把它抽象成额外的 'ready' 状态。
+    // 绑定动作放在 ready，避免在设备还没准备好时就去调业务接口。
+    if (status === 'ready') {
       // 注意：connect 的回调要求返回 Unit，不能传 async 函数（error17），
       // 故用非 async 回调包裹，内部调用前置的 async 处理函数
       onConnected(device.mac)
-    } else if (status === 'error' || status === 'timeout') {
+    } else if (status === 'failed' || status === 'disconnected') {
+      connectingMac.value = ''
       uni.showToast({ title: '连接失败', icon: 'none' })
     }
   })
@@ -177,7 +201,16 @@ async function onUnbind() {
 
 onMounted(() => {
   restoreDevice()
-  initSDK()
+  // 初始化失败在这一页要明确告知：这页的全部功能都依赖蓝牙，
+  // 静默失败会让用户对着一个永远扫不出设备的页面反复点击。
+  initSDK((ok: boolean, errMsg: string) => {
+    if (!ok) {
+      uni.showToast({
+        title: errMsg != '' ? errMsg : '蓝牙初始化失败',
+        icon: 'none'
+      })
+    }
+  })
 })
 
 onUnmounted(() => {
@@ -284,5 +317,8 @@ onUnmounted(() => {
   text-align: center;
   color: #9ca3af;
   font-size: 26rpx;
+}
+.tail {
+  height: 48rpx;
 }
 </style>

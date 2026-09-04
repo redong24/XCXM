@@ -1,0 +1,288 @@
+<template>
+  <!-- 根节点必须是 scroll-view，不能是 view：
+       官方明确「VDOM模式中，App平台的页面默认不可滚动，需要开发者在页面中
+       显示使用scroll-view」（doc.dcloud.net.cn/uni-app-x/page.html）。
+       用 view 的后果是超出首屏的内容用户永远触达不到，且不报任何错。 -->
+  <scroll-view class="alarm-page" :scroll-y="true">
+    <!-- 哨兵值守能力的诚实说明。
+         §7.7：状态判定只有两个输入（通知权限、网络可达），
+         没有第三个输入，所以本轮算不出「在岗」，值域只有黄和灰。
+         这是黄态必须承认边界的三处之一。 -->
+    <view class="state-block">
+      <view class="state-head">
+        <view class="dot" :style="'background-color:' + stateColor"></view>
+        <text class="state-name">{{ stateText }}</text>
+      </view>
+      <text class="state-desc">{{ stateDesc }}</text>
+    </view>
+
+    <!-- 骨架说明（C6/C7 实现时删除）：
+         下面的开关依赖后端 B5（年龄分档阈值 + 去抖）与 C7（推送渠道），
+         现在只有结构，没有接线。 -->
+
+    <view class="group">
+      <text class="group-title">上传与值守</text>
+
+      <view class="row">
+        <view class="row-main">
+          <text class="row-label">上传频率</text>
+          <text class="row-hint">越密越灵敏，也越耗戒指电量</text>
+        </view>
+        <text class="row-value">{{ freqText }}</text>
+      </view>
+
+      <view class="row">
+        <view class="row-main">
+          <text class="row-label">夜间加强</text>
+          <text class="row-hint">夜间提高采样密度</text>
+        </view>
+        <switch :checked="nightBoost" @change="onNightBoost" />
+      </view>
+    </view>
+
+    <view class="group">
+      <text class="group-title">提醒方式</text>
+
+      <view class="row">
+        <view class="row-main">
+          <text class="row-label">震动</text>
+        </view>
+        <switch :checked="vibrate" @change="onVibrate" />
+      </view>
+
+      <view class="row">
+        <view class="row-main">
+          <text class="row-label">响铃</text>
+          <text class="row-hint">红区预警会绕过静音，走高优先级通知渠道</text>
+        </view>
+        <switch :checked="ring" @change="onRing" />
+      </view>
+
+      <view class="row">
+        <view class="row-main">
+          <text class="row-label">免打扰时段</text>
+          <text class="row-hint">红区预警不受免打扰限制</text>
+        </view>
+        <text class="row-value">{{ dndText }}</text>
+      </view>
+
+      <!-- 测试按钮：让家长自己验证「到底响不响」，
+           这是黄态承认边界的第二处 -->
+      <view class="test" @click="sendTest">
+        <text class="test-text">发一条测试预警</text>
+        <text class="test-hint">建议按一次。收不到就说明手机的省电策略拦住了它。</text>
+      </view>
+    </view>
+
+    <view class="group">
+      <text class="group-title">阈值</text>
+      <view v-if="thresholdRows.length == 0" class="state">
+        <text class="state-text">还没有看护对象，先添加档案后这里会按人显示阈值。</text>
+      </view>
+      <view v-for="t in thresholdRows" :key="t.id" class="row">
+        <view class="row-main">
+          <text class="row-label">{{ t.name }}</text>
+          <text class="row-hint">{{ t.ageText }}</text>
+        </view>
+        <text class="row-value">{{ t.zoneText }}</text>
+      </view>
+      <text class="note">{{ DISCLAIMER_THRESHOLD }}</text>
+    </view>
+
+    <text class="disclaimer">{{ DISCLAIMER_SHORT }}</text>
+    <!-- 滚动到底部时的收尾留白，避免最后一行内容贴住屏幕边缘 -->
+    <view class="tail"></view>
+  </scroll-view>
+</template>
+
+<script setup lang="uts">
+// 注意：uni-app x 会自动引入 vue 公开 API（ref/computed/onMounted 等），无需 import
+import {
+  DISCLAIMER_SHORT,
+  DISCLAIMER_THRESHOLD,
+  sentinelColor,
+  sentinelLabel,
+  type SentinelState
+} from '../../styles/tokens.uts'
+import type { ChildDisplay, UniSwitchChangeEventLike } from '../../types/display.uts'
+
+// 本轮值域只有 'amber' 与 'gray'。
+// TODO(§7.3 离线厂商推送落地后): 打开 'green' 分支。
+const state = ref<SentinelState>('gray')
+
+// 模板不能调用带参数的函数，派生值一律在脚本里算好
+const stateText = computed<string>(() => sentinelLabel(state.value))
+const stateColor = computed<string>(() => sentinelColor(state.value))
+const stateDesc = computed<string>(() => {
+  if (state.value == 'amber') {
+    // 黄态承认边界的第三处
+    return '应用在前台或刚进后台时能收到预警。手机锁屏久置或应用被系统清理后收不到。'
+  }
+  return '当前收不到预警。请检查通知权限与网络。'
+})
+
+const freqText = ref<string>('每 5 分钟')
+const nightBoost = ref<boolean>(false)
+const vibrate = ref<boolean>(true)
+const ring = ref<boolean>(true)
+const dndText = ref<string>('未设置')
+const thresholdRows = ref<ChildDisplay[]>([])
+
+function onNightBoost(e: UniSwitchChangeEventLike) {
+  nightBoost.value = e.detail.value
+}
+
+function onVibrate(e: UniSwitchChangeEventLike) {
+  vibrate.value = e.detail.value
+}
+
+function onRing(e: UniSwitchChangeEventLike) {
+  ring.value = e.detail.value
+}
+
+function sendTest() {
+  // TODO(C7): uni.createPushMessage 走已建好的高优先级渠道，本地自发一条
+  uni.showToast({ title: '测试预警随推送一并上线', icon: 'none' })
+}
+
+onMounted(() => {
+  // TODO(C7): 读通知权限 + 网络可达，算出 amber / gray
+  // TODO(C6): 拉看护对象与各自的年龄分档阈值（后端 B5）
+})
+</script>
+
+<style scoped lang="scss">
+/* 不 import uni.scss：官方文档明示它是特殊文件，编译器已把它注入每个 scss 文件，
+ * 无需 import 即可使用其中的变量。保留 lang="scss" 只是为了启用 scss 预处理。
+ * 见 doc.dcloud.net.cn/uni-app-x/collocation/uni-scss.html */
+
+.alarm-page {
+  flex: 1;
+  background-color: $paper;
+  padding-left: $sp-4;
+  padding-right: $sp-4;
+}
+
+.state-block {
+  padding-top: $sp-5;
+  padding-bottom: $sp-4;
+}
+
+.state-head {
+  flex-direction: row;
+  align-items: center;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: $r-sm;
+  margin-right: $sp-2;
+}
+
+.state-name {
+  font-size: $fs-title;
+  color: $ink;
+  font-weight: 600;
+}
+
+.state-desc {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+  margin-top: $sp-2;
+}
+
+.group {
+  border-top-width: $hair-w;
+  border-top-style: solid;
+  border-top-color: $hairline;
+  padding-top: $sp-4;
+  padding-bottom: $sp-2;
+}
+
+.group-title {
+  font-size: $fs-label;
+  color: $ink-2;
+  margin-bottom: $sp-3;
+}
+
+.row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  min-height: $tap-min;
+  padding-top: $sp-2;
+  padding-bottom: $sp-2;
+}
+
+.row-main {
+  flex: 1;
+  padding-right: $sp-3;
+}
+
+.row-label {
+  font-size: $fs-body;
+  color: $ink;
+}
+
+.row-hint {
+  font-size: $fs-utility;
+  color: $ink-2;
+  line-height: 16px;
+  margin-top: $sp-1;
+}
+
+.row-value {
+  font-size: $fs-body;
+  color: $accent;
+}
+
+.test {
+  min-height: $tap-min;
+  justify-content: center;
+  padding-top: $sp-3;
+  padding-bottom: $sp-3;
+}
+
+.test-text {
+  font-size: $fs-body;
+  color: $accent;
+}
+
+.test-hint {
+  font-size: $fs-utility;
+  color: $ink-2;
+  line-height: 16px;
+  margin-top: $sp-1;
+}
+
+.note {
+  font-size: $fs-utility;
+  color: $ink-2;
+  line-height: 16px;
+  margin-top: $sp-2;
+  margin-bottom: $sp-2;
+}
+
+.state {
+  padding-top: $sp-2;
+  padding-bottom: $sp-2;
+}
+
+.state-text {
+  font-size: $fs-label;
+  color: $ink-2;
+  line-height: 20px;
+}
+
+.disclaimer {
+  font-size: $fs-utility;
+  color: $ink-2;
+  margin-top: $sp-5;
+  margin-bottom: $sp-5;
+}
+.tail {
+  height: $sp-6;
+}
+</style>
