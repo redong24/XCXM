@@ -148,6 +148,24 @@ function startCapture(channel: number) {
   //   也不告诉他下一步该做什么。真机日志里用户连点了三次（19:23:55、
   //   19:24:02、19:24:14），每次都是同一个错误码 —— 说明失败提示没能
   //   让他明白问题在哪。这里改成明确指路。
+  // 原始波形能力位为 false 时，直接给结论而不是让用户点了没反应。
+  //
+  // 20:45 真机实测：S07（固件 V2.3.3）上报
+  //   PPG=false ACC=false PPGRed=false IR=false Sleep=false
+  // 而 HR=true 血氧=true HRV=true —— 链路和鉴权都正常，是固件把
+  // 原始数据整族关掉了（连 PPG监测 也是 false），属消费级固件。
+  // 这不是 APP 能绕过的，jar 里也确认没有任何 unlock/授权命令。
+  if (channel != SENSOR_ACC && !isRawPpgSupported()) {
+    uni.showModal({
+      title: '该设备无法采集原始波形',
+      content: '手环固件上报：不支持原始 PPG 波形输出。\n\n'
+        + '心率/血氧/HRV 可以正常使用，但哮喘预警模型需要原始波形，'
+        + '需厂家提供开启原始数据的固件。\n\n'
+        + '请把日志中 [CAP] 开头的两行发给厂家。',
+      showCancel: false
+    })
+    return
+  }
   if (!isDeviceReady()) {
     uni.showModal({
       title: '设备未就绪',
@@ -184,8 +202,6 @@ function onStart() {
   startCapture(SENSOR_PPG_GREEN)
 }
 
-// ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
-// rwble 内部会跳过上传并打印说明），只为看 PROBE 日志有没有出现。
 // ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
 // rwble 内部会跳过上传并打印说明）。
 //

@@ -532,9 +532,14 @@ function startRealtime() {
       onResultValue(r)
     },
     (errMsg: string) => {
-      // 最常见的原因是设备还没 ready（等戒指上报功能菜单）。
+      // 最常见的原因是设备还没 ready（等手环上报功能菜单）。
       // 这属于正常时序而非故障，不打扰用户，只留日志。
-      console.log(`[home] 实时测量未开启：${errMsg}`)
+      //
+      // 20:45 真机实测：initSDK 成功比设备就绪早 4.9 秒，这里必然先
+      // 命中一次。以前文案是「实时测量未开启」，看着像故障，其实
+      // 请求已被 rwble 暂存、设备就绪时会自动重放（见 rwble.uts
+      // pendingRealtime）。所以这里不能再叫「未开启」。
+      console.log(`[home] 实时测量尚未开始（会自动重试）：${errMsg}`)
     }
   )
 }

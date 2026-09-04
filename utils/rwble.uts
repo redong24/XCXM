@@ -203,6 +203,23 @@ let scanFoundCb: ((device: BleDevice) => void) | null = null
 let resultCb: ResultValueCallback | null = null
 let rawCb: RawPpgCallback | null = null
 
+// 待重放的「启动实时测量」意图。
+//
+// 【为什么需要它】
+//   20:45 真机日志：initSDK 成功（20:45:52.600）比设备就绪
+//   （20:45:57.519 功能菜单上报）早了 4.9 秒，而 startRealtime() 只在
+//   initSDK 回调里调一次、永不重试 —— 于是 startHealthData 撞上
+//   deviceReady=false 直接返回，这台设备唯一开放的 HR/血氧/HRV
+//   一次都没取到。
+//
+// 【为什么不做成 ready 事件订阅槽】
+//   connCb 只在 connect() 里赋值，只有发起连接的页面（device）能收到
+//   ready；home 页不发起连接，拿不到。而再开一个全局 ready 订阅槽会
+//   重现「单监听者互相覆盖」的老毛病（见 registerListeners 注释）。
+//   暂存意图只有一份，天然不会互相覆盖，也不关心是谁触发了连接。
+let pendingRealtime: ResultValueCallback | null = null
+let pendingRealtimeError: ((errMsg: string) => void) | null = null
+
 // 监听者是否已注册。onXxx 重复调用会覆盖，不会叠加，
 // 但仍用一个标志避免在 initialize 之外的地方误注册。
 let listenersBound = false
@@ -343,6 +360,8 @@ export function stopHealthData(): void {
   // NoClassDefFoundError。但回调槽必须照清，否则状态永久残留。
   if (!sdkInitialized) {
     resultCb = null
+    pendingRealtime = null
+    pendingRealtimeError = null
     return
   }
   // 三个 metric 是分别启停的（index.uts 的 controlHealth 按 metric 换
@@ -351,6 +370,41 @@ export function stopHealthData(): void {
   stopRealtimeMeasure({ metric: 'bloodOxy' })
   stopRealtimeMeasure({ metric: 'hrv' })
   resultCb = null
+  // 用户/页面明确要求停止，排队中的请求当然也要撤销，
+  // 否则设备一就绪又自己启动起来了。
+  pendingRealtime = null
+  pendingRealtimeError = null
+}
+
+// 真正向 SDK 下发实时测量指令。
+//
+// 【为什么要从 startHealthData 里抽出来】
+//   重放点在 registerListeners 内部（onFunctionMenu 回调），而
+//   startHealthData 声明在本文件后半部分。UTS/Kotlin 没有函数提升
+//   （utscheck U05），在声明之前调用会直接编译失败，所以被复用的
+//   这段必须提到 registerListeners 之前。
+function beginRealtime(
+  callback: ResultValueCallback,
+  onError: (errMsg: string) => void
+): void {
+  // 真实用法：onRealtimeData 已在 registerListeners 里统一订阅，
+  // 这里按 metric 逐个启动测量。
+  // metric 合法值见 interface.uts:110 RealtimeMetric：
+  //   'hr' | 'bloodOxy' | 'hrv' | 'pressure' | 'bloodSugar' | 'bloodPressure'
+  // 本项目只用前三个；回调里是 dataType(number)，由 mapDataType 映射。
+  resultCb = callback
+  console.log('[RwBle] 启动实时测量 hr/bloodOxy/hrv')
+  // 只对第一个 metric 上报错误，避免三条失败弹三次同样的提示。
+  startRealtimeMeasure({
+    metric: 'hr',
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 启动实时测量失败 ${msg}`)
+      onError(msg)
+    }
+  })
+  startRealtimeMeasure({ metric: 'bloodOxy' })
+  startRealtimeMeasure({ metric: 'hrv' })
 }
 
 // 注册全部全局事件监听。
@@ -442,6 +496,22 @@ function registerListeners(): void {
       + `PPG监测=${raw.getBoolean('isSupportPPGMonitoring')}`)
 
     connCb?.('ready', { name: menu.name, mac: menu.mac, rssi: 0 } as BleDevice)
+
+    // 重放此前因「设备未就绪」而被搁置的实时测量请求。
+    //
+    // 这是 20:45 那个缺陷的正解：谁先到不再重要 —— 页面早于设备就绪
+    // 时把意图存下，就绪的这一刻由设备事件驱动补发。
+    // 先取出再清空，保证只重放一次（幂等）。
+    const pc = pendingRealtime
+    const pe = pendingRealtimeError
+    if (pc != null) {
+      pendingRealtime = null
+      pendingRealtimeError = null
+      console.log('[RwBle] 设备就绪，重放此前搁置的实时测量请求')
+      beginRealtime(pc!, pe != null ? pe! : (msg: string) => {
+        console.error(`[RwBle] 重放实时测量失败 ${msg}`)
+      })
+    }
   })
 
   onRealtimeData((d: RealtimeData) => {
@@ -616,6 +686,10 @@ export function releasePageCallbacks(): void {
   scanFoundCb = null
   resultCb = null
   rawCb = null
+  // 待重放意图也必须清掉：页面已经卸载了，重放到一个不存在的页面上
+  // 等于把数据写进空气，还会让人误以为测量在跑。
+  pendingRealtime = null
+  pendingRealtimeError = null
 }
 
 // 只读探针：当前是否在扫描。射频冲突排查用。
@@ -669,6 +743,8 @@ export function destroySDK(): void {
     scanFoundCb = null
     resultCb = null
     rawCb = null
+    pendingRealtime = null
+    pendingRealtimeError = null
     deviceConnected = false
     deviceReady = false
     return
@@ -684,6 +760,8 @@ export function destroySDK(): void {
   scanFoundCb = null
   resultCb = null
   rawCb = null
+  pendingRealtime = null
+  pendingRealtimeError = null
   sdkInitialized = false
   deviceConnected = false
   deviceReady = false
@@ -858,9 +936,17 @@ export function startHealthData(
   callback: ResultValueCallback,
   onError: (errMsg: string) => void
 ): void {
-  // 这道闸门是必须的，理由见上文 connected/ready 说明。
+  // 设备还没就绪不再直接失败，而是把意图记下来，等 onFunctionMenu
+  // 上报就绪时自动重放（见 pendingRealtime 声明处的原因说明）。
+  //
+  // 仍然回调 onError：上层要据此显示「等待设备」这类状态。区别在于
+  // 文案不再是终态失败，而是明确告知会自动开始 —— 20:45 那轮
+  // home 页打的是「实时测量未开启」，看着像故障，其实只是早到了。
   if (!deviceReady) {
-    onError('设备尚未就绪（等待功能菜单上报）')
+    pendingRealtime = callback
+    pendingRealtimeError = onError
+    console.log('[RwBle] 设备未就绪，已暂存实时测量请求，就绪后自动开始')
+    onError('设备尚未就绪，已排队等待（就绪后自动开始）')
     return
   }
   if (USE_MOCK) {
@@ -878,24 +964,7 @@ export function startHealthData(
     }, 2000)
     return
   }
-  // 真实用法：onRealtimeData 已在 registerListeners 里统一订阅，
-  // 这里按 metric 逐个启动测量。
-  // metric 合法值见 interface.uts:110 RealtimeMetric：
-  //   'hr' | 'bloodOxy' | 'hrv' | 'pressure' | 'bloodSugar' | 'bloodPressure'
-  // 本项目只用前三个；回调里是 dataType(number)，由 mapDataType 映射。
-  resultCb = callback
-  console.log('[RwBle] 启动实时测量 hr/bloodOxy/hrv')
-  // 只对第一个 metric 上报错误，避免三条失败弹三次同样的提示。
-  startRealtimeMeasure({
-    metric: 'hr',
-    fail: (e: RwfitFail) => {
-      const msg = failText(e.errCode, e.errMsg)
-      console.error(`[RwBle] 启动实时测量失败 ${msg}`)
-      onError(msg)
-    }
-  })
-  startRealtimeMeasure({ metric: 'bloodOxy' })
-  startRealtimeMeasure({ metric: 'hrv' })
+  beginRealtime(callback, onError)
 }
 
 // ---------------------------------------------------------------------------
