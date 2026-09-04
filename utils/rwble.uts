@@ -38,7 +38,7 @@
 //   2. HBuilderX >= 5.15.0（插件 engines 要求）
 //   3. 已提交云端打包「自定义调试基座」并安装到手机
 //   4. manifest.json 里蓝牙权限齐备（本项目已具备，已核对）
-export const USE_MOCK = true
+export const USE_MOCK = false
 
 // ---------------------------------------------------------------------------
 // 对外类型
@@ -54,6 +54,13 @@ export type BleDevice = {
   name: string
   mac: string
   rssi: number
+  // 平台设备标识。Android 用不到（connectNative 只认 mac），
+  // 但 readme 明确要求「连接时原样传回扫描得到的完整设备对象，
+  // iOS 和微信小程序需要其中的平台设备标识」，
+  // app-ios/index.uts:462 就是取 device.uuid。
+  // 设为可选：Android 扫描结果里没有这两个字段。
+  uuid?: string
+  deviceId?: string
 }
 
 // 实时测量结果值
@@ -87,19 +94,50 @@ export const SENSOR_PPG_GREEN = 2
 export const SENSOR_PPG_GREEN_AND_ACC = 3
 
 // ---------------------------------------------------------------------------
+// 原始 PPG 采样率
+// ---------------------------------------------------------------------------
+// 【这个值目前是假设，尚未被实测证实】
+//   代码历史上写死 125，而 SDK 文档写 100Hz。两者矛盾且从未验证。
+//   fs 是 RR（呼吸率）提取的分母，直接决定 0.1-0.75Hz 带通对应的 bpm 区间，
+//   若真值是 100 而按 125 算，全部 RR 结果会有 25% 系统性偏差，
+//   已完成的 CapnoBase 定标参数也要重做。
+//   本次自定义基座上线后，onSensorRawData 里的 PROBE 日志会直接算出
+//   fs = ppg点数 / 相邻包 timestampSec 差值，据此改这一个常量即可。
+export const RAW_PPG_FS = 125
+
+// ---------------------------------------------------------------------------
 // 插件引用
 // ---------------------------------------------------------------------------
 // 放开下面这行的同时必须把 USE_MOCK 置为 false。
 // 注意：只要这行 import 存在，即使 USE_MOCK 为 true，标准真机基座
 // 也会因为找不到原生库而启动失败，所以两者必须同时切换。
-// import { initialize, startScan, stopScan, connect, disconnect,
-//          startRealtimeMeasure, stopRealtimeMeasure,
-//          controlSensorRaw, getSensorRawHistory,
-//          onScanResult, offScanResult, onConnectState, offConnectState,
-//          onFunctionMenu, offFunctionMenu,
-//          onRealtimeData, offRealtimeData,
-//          onSensorRawData, offSensorRawData,
-//          onSensorRawStopped, offSensorRawStopped } from '@/uni_modules/rwfit-ble'
+// 已核对 uni_modules/rwfit-ble/utssdk/interface.uts 与 app-android/index.uts，
+// 下列每个名字都确认存在且签名一致（SDK 用 `export const xxx: Type = function`
+// 形式导出，import 写法不变）。
+import { initialize, startScan as sdkStartScan, stopScan as sdkStopScan,
+         connect as sdkConnect, disconnect as sdkDisconnect,
+         startRealtimeMeasure, stopRealtimeMeasure,
+         controlSensorRaw, getSensorRawHistory,
+         onScanResult, offScanResult, onConnectState, offConnectState,
+         onFunctionMenu, offFunctionMenu,
+         onRealtimeData, offRealtimeData,
+         onSensorRawData, offSensorRawData,
+         onSensorRawStopped, offSensorRawStopped } from '@/uni_modules/rwfit-ble'
+// 类型单独引入。这些名字全部来自 utssdk/interface.uts，行号已核对：
+//   BleDevice:59  FunctionMenu:78  RealtimeData:113  ConnectStateEvent:70
+//   SensorRawPacket:190  SensorRawStoppedEvent:201  RwfitFail:18
+// 注意 BleDevice 与本文件对外导出的同名类型是两回事：
+//   SDK 的多 3 个可选字段(uuid/deviceId/systemConnected)，
+//   本文件的是精简后的对外契约。这里 import 的是 SDK 版，
+//   用于给回调参数标注类型；对外仍返回本文件自己的 BleDevice。
+import type { BleDevice as SdkBleDevice, ConnectStateEvent, FunctionMenu,
+              RealtimeData, SensorRawPacket, SensorRawStoppedEvent,
+              RwfitFail } from '@/uni_modules/rwfit-ble'
+
+// 【为什么 startScan / stopScan / connect / disconnect 要起别名】
+//   本文件对外导出的函数同名。UTS 编译到 Kotlin 后，同名符号会互相遮蔽，
+//   本文件里的 startScan() 会递归调用自己而不是插件的 —— 表现为栈溢出，
+//   且报错位置与真因无关。加 sdk 前缀彻底避开。
 
 // ---------------------------------------------------------------------------
 // 内部状态
@@ -118,9 +156,80 @@ let sdkInitialized = false
 let deviceConnected = false
 let deviceReady = false
 
+// 上层注册的回调。真实模式下事件是全局订阅（onXxx 只能有一个监听者），
+// 所以必须把上层回调存起来，由本文件的单一监听者转发。
+// 类型带 | null 是 UTS 空安全的要求，调用处必须用 ?.() 或判空。
+let connCb: ConnectionCallback | null = null
+let scanFoundCb: ((device: BleDevice) => void) | null = null
+let resultCb: ResultValueCallback | null = null
+let rawCb: RawPpgCallback | null = null
+
+// 监听者是否已注册。onXxx 重复调用会覆盖，不会叠加，
+// 但仍用一个标志避免在 initialize 之外的地方误注册。
+let listenersBound = false
+
+// --- 采样率自测（PROBE）状态 ---------------------------------------------
+// 存在的唯一目的：把「一个包多少个点」「相邻包间隔多少秒」「sequence 是否连续」
+// 这三个数直接算出来打到日志里，不让人肉眼数日志。
+// 这三个数决定 fs 的真值。当前代码里 fs=125 是**我们的假设**，
+// SDK 文档写 100Hz。若真值是 100，RR 定标参数全部要重做，所以必须实测。
+let probeCount = 0
+let probeLastTs = 0.0
+let probeLastSeq = -1
+let probeSumPoints = 0
+const PROBE_MAX = 12
+
 // mock 模式下的定时器句柄。0 表示未启动。
 // 用 number 而非 any：UTS 严格空安全下 any|null 会在清理时逼出强转。
 let mockRealtimeTimer = 0
+
+// 把 SDK 的 dataType(number) 映射成本项目的 type 字符串。
+//
+// 数值不是猜的，逐条取自 uni_modules/rwfit-ble/utssdk/app-android/index.uts
+// 的 bindRealtimeCallback()（757-786 行）里的分支判断：
+//   type == 1  -> Constants.RingHealthType.HR        心率
+//   type == 13 -> HRV（SDK 同样存在 HrPartData 里）
+//   type == 3  -> 血氧
+//   type == 4  -> 血压（本项目暂不用）
+//   type == 8  -> 压力（本项目暂不用）
+//   type == 9  -> 血糖（本项目暂不用）
+//   type == 10 -> 计数（本项目暂不用）
+// 返回空串表示「本项目不消费」，调用方据此丢弃，不要伪造成 hr。
+function mapDataType(dataType: number): string {
+  if (dataType == 1) {
+    return 'hr'
+  }
+  if (dataType == 13) {
+    return 'hrv'
+  }
+  if (dataType == 3) {
+    return 'bo'
+  }
+  return ''
+}
+
+// 统一的错误文案。RwfitFail 继承 IUniError，有 errCode + errMsg。
+// errCode 取值见 interface.uts 的 RwfitErrorCode：
+//   9201002 蓝牙不可用 / 9201003 权限被拒 / 9201004 参数非法
+//   9201005 设备未就绪 / 9201006 超时 / 9201007 平台不支持 / 9201099 原生错误
+function failText(code: number, msg: string): string {
+  let hint = ''
+  if (code == 9201002) {
+    hint = '蓝牙不可用（请检查手机蓝牙是否打开）'
+  } else if (code == 9201003) {
+    hint = '蓝牙/定位权限被拒绝'
+  } else if (code == 9201005) {
+    hint = '设备未就绪（未连接或未收到功能菜单）'
+  } else if (code == 9201006) {
+    hint = '操作超时'
+  } else if (code == 9201099) {
+    hint = '原生 SDK 错误'
+  }
+  if (hint == '') {
+    return `${code}: ${msg}`
+  }
+  return `${code} ${hint}: ${msg}`
+}
 
 export function isReady(): boolean {
   return deviceReady
@@ -147,8 +256,159 @@ export function stopHealthData(): void {
   if (USE_MOCK) {
     return
   }
-  // stopRealtimeMeasure({ metric: 'hr' })
-  // offRealtimeData()
+  // 三个 metric 是分别启停的（index.uts 的 controlHealth 按 metric 换
+  // healthKey 下发指令），所以停的时候也要逐个停，不能只停 hr。
+  stopRealtimeMeasure({ metric: 'hr' })
+  stopRealtimeMeasure({ metric: 'bloodOxy' })
+  stopRealtimeMeasure({ metric: 'hrv' })
+  resultCb = null
+}
+
+// 注册全部全局事件监听。
+//
+// 【为什么集中在一处注册，而不是各函数各自注册】
+//   SDK 的 onXxx 是「单监听者」语义（index.uts 里就是给
+//   xxxListener 变量赋值），后注册的会覆盖前一个。若 startScan 和
+//   connect 各自注册 onConnectState，后者会把前者顶掉。
+//   集中注册 + 转发到可空回调槽，是唯一不会互相踩的写法。
+function registerListeners(): void {
+  if (listenersBound) {
+    return
+  }
+  listenersBound = true
+
+  onScanResult((d: SdkBleDevice) => {
+    console.log(`[RwBle] 扫到设备 name=${d.name} mac=${d.mac} rssi=${d.rssi} uuid=${d.uuid ?? '-'}`)
+    // 平台标识必须原样带出去，否则 connect 时无法回传（iOS/微信要用）。
+    scanFoundCb?.({
+      name: d.name, mac: d.mac, rssi: d.rssi,
+      uuid: d.uuid, deviceId: d.deviceId
+    } as BleDevice)
+  })
+
+  // 只代表 BLE 链路状态，不代表可以调业务 API（见上文 connected/ready 说明）。
+  onConnectState((e: ConnectStateEvent) => {
+    const st = e.state
+    console.log(`[RwBle] 连接状态 -> ${st}`)
+    const dev = { name: e.name ?? '', mac: e.mac ?? '', rssi: 0 } as BleDevice
+    if (st == 'connected') {
+      deviceConnected = true
+      // 注意：此处**不能**置 deviceReady = true。
+      connCb?.('connected', dev)
+    } else if (st == 'disconnected' || st == 'failed') {
+      deviceConnected = false
+      deviceReady = false
+      connCb?.(st, dev)
+    } else {
+      connCb?.(st, dev)
+    }
+  })
+
+  // 戒指主动上报功能菜单 = 真正可用。业务 API 的闸门就靠这个事件打开。
+  onFunctionMenu((menu: FunctionMenu) => {
+    deviceReady = true
+    console.log(`[RwBle] 功能菜单已上报，设备就绪 mac=${menu.mac}`)
+    connCb?.('ready', { name: menu.name, mac: menu.mac, rssi: 0 } as BleDevice)
+  })
+
+  onRealtimeData((d: RealtimeData) => {
+    const t = mapDataType(d.dataType)
+    if (t == '') {
+      // 本项目不消费的指标（血压/压力/血糖/计数）直接丢，不伪造成 hr。
+      return
+    }
+    resultCb?.({ type: t, value: d.dataValue, timestamp: d.time } as HardwareResultValue)
+  })
+
+  // ---- 原始波形实时流 ----
+  onSensorRawData((p: SensorRawPacket) => {
+    // ================= 采样率自测日志 =================
+    // 这段是本次自定义基座的核心目的，读到数就能定 fs 真值。
+    //
+    // 【已核实的关键事实，决定了这里为什么只用 timestampSec】
+    //   index.uts 里有两个不同的封装函数：
+    //     sensorPacket()        <- onSensorRawData 走这条，有 timestampSec，**无 sequence**
+    //     sensorHistoryPacket() <- getSensorRawHistory 走这条，有 sequence，**无 timestampSec**
+    //   两条通路的可用字段是互斥的，所以实时流只能按 timestampSec 判连续，
+    //   历史补齐只能按 sequence 判连续。二者都要判空（可选字段）。
+    if (probeCount < PROBE_MAX) {
+      const n = p.ppg.length
+      const ts = p.timestampSec ?? 0.0
+      const seq = p.sequence ?? -1
+      probeSumPoints += n
+      let dt = -1.0
+      if (probeLastTs > 0.0 && ts > 0.0) {
+        dt = ts - probeLastTs
+      }
+      let fsGuess = -1.0
+      if (dt > 0.0) {
+        // 保留两位小数，避免 Kotlin 打出 124.99999999999999
+        fsGuess = Math.round((n / dt) * 100) / 100
+      }
+      let seqStep = -1
+      if (probeLastSeq >= 0 && seq >= 0) {
+        seqStep = seq - probeLastSeq
+      }
+      console.log(
+        `[RwBle][PROBE ${probeCount + 1}/${PROBE_MAX}] ` +
+        `type=${p.type} ppg点数=${n} acc点数=${p.acc.length} ` +
+        `ir点数=${p.ir.length} red点数=${p.ppgRed.length} ` +
+        `timestampSec=${ts} 距上包=${dt}s 推算fs=${fsGuess}Hz ` +
+        `sequence=${seq} seq步长=${seqStep}`
+      )
+      probeLastTs = ts
+      probeLastSeq = seq
+      probeCount += 1
+      if (probeCount == PROBE_MAX) {
+        console.log(
+          `[RwBle][PROBE 汇总] 共 ${PROBE_MAX} 包，ppg 总点数=${probeSumPoints}，` +
+          `平均每包=${Math.round((probeSumPoints / PROBE_MAX) * 100) / 100} 点。` +
+          `请把上面 PROBE 全部日志发回，用于确定 fs 真值（当前代码假设 125Hz）。`
+        )
+      }
+    }
+    // ================= 自测日志结束 =================
+
+    // 一个包里同时带 ppg / ppgRed / ir / acc，按当前通道取对应数组。
+    // 本项目当前只用绿光（后端 PPG_CHANNEL_GREEN 链路），
+    // 红光/红外先不落库，避免上传无人消费的数据。
+    if (p.ppg.length == 0) {
+      return
+    }
+    rawCb?.({
+      channel: SENSOR_PPG_GREEN,
+      data: p.ppg,
+      fs: RAW_PPG_FS,
+      capturedAt: Date.now()
+    } as RawPpgResult)
+  })
+
+  onSensorRawStopped((e: SensorRawStoppedEvent) => {
+    console.log(`[RwBle] 原始采集已停止 reason=${e.reason}，开始拉历史补齐`)
+    // 停止后拉历史，补齐 BLE 丢包造成的空洞。
+    // 历史包只有 sequence 没有 timestampSec，所以这里不参与 fs 自测。
+    getSensorRawHistory({
+      success: (list: Array<any>) => {
+        console.log(`[RwBle] 历史补齐 ${list.length} 包`)
+        for (let i = 0; i < list.length; i++) {
+          const pk = list[i] as SensorRawPacket
+          if (pk.ppg.length == 0) {
+            continue
+          }
+          console.log(`[RwBle][HIST ${i + 1}] sequence=${pk.sequence ?? -1} ppg点数=${pk.ppg.length}`)
+          rawCb?.({
+            channel: SENSOR_PPG_GREEN,
+            data: pk.ppg,
+            fs: RAW_PPG_FS,
+            capturedAt: Date.now()
+          } as RawPpgResult)
+        }
+      },
+      fail: (e2: RwfitFail) => {
+        console.error(`[RwBle] 历史补齐失败 ${failText(e2.errCode, e2.errMsg)}`)
+      }
+    })
+  })
 }
 
 export function initSDK(onDone: (ok: boolean, errMsg: string) => void): void {
@@ -158,19 +418,26 @@ export function initSDK(onDone: (ok: boolean, errMsg: string) => void): void {
     onDone(true, '')
     return
   }
-  // initialize({
-  //   success: () => {
-  //     sdkInitialized = true
-  //     registerListeners()
-  //     onDone(true, '')
-  //   },
-  //   fail: (e) => {
-  //     // errCode 取值见 interface.uts 的 RwfitErrorCode：
-  //     //   9201002 蓝牙不可用 / 9201003 权限被拒 / 9201099 原生 SDK 错误
-  //     onDone(false, `${e.errCode}: ${e.errMsg}`)
-  //   }
-  // })
-  onDone(false, '真实模式需先接入 rwfit-ble 插件并打自定义基座')
+  if (sdkInitialized) {
+    onDone(true, '')
+    return
+  }
+  console.log('[RwBle] 真实模式：开始初始化 rwfit-ble')
+  // initialize 内部会自己申请蓝牙权限（index.uts:418 requestBluetoothPermissions），
+  // 所以这里不需要再手动申请一遍，权限弹窗由 SDK 触发。
+  initialize({
+    success: () => {
+      sdkInitialized = true
+      registerListeners()
+      console.log('[RwBle] 初始化成功，监听已注册')
+      onDone(true, '')
+    },
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 初始化失败 ${msg}`)
+      onDone(false, msg)
+    }
+  })
 }
 
 export function destroySDK(): void {
@@ -182,8 +449,17 @@ export function destroySDK(): void {
     console.log('[RwBle] mock 销毁完成')
     return
   }
-  // offScanResult(); offConnectState(); offFunctionMenu()
-  // offRealtimeData(); offSensorRawData(); offSensorRawStopped()
+  offScanResult()
+  offConnectState()
+  offFunctionMenu()
+  offRealtimeData()
+  offSensorRawData()
+  offSensorRawStopped()
+  listenersBound = false
+  connCb = null
+  scanFoundCb = null
+  resultCb = null
+  rawCb = null
   sdkInitialized = false
   deviceConnected = false
   deviceReady = false
@@ -208,13 +484,17 @@ export function startScan(
     }, 1500)
     return
   }
-  // 真实用法：onScanResult 订阅结果，startScan 只负责开始扫描。
-  // 两者是分开的：startScan 的 success 只表示「扫描已启动」，不带设备。
-  // onScanResult((d) => {
-  //   onFound({ name: d.name, mac: d.mac, rssi: d.rssi } as BleDevice)
-  // })
-  // startScan({ fail: (e) => onError(`${e.errCode}: ${e.errMsg}`) })
-  onError('真实模式需先接入 rwfit-ble 插件')
+  // 真实用法：onScanResult 订阅结果（已在 registerListeners 里统一注册），
+  // sdkStartScan 只负责开始扫描 —— 它的 success 只表示「扫描已启动」，不带设备。
+  scanFoundCb = onFound
+  console.log('[RwBle] 开始扫描')
+  sdkStartScan({
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 扫描失败 ${msg}`)
+      onError(msg)
+    }
+  })
 }
 
 export function stopScan(): void {
@@ -222,15 +502,28 @@ export function stopScan(): void {
     console.log('[RwBle] mock 停止扫描')
     return
   }
-  // stopScan({})
-  // offScanResult()
+  console.log('[RwBle] 停止扫描')
+  sdkStopScan({})
+  // 不 offScanResult：监听是全局单例，注销后下次扫描会静默无回调。
+  // 只清回调槽即可停止向上层转发。
+  scanFoundCb = null
 }
 
 // ---------------------------------------------------------------------------
 // 设备连接 / 就绪
 // ---------------------------------------------------------------------------
 
-export function connect(mac: string, onStatus: ConnectionCallback): void {
+// 连接设备。
+//
+// 【为什么参数是完整对象而不是 mac 字符串】
+//   readme 原文：「连接时必须原样传回扫描得到的完整设备对象；
+//   iOS 和微信小程序需要其中的平台设备标识。」
+//   本函数早先只收 mac，在 Android 上能跑（connectNative:399 只校验 mac），
+//   但 app-ios/index.uts:462 取的是 device.uuid —— 只传 mac 在 iOS
+//   必然连不上，且不会报错，属于最难查的一类平台差异问题。
+//   所以签名改为整个 BleDevice，由调用方原样回传扫描结果。
+export function connect(device: BleDevice, onStatus: ConnectionCallback): void {
+  const mac = device.mac
   if (USE_MOCK) {
     const dev = { name: 'RWFit Ring', mac, rssi: -65 } as BleDevice
     console.log(`[RwBle] mock 连接 ${mac}`)
@@ -249,12 +542,25 @@ export function connect(mac: string, onStatus: ConnectionCallback): void {
     return
   }
   // 真实链路是三段式，不能省中间一段：
-  //   connect() -> onConnectState('connected') -> onFunctionMenu() -> 才可用
-  // connect({
-  //   device: { name: '', mac: mac, rssi: 0 },
-  //   fail: (e) => onStatus('failed', null)
-  // })
-  onStatus('failed', null)
+  //   sdkConnect() -> onConnectState('connected') -> onFunctionMenu() -> 才可用
+  // 后两段由 registerListeners 里的监听转发，所以这里只存回调 + 发起连接。
+  connCb = onStatus
+  console.log(`[RwBle] 发起连接 mac=${mac} uuid=${device.uuid ?? '-'}`)
+  onStatus('connecting', device)
+  // 原样回传扫描得到的对象，平台标识不丢。
+  sdkConnect({
+    device: {
+      name: device.name, mac: device.mac, rssi: device.rssi,
+      uuid: device.uuid, deviceId: device.deviceId
+    } as SdkBleDevice,
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 连接失败 ${msg}`)
+      deviceConnected = false
+      deviceReady = false
+      onStatus('failed', null)
+    }
+  })
 }
 
 export function disconnect(): void {
@@ -264,7 +570,8 @@ export function disconnect(): void {
     console.log('[RwBle] mock 断开')
     return
   }
-  // disconnect({})
+  console.log('[RwBle] 主动断开')
+  sdkDisconnect({})
 }
 
 // ---------------------------------------------------------------------------
@@ -295,15 +602,24 @@ export function startHealthData(
     }, 2000)
     return
   }
-  // 真实用法：先订阅 onRealtimeData，再按 metric 启动测量。
-  // metric 合法值见 RWFIT_REALTIME_METRICS：
+  // 真实用法：onRealtimeData 已在 registerListeners 里统一订阅，
+  // 这里按 metric 逐个启动测量。
+  // metric 合法值见 interface.uts:110 RealtimeMetric：
   //   'hr' | 'bloodOxy' | 'hrv' | 'pressure' | 'bloodSugar' | 'bloodPressure'
-  // 注意回调里是 dataType(number) + dataValue，需要自行映射成本项目的 type。
-  // onRealtimeData((d) => {
-  //   callback({ type: mapDataType(d.dataType), value: d.dataValue, timestamp: d.time })
-  // })
-  // startRealtimeMeasure({ metric: 'hr', fail: (e) => onError(`${e.errCode}: ${e.errMsg}`) })
-  onError('真实模式需先接入 rwfit-ble 插件')
+  // 本项目只用前三个；回调里是 dataType(number)，由 mapDataType 映射。
+  resultCb = callback
+  console.log('[RwBle] 启动实时测量 hr/bloodOxy/hrv')
+  // 只对第一个 metric 上报错误，避免三条失败弹三次同样的提示。
+  startRealtimeMeasure({
+    metric: 'hr',
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 启动实时测量失败 ${msg}`)
+      onError(msg)
+    }
+  })
+  startRealtimeMeasure({ metric: 'bloodOxy' })
+  startRealtimeMeasure({ metric: 'hrv' })
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +638,7 @@ export function startRawPpgCapture(
   if (USE_MOCK) {
     console.log(`[RwBle] mock 开始原始波形采集（通道 ${channel}）`)
     setTimeout(() => {
-      const fs = 125
+      const fs = RAW_PPG_FS
       const n = fs * 60
       const data: number[] = []
       for (let i = 0; i < n; i++) {
@@ -336,18 +652,24 @@ export function startRawPpgCapture(
     }, 3000) // mock 缩短为 3s，避免真等 60s
     return
   }
-  // 真实链路是「启动采集 -> 收流 -> 收到停止事件 -> 再取历史补齐」：
-  // onSensorRawData((p) => {
-  //   // 一个包里同时有 ppg / ppgRed / ir / acc，按 channel 取对应数组
-  //   callback({ channel, data: p.ppg, fs: 125, capturedAt: Date.now() })
-  // })
-  // onSensorRawStopped((e) => {
-  //   // reason 见固件定义；停止后调 getSensorRawHistory 拉齐漏掉的分片
-  //   getSensorRawHistory({ success: (list) => { /* 补齐 */ } })
-  // })
-  // controlSensorRaw({ enabled: true, sensorType: channel,
-  //                    fail: (e) => onError(`${e.errCode}: ${e.errMsg}`) })
-  onError('真实模式需先接入 rwfit-ble 插件')
+  // 真实链路是「启动采集 -> 收流 -> 收到停止事件 -> 再取历史补齐」。
+  // 收流与停止事件都由 registerListeners 里的监听处理，这里只负责启动。
+  rawCb = callback
+  // 每次启动重置自测计数，保证一开采就能拿到 PROBE 日志。
+  probeCount = 0
+  probeLastTs = 0.0
+  probeLastSeq = -1
+  probeSumPoints = 0
+  console.log(`[RwBle] 启动原始波形采集 sensorType=${channel}（自测日志将打印前 ${PROBE_MAX} 包）`)
+  controlSensorRaw({
+    enabled: true,
+    sensorType: channel,
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 启动原始采集失败 ${msg}`)
+      onError(msg)
+    }
+  })
 }
 
 export function stopRawPpgCapture(): void {
@@ -355,6 +677,10 @@ export function stopRawPpgCapture(): void {
     console.log('[RwBle] mock 停止原始波形采集')
     return
   }
-  // controlSensorRaw({ enabled: false, sensorType: SENSOR_PPG_GREEN })
-  // offSensorRawData(); offSensorRawStopped()
+  console.log('[RwBle] 停止原始波形采集')
+  // 停止时 sensorType 必须传，index.uts 会做 validSensorType 校验。
+  controlSensorRaw({ enabled: false, sensorType: SENSOR_PPG_GREEN })
+  // 同 stopScan：不注销全局监听，只清回调槽。
+  // onSensorRawStopped 还需要留着接固件的停止上报并拉历史补齐。
+  rawCb = null
 }

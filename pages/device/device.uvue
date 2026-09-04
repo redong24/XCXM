@@ -159,7 +159,9 @@ async function onConnected(mac: string): Promise<boolean> {
 
 function onConnect(device: BleDevice) {
   connectingMac.value = device.mac
-  connect(device.mac, (status) => {
+  // 传整个 device 而不是 device.mac：适配层要求原样回传扫描结果，
+  // 否则 iOS 端缺少 uuid 会连不上（详见 utils/rwble.uts 的 connect 注释）。
+  connect(device, (status) => {
     // 状态取值必须与适配层/SDK 对齐，否则会静默失效。
     // 这里原来判断的是 'error' / 'timeout'，而适配层从不发出这两个值。
     // 官方 ConnectState 是 'connecting'|'connected'|'disconnected'|'failed'，
