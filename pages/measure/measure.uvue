@@ -71,6 +71,8 @@ import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 import {
   initSDK,
   isDeviceReady,
+  isRawPpgSupported,
+  isRawAccSupported,
   startRawPpgCapture,
   stopRawPpgCapture,
   SENSOR_PPG_GREEN,
@@ -184,14 +186,31 @@ function onStart() {
 
 // ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
 // rwble 内部会跳过上传并打印说明），只为看 PROBE 日志有没有出现。
+// ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
+// rwble 内部会跳过上传并打印说明）。
+//
+// 20:08 实测 PPG 与 ACC 均在 15.10s 后失败（极差 6ms，正是 SDK
+// 命令队列「重发 2 次 × 5s 超时」的固定耗时），说明不是单通道被锁。
+// 现在改成先看设备自己上报的能力位 —— 那是权威答案。
 function onProbeAcc() {
+  const capPpg = isRawPpgSupported()
+  const capAcc = isRawAccSupported()
+  if (!capPpg && !capAcc) {
+    uni.showModal({
+      title: '设备不支持原始波形',
+      content: '设备在功能菜单里明确上报：不支持 PPG、也不支持 ACC 原始波形采集。\n\n'
+        + '这不是 APP 或参数问题，需要厂家开启权限或提供支持原始波形的固件。\n\n'
+        + '请把日志里的 [CAP] 那两行发给厂家。',
+      showCancel: false
+    })
+    return
+  }
   uni.showModal({
     title: 'ACC 通道探测',
-    content: '这是诊断功能，不采集 PPG、不上传数据。\n\n'
-      + '请戴好手环后确认，然后把日志发回。\n'
-      + '看日志里有没有 [PROBE 1/12]：\n'
-      + '· 有（acc点数>0）：原始采集链路正常，是 PPG 通道被厂家锁了\n'
-      + '· 无：该型号固件不支持原始波形下发，需要厂家开权限或换固件',
+    content: '这是诊断功能，不上传数据。\n\n'
+      + `设备上报能力：PPG=${capPpg ? '支持' : '不支持'}、`
+      + `ACC=${capAcc ? '支持' : '不支持'}\n\n`
+      + '请戴好手环后确认，然后把日志发回。',
     confirmText: '开始探测',
     success: (res) => {
       if (res.confirm) {

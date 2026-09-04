@@ -229,6 +229,24 @@ let scanning = false
 // 到点打印明确诊断，而不是让用户对着一个 9201099 猜。
 let rawWatchdog = 0
 
+// 设备上报的原始采集能力位（来自功能菜单）。
+//
+// 【这是之前几轮一直没读的关键信息】
+//   SupportMenuBean 有 isSupportSensorRawPPG / isSupportSensorRawACC 等
+//   五个能力位，Android 插件的 menuFromNative() 早就把它们放进
+//   FunctionMenu.raw 了。设备连上 0.2 秒就送来了答案，我们却在靠
+//   下发命令、等 15 秒超时来反推 —— 白等了四轮。
+//
+// 初值 true 的理由：能力位要等功能菜单上报才知道，而在那之前
+//   deviceReady 也是 false、根本不会走到采集。若初值给 false，
+//   一旦某固件不上报这两个字段（可选字段缺失），就会被永久误判为
+//   「不支持」而彻底锁死。宁可放过去让 SDK 报错，也不要自己把路堵死。
+let supportRawPpg = true
+let supportRawAcc = true
+
+export function isRawPpgSupported(): boolean { return supportRawPpg }
+export function isRawAccSupported(): boolean { return supportRawAcc }
+
 // 当前正在采集的通道号。
 //
 // 【为什么必须记住它】
@@ -394,6 +412,35 @@ function registerListeners(): void {
   onFunctionMenu((menu: FunctionMenu) => {
     deviceReady = true
     console.log(`[RwBle] 功能菜单已上报，设备就绪 mac=${menu.mac}`)
+
+    // 读出原始采集能力位。
+    //
+    // 【为什么默认值给 true 而不是 false】
+    //   字段缺失（老固件不上报）与字段为 false（明确不支持）是两回事。
+    //   缺失时按 true 处理，让命令真的发下去、由 SDK 给结论；
+    //   按 false 处理会在字段缺失时把功能永久锁死，
+    //   而我们连「能力位是否可信」都还没验证过。
+    //   用两参重载 getBoolean(key, def)，直接拿到非空 boolean。
+    const raw = menu.raw
+    supportRawPpg = raw.getBoolean('isSupportSensorRawPPG', true)
+    supportRawAcc = raw.getBoolean('isSupportSensorRawACC', true)
+    // 下面这两行是本轮的核心诊断：设备到底支不支持原始波形，
+    // 它自己在这里说得很清楚，之前四轮都没读。
+    // 日志故意用单参版本（不给默认值）：字段缺失打 null、
+    // 明确不支持打 false —— 诊断时这两种情况含义完全不同，
+    // 一旦被默认值抹平就分不清「固件没上报」和「固件说不支持」。
+    console.log(`[RwBle][CAP] 原始采集能力位 `
+      + `PPG=${raw.getBoolean('isSupportSensorRawPPG')} `
+      + `ACC=${raw.getBoolean('isSupportSensorRawACC')} `
+      + `PPGRed=${raw.getBoolean('isSupportSensorRawPPGRed')} `
+      + `IR=${raw.getBoolean('isSupportSensorRawIR')} `
+      + `Sleep=${raw.getBoolean('isSupportSensorRawSleep')}`)
+    console.log(`[RwBle][CAP] 参考：实时测量能力 `
+      + `HR=${raw.getBoolean('isHr')} `
+      + `血氧=${raw.getBoolean('isBloodOxy')} `
+      + `HRV=${raw.getBoolean('isHrv')} `
+      + `PPG监测=${raw.getBoolean('isSupportPPGMonitoring')}`)
+
     connCb?.('ready', { name: menu.name, mac: menu.mac, rssi: 0 } as BleDevice)
   })
 
@@ -858,11 +905,33 @@ export function startHealthData(
 export function startRawPpgCapture(
   channel: number,
   callback: RawPpgCallback,
-  onError: (errMsg: string) => void
+  onError: (errMsg: string) => void,
+  force: boolean = false
 ): void {
   if (!deviceReady) {
     onError('设备尚未就绪（等待功能菜单上报）')
     return
+  }
+  // 能力位前置判断。
+  //
+  // 【为什么必须前置而不是发下去看结果】
+  //   反编译确认 SDK 的命令队列（RingBleDataManager）对无应答命令
+  //   会重发 2 次、每次等 5 秒，第 3 次超时才放弃 —— 总共 15 秒。
+  //   20:08 那轮 4 次失败耗时 15.097/15.103/15.097/15.103s，极差 6ms，
+  //   正是这个机制。明知不支持还发，代价是白占命令队列 15 秒，
+  //   并且回给用户一个毫无信息量的 9201099。
+  //
+  // force 口子的存在理由见 supportRawPpg 声明处：
+  //   能力位有可能误报，必须保留验证它的手段。
+  if (!force) {
+    const supported = channel == SENSOR_ACC ? supportRawAcc : supportRawPpg
+    if (!supported) {
+      const ch = channel == SENSOR_ACC ? 'ACC' : 'PPG'
+      console.warn(`[RwBle] 设备明确上报不支持 ${ch} 原始波形（功能菜单能力位为 false），`
+        + '已跳过命令下发。若仍要试，请用 force 参数。')
+      onError(`该设备不支持${ch}原始波形采集（设备功能菜单声明不支持）`)
+      return
+    }
   }
   if (USE_MOCK) {
     console.log(`[RwBle] mock 开始原始波形采集（通道 ${channel}）`)
@@ -909,15 +978,14 @@ export function startRawPpgCapture(
   rawWatchdog = setTimeout(() => {
     if (probeCount == 0) {
       console.warn('[RwBle] 采集看门狗：命令已下发 20s，未收到任何数据包。'
-        + '已排除的可能：参数非法（反编译确认原生层不校验、直接组包下发，'
-        + 'sensorType=2 在 RWFIT_SENSOR_RAW_SELECTION 内合法）、'
-        + '平台不匹配（SDK 全部 34 条命令均为 JL/杰理平台）。'
-        + '仍需确认：1) 该型号手环固件是否支持原始波形下发'
-        + '（这是最可能的 —— 原始 PPG 通常需要厂家开启权限或专用固件）；'
-        + '2) 是否需要先停止其它数据流（实时测量/历史同步）；'
-        + '3) 用测量页的「ACC 通道探测」按钮试 sensorType=1：'
-        + '若 ACC 能出数（PROBE 日志里 acc点数>0）说明原始采集通道是通的、'
-        + '仅 PPG 被锁；若 ACC 同样静默，说明该固件整体不支持原始波形。')
+        + '已排除的可能：参数非法（反编译确认原生层不校验、直接组包下发）、'
+        + '平台不匹配（SDK 全部 34 条命令均为 JL/杰理平台）、'
+        + '单通道被锁（20:08 实测 PPG 与 ACC 表现完全一致）、'
+        + '射频抢占（已改为连上即停扫，且 20:08 那轮采集时扫描已停 1.46s）。'
+        + '若上方 [CAP] 日志显示能力位为 false，则结论已明确：'
+        + '该固件不支持原始波形下发，需厂家开权限或换固件。'
+        + '若能力位为 true 而仍然静默，则是固件声明与实现不一致，'
+        + '需把 [CAP] 与本条日志一并交给厂家。')
     }
   }, 20000)
   controlSensorRaw({
