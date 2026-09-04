@@ -75,6 +75,7 @@ import {
   releasePageCallbacks,
   startScan,
   stopScan,
+  isScanning,
   connect,
   type BleDevice
 } from '../../utils/rwble.uts'
@@ -188,6 +189,13 @@ function onConnect(device: BleDevice) {
     // 另外「connected」并不等于「可用」：真实链路要等戒指上报功能菜单
     // （onFunctionMenu）才算就绪，适配层把它抽象成额外的 'ready' 状态。
     // 绑定动作放在 ready，避免在设备还没准备好时就去调业务接口。
+    if (status === 'connected' && isScanning()) {
+      // 连上就停扫，不等那个 15 秒定时器。
+      // 真机 19:40 日志里连接在 +5.752s 完成，而扫描到 +15.073s 才停，
+      // 中间近 10 秒一直边扫边通信，白白抢占射频。
+      setScanning(false)
+      stopScan()
+    }
     if (status === 'ready') {
       // 成功路径也必须清空，否则按钮永久停在「连接中…」。
       // 原代码只在 failed/disconnected 分支清，成功时漏了 ——

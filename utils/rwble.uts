@@ -216,6 +216,28 @@ let listenersBound = false
 // 「上报了但被上层过滤掉」这两种完全不同的故障。
 let scanSeen = 0
 
+// 是否正在扫描。
+//
+// 【为什么必须自己记】
+//   BLE 扫描与数据传输抢占同一射频，发业务命令前必须确认扫描已停。
+//   SDK 不提供「当前是否在扫描」的查询接口，只能自己维护。
+//   真机 19:40 那轮日志里，启动采集时扫描仍在进行（1.2s 后才由
+//   15 秒定时器停掉），而采集命令在 15.09s 后超时失败。
+let scanning = false
+
+// 采集命令看门狗：命令下发后若迟迟没有应答也没有失败回调，
+// 到点打印明确诊断，而不是让用户对着一个 9201099 猜。
+let rawWatchdog = 0
+
+// 当前正在采集的通道号。
+//
+// 【为什么必须记住它】
+//   停止采集时 sensorType 也得传（index.uts 会做 validSensorType 校验），
+//   而它必须和启动时用的是同一个通道，否则等于「开 A 停 B」—— 命令发出去了
+//   但设备继续发 A 通道的流。以前只有绿光一个通道，硬编码碰巧是对的；
+//   现在加了 ACC 探测，硬编码就成了真 bug。
+let rawChannel = SENSOR_PPG_GREEN
+
 let probeCount = 0
 let probeLastTs = 0.0
 let probeLastSeq = -1
@@ -437,10 +459,16 @@ function registerListeners(): void {
     // 本项目当前只用绿光（后端 PPG_CHANNEL_GREEN 链路），
     // 红光/红外先不落库，避免上传无人消费的数据。
     if (p.ppg.length == 0) {
+      // ACC 探测（sensorType=1）时 ppg 必然为空，这条 return 是正常路径，
+      // 不是错误。判据看上面的 PROBE 日志：只要 PROBE 打出来了就说明
+      // 「设备在发包」，acc点数>0 即代表原始采集链路本身是通的。
+      if (probeCount <= PROBE_MAX) {
+        console.log('[RwBle] 本包 ppg 为空，不上传（ACC 探测时属正常）')
+      }
       return
     }
     rawCb?.({
-      channel: SENSOR_PPG_GREEN,
+      channel: rawChannel,
       data: p.ppg,
       fs: RAW_PPG_FS,
       capturedAt: Date.now()
@@ -461,7 +489,7 @@ function registerListeners(): void {
           }
           console.log(`[RwBle][HIST ${i + 1}] sequence=${pk.sequence ?? -1} ppg点数=${pk.ppg.length}`)
           rawCb?.({
-            channel: SENSOR_PPG_GREEN,
+            channel: rawChannel,
             data: pk.ppg,
             fs: RAW_PPG_FS,
             capturedAt: Date.now()
@@ -541,6 +569,11 @@ export function releasePageCallbacks(): void {
   scanFoundCb = null
   resultCb = null
   rawCb = null
+}
+
+// 只读探针：当前是否在扫描。射频冲突排查用。
+export function isScanning(): boolean {
+  return scanning
 }
 
 // 只读探针：设备是否已就绪（可以调业务 API）。
@@ -632,6 +665,7 @@ export function startScan(
   // sdkStartScan 只负责开始扫描 —— 它的 success 只表示「扫描已启动」，不带设备。
   scanFoundCb = onFound
   scanSeen = 0
+  scanning = true
   console.log('[RwBle] 开始扫描（若下方无 [SCAN n] 日志，说明 SDK 未上报任何设备）')
   sdkStartScan({
     fail: (e: RwfitFail) => {
@@ -652,12 +686,14 @@ export function stopScan(): void {
   // 把「原生库没加载」误导成「附近没有设备」；随后 sdkStopScan 还会
   // 再抛一次 NoClassDefFoundError。必须在这里挡住。
   if (!sdkInitialized) {
+    scanning = false
     console.warn('[RwBle] 跳过停止扫描：SDK 未初始化，本轮从未真正开始扫描。'
       + '请先解决初始化失败（如 NoClassDefFoundError 表示原生 .aar 未打进基座，'
       + '需重新制作自定义调试基座；模拟器则通常是没有蓝牙硬件）。')
     scanFoundCb = null
     return
   }
+  scanning = false
   console.log(`[RwBle] 停止扫描，本轮共上报 ${scanSeen} 条`)
   if (scanSeen == 0) {
     // 明确区分故障方向，避免把「SDK 没扫到」误判成「页面 bug」。
@@ -725,6 +761,14 @@ export function connect(device: BleDevice, onStatus: ConnectionCallback): void {
   // 真实链路是三段式，不能省中间一段：
   //   sdkConnect() -> onConnectState('connected') -> onFunctionMenu() -> 才可用
   // 后两段由 registerListeners 里的监听转发，所以这里只存回调 + 发起连接。
+  // 连接前先停扫：扫描与连接同样抢射频，边扫边连会拖慢甚至连不上。
+  // 真机 19:40 那轮里连接耗时 1.53s（21.681 -> 23.213），
+  // 而当时扫描仍在进行。
+  if (scanning) {
+    console.log('[RwBle] 连接前先停止扫描（避免射频抢占）')
+    sdkStopScan({})
+    scanning = false
+  }
   connCb = onStatus
   console.log(`[RwBle] 发起连接 mac=${mac} uuid=${device.uuid ?? '-'}`)
   onStatus('connecting', device)
@@ -840,18 +884,56 @@ export function startRawPpgCapture(
   // 真实链路是「启动采集 -> 收流 -> 收到停止事件 -> 再取历史补齐」。
   // 收流与停止事件都由 registerListeners 里的监听处理，这里只负责启动。
   rawCb = callback
+  // 记住本次通道，供 stopRawPpgCapture 用同一个通道去关。
+  rawChannel = channel
   // 每次启动重置自测计数，保证一开采就能拿到 PROBE 日志。
   probeCount = 0
   probeLastTs = 0.0
   probeLastSeq = -1
   probeSumPoints = 0
+  // 【必须先停扫】BLE 扫描与数据传输抢占同一射频。真机 19:40 那轮
+  // 启动采集时扫描仍在进行，命令 15.09s 后超时失败（9201099）——
+  // 反编译已确认原生层不校验参数、直接组包下发，所以失败在链路而非参数。
+  if (scanning) {
+    console.log('[RwBle] 采集前先停止扫描（射频让给数据传输）')
+    sdkStopScan({})
+    scanning = false
+  }
   console.log(`[RwBle] 启动原始波形采集 sensorType=${channel}（自测日志将打印前 ${PROBE_MAX} 包）`)
+  // 看门狗：命令下发后 20s 仍无任何数据包、也没走 fail，说明设备静默。
+  // 只打日志不改状态 —— 真正的失败仍由 SDK 的 fail 回调负责，
+  // 这里只是把「静默」这个事实说出来，否则排查时无从下手。
+  if (rawWatchdog != 0) {
+    clearTimeout(rawWatchdog)
+  }
+  rawWatchdog = setTimeout(() => {
+    if (probeCount == 0) {
+      console.warn('[RwBle] 采集看门狗：命令已下发 20s，未收到任何数据包。'
+        + '已排除的可能：参数非法（反编译确认原生层不校验、直接组包下发，'
+        + 'sensorType=2 在 RWFIT_SENSOR_RAW_SELECTION 内合法）、'
+        + '平台不匹配（SDK 全部 34 条命令均为 JL/杰理平台）。'
+        + '仍需确认：1) 该型号手环固件是否支持原始波形下发'
+        + '（这是最可能的 —— 原始 PPG 通常需要厂家开启权限或专用固件）；'
+        + '2) 是否需要先停止其它数据流（实时测量/历史同步）；'
+        + '3) 用测量页的「ACC 通道探测」按钮试 sensorType=1：'
+        + '若 ACC 能出数（PROBE 日志里 acc点数>0）说明原始采集通道是通的、'
+        + '仅 PPG 被锁；若 ACC 同样静默，说明该固件整体不支持原始波形。')
+    }
+  }, 20000)
   controlSensorRaw({
     enabled: true,
     sensorType: channel,
     fail: (e: RwfitFail) => {
+      if (rawWatchdog != 0) {
+        clearTimeout(rawWatchdog)
+        rawWatchdog = 0
+      }
       const msg = failText(e.errCode, e.errMsg)
+      // 补上耗时：立即失败（参数/状态问题）和超时失败（链路问题）
+      // 表现完全不同，但错误码一样，不打耗时无法区分。
       console.error(`[RwBle] 启动原始采集失败 ${msg}`)
+      console.error('[RwBle] 若上面这条距「启动原始波形采集」超过 10s，'
+        + '属于**设备未应答的超时**而非参数错误 —— 命令已成功下发。')
       onError(msg)
     }
   })
@@ -867,9 +949,10 @@ export function stopRawPpgCapture(): void {
     rawCb = null
     return
   }
-  console.log('[RwBle] 停止原始波形采集')
-  // 停止时 sensorType 必须传，index.uts 会做 validSensorType 校验。
-  controlSensorRaw({ enabled: false, sensorType: SENSOR_PPG_GREEN })
+  console.log(`[RwBle] 停止原始波形采集 sensorType=${rawChannel}`)
+  // 停止时 sensorType 必须传，index.uts 会做 validSensorType 校验，
+  // 且必须与启动时同一通道 —— 见 rawChannel 声明处的说明。
+  controlSensorRaw({ enabled: false, sensorType: rawChannel })
   // 同 stopScan：不注销全局监听，只清回调槽。
   // onSensorRawStopped 还需要留着接固件的停止上报并拉历史补齐。
   rawCb = null

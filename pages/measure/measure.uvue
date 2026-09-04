@@ -45,7 +45,16 @@
       >
         {{ deviceState.connected ? '开始采集' : '请先连接设备' }}
       </button>
-      <button v-else class="stop-btn" @click="onStop">停止采集</button>
+      <button v-else class="stop-btn" @click="onStop">
+        {{ probing ? '停止探测' : '停止采集' }}
+      </button>
+      <!-- 诊断入口：仅在空闲且设备已连接时出现。
+           放在主按钮下方并用弱化样式，避免被误当成正常采集入口。 -->
+      <button
+        v-if="!measuring && deviceState.connected"
+        class="probe-btn"
+        @click="onProbeAcc"
+      >ACC 通道探测（诊断用）</button>
     </view>
 
     <text class="tip">采集约 1 分钟原始 PPG 波形，上传后由算法服务重算生理参数</text>
@@ -65,6 +74,7 @@ import {
   startRawPpgCapture,
   stopRawPpgCapture,
   SENSOR_PPG_GREEN,
+  SENSOR_ACC,
   type RawPpgResult
 } from '../../utils/rwble.uts'
 
@@ -74,6 +84,10 @@ const hasResult = ref(false)
 const hrResult = ref('--')
 const boResult = ref('--')
 const sampleCount = ref('--')
+// 是否处于 ACC 诊断探测（而非正常 PPG 采集）。
+// 用来把按钮文案和状态文字区分开 —— 探测不产生业务数据，
+// 如果沿用「采集中」会让用户以为拿到了 PPG。
+const probing = ref(false)
 
 // 原始 PPG 采集结果处理（async）
 // 注意：UTS 不存在函数声明提升，必须先定义、后使用，故放在 onStart 之前
@@ -115,7 +129,16 @@ async function handleRawPpgResult(raw: RawPpgResult) {
   }
 }
 
-function onStart() {
+// 启动采集的公共实现，通道由调用方给出。
+//
+// 【为什么要参数化通道】
+//   19:40 真机日志里绿光 PPG（sensorType=2）下发后 15.091s 超时失败
+//   9201099。反编译已确认原生层不校验参数、直接组包下发，所以不是参数问题，
+//   是设备没应答。ACC 通道（sensorType=1）是最便宜的判别实验：
+//     ACC 出数   -> 原始采集链路是通的，仅 PPG 通道被厂家锁了
+//     ACC 也静默 -> 该型号固件整体不支持原始波形下发
+//   两个结论的下一步完全不同，所以必须能分别试。
+function startCapture(channel: number) {
   // 采集前先确认设备真的就绪。
   //
   // 【为什么不直接调下去让它失败】
@@ -132,15 +155,16 @@ function onStart() {
     })
     return
   }
+  probing.value = channel == SENSOR_ACC
   measuring.value = true
-  statusText.value = '采集中...'
+  statusText.value = channel == SENSOR_ACC ? 'ACC 探测中...' : '采集中...'
   hasResult.value = false
 
   // 注意：startRawPpgCapture 的回调签名要求返回 Unit，
   // 传 async 函数会得到 UTSPromise<Unit> 导致 error17，
   // 因此用非 async 回调包裹，内部调用 async 处理函数（不 await）
   startRawPpgCapture(
-    SENSOR_PPG_GREEN,
+    channel,
     (raw: RawPpgResult) => {
       handleRawPpgResult(raw)
     },
@@ -148,14 +172,39 @@ function onStart() {
       // 采集失败必须让用户看见并退出「采集中」状态，
       // 否则页面会永远停在转圈上，用户只能杀进程。
       measuring.value = false
+      probing.value = false
       statusText.value = errMsg != '' ? errMsg : '采集失败'
     }
   )
 }
 
+function onStart() {
+  startCapture(SENSOR_PPG_GREEN)
+}
+
+// ACC 通道探测：诊断入口，不上传数据（ACC 包的 ppg 为空，
+// rwble 内部会跳过上传并打印说明），只为看 PROBE 日志有没有出现。
+function onProbeAcc() {
+  uni.showModal({
+    title: 'ACC 通道探测',
+    content: '这是诊断功能，不采集 PPG、不上传数据。\n\n'
+      + '请戴好手环后确认，然后把日志发回。\n'
+      + '看日志里有没有 [PROBE 1/12]：\n'
+      + '· 有（acc点数>0）：原始采集链路正常，是 PPG 通道被厂家锁了\n'
+      + '· 无：该型号固件不支持原始波形下发，需要厂家开权限或换固件',
+    confirmText: '开始探测',
+    success: (res) => {
+      if (res.confirm) {
+        startCapture(SENSOR_ACC)
+      }
+    }
+  })
+}
+
 function onStop() {
   stopRawPpgCapture()
   measuring.value = false
+  probing.value = false
   statusText.value = '已停止'
 }
 
@@ -267,6 +316,21 @@ onUnmounted(() => {
   border-radius: 20rpx;
   font-size: 32rpx;
   font-weight: bold;
+}
+
+/* 诊断按钮：故意做成弱化的描边样式。
+   它不是正常功能入口，视觉权重必须低于「开始采集」，
+   否则用户会分不清哪个才是真正要点的。 */
+.probe-btn {
+  margin-top: 24rpx;
+  height: 80rpx;
+  border-radius: 40rpx;
+  background-color: transparent;
+  border-width: 2rpx;
+  border-style: solid;
+  border-color: #cbd5e1;
+  font-size: 26rpx;
+  color: #64748b;
 }
 
 .tip {
