@@ -20,10 +20,10 @@
     <!-- 预警列表 -->
     <view v-if="currentTab === 'alerts'" class="list">
       <view v-if="alertError != ''" class="empty">
-        <text>加载失败：{{ alertError }}</text>
+        <text class="empty-text">加载失败：{{ alertError }}</text>
       </view>
       <view v-if="alertError == '' && alerts.length === 0" class="empty">
-        <text>暂无预警记录</text>
+        <text class="empty-text">暂无预警记录</text>
       </view>
       <view v-for="a in alerts" :key="a.id" class="list-item">
         <view class="item-main">
@@ -40,10 +40,10 @@
     <!-- 反馈列表 -->
     <view v-else class="list">
       <view v-if="feedbackError != ''" class="empty">
-        <text>加载失败：{{ feedbackError }}</text>
+        <text class="empty-text">加载失败：{{ feedbackError }}</text>
       </view>
       <view v-if="feedbackError == '' && feedbacks.length === 0" class="empty">
-        <text>暂无反馈记录</text>
+        <text class="empty-text">暂无反馈记录</text>
       </view>
       <view v-for="f in feedbacks" :key="f.id" class="list-item">
         <view class="item-main">
@@ -251,7 +251,9 @@ onMounted(() => {
 
 .empty {
   padding: 60rpx 0;
-  text-align: center;
+  align-items: center;
+}
+.empty-text {
   color: #9ca3af;
   font-size: 26rpx;
 }

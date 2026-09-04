@@ -55,8 +55,11 @@
 //
 //  2) BlueToothUtils.isLegalDevice(deviceName) 只有 CharSequence.length + ifne，
 //     即仅判 null/空串，**没有任何型号或前缀匹配**（常量池中无型号字符串）。
-//     => 设备名叫 SR116 还是 RWFit 都不影响准入。该 SDK 靠广播签名认自家设备，
-//        这也是同厂家的戒指与手环能共用一套 SDK 的原因。
+//     => 设备名叫 SR116 还是 RWFit 都不影响准入。该 SDK 靠广播签名认自家设备。
+//     ！更正：之前据「戒指手环同厂家、SDK 通用」推断二者可共用，该前提已被推翻。
+//        本 .aar 是【手环】SDK（实测手环 S07 / MAC 3F:00:00:00:12:9F 可用），
+//        戒指 SDK 厂家尚未提供。名称不过滤不等于戒指能被扫到——真正的门槛是
+//        下面第 5 条的广播签名。
 //
 //  3) deviceId 并非 MAC：onScanResult 里由 setRawDataFlag(广播hex) 起，
 //     经 getBleMac 定位、split[1]、substring(6,22)、每 2 位 parseInt(16)
@@ -67,6 +70,12 @@
 //  4) ScanBleService.startScan(boolean includeBonded, String) 的第一个参数
 //     控制是否枚举系统已绑定设备；本插件 app-android/index.uts:446 固定传
 //     startScan(false, null)，即只走纯 BLE 广播扫描这条分支。
+//
+//  5) 【适用范围，务必注意】上述 d6 06 02 00 是本 .aar（手环 SDK）认定的
+//     自家设备签名。戒指是否沿用同一签名，在拿到戒指 SDK 或厂家广播格式说明
+//     之前无法确认。因此：
+//       - 手环扫不到 -> 先查连接占用/广播态/定位权限；
+//       - 戒指扫不到 -> 很可能就是签名不匹配，属预期内，不要浪费时间排查手机端。
 // ===========================================================================
 export const USE_MOCK = false
 
@@ -564,8 +573,9 @@ export function stopScan(): void {
       + '3) 定位权限未授予（Android 12 以下，BLE 扫描强制要求定位权限）；'
       + '4) 广播特征字节不匹配 —— SDK 原生层 ScanBleService.onScanResult 只放行'
       + '「广播前 9 字节的 hex 含 d6 06 02 00」的设备，其余直接丢弃，'
-      + '不会回调到这里。注意设备名不影响：isLegalDevice 仅判非空，无型号匹配，'
-      + '所以 SR116 这类型号本身是可以通过的。'
+      + '不会回调到这里。注意设备名不影响：isLegalDevice 仅判非空，无型号匹配。'
+      + '重要：该签名属于当前这套【手环】SDK；戒指 SDK 厂家尚未提供，'
+      + '戒指能否通过此签名未知，戒指扫不到属预期内。'
       + '若 1~3 都排除后仍为 0 条，即可判定为第 4 种，需向厂家索取该型号的广播格式。')
   }
   sdkStopScan({})
