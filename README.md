@@ -61,28 +61,44 @@ app/
 
 编辑 `utils/rwble.uts`，将 `USE_MOCK` 改为 `false`，并取消注释各 TODO 处的真实插件调用。关键 API 对应关系：
 
-| 适配层方法 | 真实插件 API | 说明 |
+> ⚠️ 下表已按官方 `uni_modules/rwfit-ble/utssdk/interface.uts` 核对更新。
+> 早期版本此处填的是 `RwBleRing.initSDK()` / `controlHealthDataJL()` / `ringControlSensorRaw()`，
+> **这些名字在 UTS 插件中不存在**（`ringControlSensorRaw` 属于 Android 原生 SDK）。
+> 真实契约是 uni 风格 options 对象 + 独立 `onXxx` 事件订阅。
+
+| 适配层方法 | 真实插件 API（UTS） | 说明 |
 |-----------|-------------|------|
-| `initSDK()` | `RwBleRing.initSDK()` | 初始化 |
-| `startScan()` | `RwBleRing.startScan()` | 扫描设备 |
-| `connect()` | `RwBleRing.connect()` | 连接设备 |
-| `startHealthData()` | `RwBleRing.controlHealthDataJL()` | 实时结果值（HR/血氧/HRV）|
-| `startRawPpgCapture()` | `RwBleRing.ringControlSensorRaw()` + `ringGetHistorySensorRaw()` | 原始PPG采集 + 同步 |
+| `initSDK()` | `initialize({ success, fail })` | 初始化 |
+| `startScan()` | `startScan({})` + `onScanResult(cb)` | 扫描设备 |
+| `connect()` | `connect({ deviceId })` | 连接设备 |
+| `startHealthData()` | `startRealtimeMeasure({ metric })` + `onRealtimeData(cb)` | 实时结果值（HR/血氧/HRV）|
+| `startRawPpgCapture()` | `controlSensorRaw({ enabled, sensorType })` + `getSensorRawHistory()` | 原始PPG采集 + 同步 |
 
 ### 4.3 原始 PPG 采集时序（关键）
 
 ```
-1. ringControlSensorRaw(通道, 绿光+ACC)   # 启动采集
-2. 设备采约 1 分钟
-3. onResult 回调（停止通知）
-4. ringGetHistorySensorRaw()             # 立即同步（避免数据被覆盖）
-5. 上传 /api/data/raw-ppg
+1. 查能力位 isSupportSensorRawPPG / isSupportSensorRawACC   # 必须先查
+2. 订阅 onSensorRawStopped                                  # 先订阅再启动
+3. controlSensorRaw({ enabled: true, sensorType: 3 })       # 启动：绿光 + ACC
+4. 设备采约 1 分钟
+5. onSensorRawStopped 触发（设备主动停止）
+6. getSensorRawHistory()                 # 立即同步（避免数据被覆盖）
+7. 按 sequence 排序拼接 → 先落本地库
+8. 再上传 /api/data/raw-ppg
 ```
 
 ⚠️ **硬件约束**：
-- 设备仅存 1 分钟数据，必须在 `onResult` 后**立即同步**
-- 绿光/红光不能共存，单次采集选一种
-- 采样率需实测确认（影响算法参数）
+- **原始 PPG 仅支持历史获取，无实时推送**
+- 设备仅存最近一次约 1 分钟数据，必须在停止通知后**立即同步**，否则被覆盖
+- 绿光/红光不能共存；红外不能单独启动，须与绿光或红光组合
+- PPG 定时监测与手动采集**共用同一块存储**，采集期间应关闭定时监测
+- 采样率**全仓库无记载，必须实测标定**（`utils/rwble.uts` 中 `fs: 125` 仅为占位假设值）
+
+> 📄 完整分析（含 AAR 反编译验证的字节级协议、四平台 API 对照、数据结构）见
+> [`docs/RWFIT_SDK_RAW_PPG_ANALYSIS.md`](docs/RWFIT_SDK_RAW_PPG_ANALYSIS.md)
+>
+> 📄 SDK **全量**数据能力清单（健康指标/全天历史/运动/设备事件五类、12 条易踩坑）见
+> [`docs/RWFIT_SDK_DATA_INVENTORY.md`](docs/RWFIT_SDK_DATA_INVENTORY.md)
 
 ## 五、后端对接配置
 

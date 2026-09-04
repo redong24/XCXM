@@ -85,6 +85,24 @@ export type RawPpgCallback = (result: RawPpgResult) => void
 export const SENSOR_ACC = 1
 export const SENSOR_PPG_GREEN = 2
 export const SENSOR_PPG_GREEN_AND_ACC = 3
+export const SENSOR_PPG_RED = 4
+export const SENSOR_PPG_RED_AND_ACC = 5
+
+// 规则（官方 §5.2.5）：绿光与红光不能共存；红外不能单独启动，须与绿光/红光组合。
+//
+// ⚠️ 易踩坑：控制接口的 sensorType 与返回数据的 type 编号定义**不同**。
+//    sensorType=1 表示开启 ACC，但历史数据 type=1 表示 PPG。
+// 历史数据 type：1=PPG(绿光)  2=ACC  3=PPG Red  4=IR
+export const RAW_TYPE_PPG = 1
+export const RAW_TYPE_ACC = 2
+export const RAW_TYPE_PPG_RED = 3
+export const RAW_TYPE_IR = 4
+
+// 采样率：官方 SDK 文档与代码中**均无任何记载**（已全仓库核查）。
+// 下面这个值是占位假设，**不具备真实性**，仅供 mock 链路联调。
+// 硬件到位后必须实测标定：fs ≈ 一次完整采集的 PPG 总点数 / 实际采集秒数。
+// 标定完成前，任何频域算法（HR/HRV/呼吸率）结果都不可信。
+export const FS_UNCALIBRATED = 125
 
 // ---------------------------------------------------------------------------
 // 插件引用
@@ -322,7 +340,7 @@ export function startRawPpgCapture(
   if (USE_MOCK) {
     console.log(`[RwBle] mock 开始原始波形采集（通道 ${channel}）`)
     setTimeout(() => {
-      const fs = 125
+      const fs = FS_UNCALIBRATED // 占位值，非真实采样率，见上方说明
       const n = fs * 60
       const data: number[] = []
       for (let i = 0; i < n; i++) {
@@ -337,13 +355,22 @@ export function startRawPpgCapture(
     return
   }
   // 真实链路是「启动采集 -> 收流 -> 收到停止事件 -> 再取历史补齐」：
-  // onSensorRawData((p) => {
-  //   // 一个包里同时有 ppg / ppgRed / ir / acc，按 channel 取对应数组
-  //   callback({ channel, data: p.ppg, fs: 125, capturedAt: Date.now() })
-  // })
+  // ⚠️ 重要（已核实官方文档 blesdkandroid_zh.md §5.2.5）：
+  //   原始 PPG/ACC/PPG Red/IR **不支持实时推送，仅支持历史获取**。
+  //   onSensorRawData 实时通道实际只推送 type=5 睡眠状态数据。
+  //   所以真实采集必须走「controlSensorRaw 启动 → 等停止事件 → getSensorRawHistory」，
+  //   不要指望 onSensorRawData 出 PPG 波形。
+  //
   // onSensorRawStopped((e) => {
-  //   // reason 见固件定义；停止后调 getSensorRawHistory 拉齐漏掉的分片
-  //   getSensorRawHistory({ success: (list) => { /* 补齐 */ } })
+  //   // 设备主动停止（e.reason 见固件定义）。
+  //   // ⚠️ 设备只存最近一次约 1 分钟数据，此处必须【立即】同步，否则被下次采集覆盖。
+  //   getSensorRawHistory({ success: (list) => {
+  //     // list 每项含 type(1=PPG,2=ACC,3=PPGRed,4=IR)、sequence、各数据数组
+  //     // 按 sequence 排序拼接；PPG 为 int32 原始 ADC 计数值
+  //     // fs（采样率）官方无记载，必须实测标定：fs ≈ PPG 总点数 / 实际采集秒数
+  //     callback({ channel, data: /* 拼接后的 ppg */[], fs: FS_UNCALIBRATED,
+  //                capturedAt: Date.now() })
+  //   } })
   // })
   // controlSensorRaw({ enabled: true, sensorType: channel,
   //                    fail: (e) => onError(`${e.errCode}: ${e.errMsg}`) })
