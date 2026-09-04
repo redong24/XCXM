@@ -712,3 +712,104 @@ export function stopRawPpgCapture(): void {
   // onSensorRawStopped 还需要留着接固件的停止上报并拉历史补齐。
   rawCb = null
 }
+
+// ===========================================================================
+//  旁路广播探测（probeRawAdvertising）
+// ---------------------------------------------------------------------------
+//  【为什么需要这个函数】
+//  反编译 blesdk-rwfit-2.260724.aar，得到 ScanBleService.onScanResult 的字节码，
+//  发现原生层在把设备回调给我们之前，有一道硬过滤（下面是字节码 pc 偏移）：
+//      pc 24 : scanRecord.getBytes() == null      -> 丢弃
+//      pc 37 : getBytes().length < 9              -> 丢弃
+//      pc 50 : Arrays.copyOf(bytes, 9)            取前 9 字节
+//      pc 60 : ByteConvertUtil.bytesToHexString(...)
+//      pc 68 : hex.contains("d6 06 02 00")
+//      pc 71 : 不含 -> 丢弃（直接 return，不进 onScanDevice）
+//  即：广播前 9 字节里不含 d6 06 02 00 的设备，UTS 层永远收不到；而且我们
+//  无法区分「附近没有设备」和「设备被原生丢掉了」——两种情况在上层的表现
+//  都是「没有任何回调」。
+//
+//  另外已确认 isLegalDevice(deviceName) 只判 null/空串（字节码仅 
+//  CharSequence.length + ifne，常量池里没有任何型号字符串），所以设备
+//  叫 SR116 还是 RWFit 都不影响准入 —— 这家 SDK 是靠广播签名认自家设备的，
+//  这也解释了为什么同厂家的戒指和手环能共用一套 SDK。
+//
+//  本函数不走 rwfit SDK，改用 uni-app 的系统 BLE API 扫描，把每台设备的
+//  advertisData 原始字节打印出来，用来回答唯一的问题：
+//      「这枚戒指的广播里到底有没有 d6 06 02 00？」
+//  - 有  -> SDK 能收到它，问题在别处（权限 / 连接被占用 / 未在广播态）
+//  - 没有 -> SDK 结构上不可能扫到它，需要找厂家要广播格式，或改走系统 BLE 通道
+// ===========================================================================
+export function probeRawAdvertising(durationMs: number): void {
+  const NEEDLE = 'd6060200'          // 原生判据里的特征字节（去掉空格）
+  let found = 0
+  let matched = 0
+
+  console.log('[RwBle][ADV] 开始旁路广播探测（不经过 rwfit SDK）')
+
+  uni.openBluetoothAdapter({
+    success: () => {
+      uni.onBluetoothDeviceFound((res: any) => {
+        const list = res.devices as Array<any>
+        for (let i = 0; i < list.length; i++) {
+          const d = list[i]
+          found += 1
+          const nm = (d.name ?? '') as string
+          const ln = (d.localName ?? '') as string
+          const di = (d.deviceId ?? '') as string
+
+          // advertisData 是 ArrayBuffer，转十六进制串
+          let hex = ''
+          const ab = d.advertisData
+          if (ab != null) {
+            const bytes = new Uint8Array(ab as ArrayBuffer)
+            for (let k = 0; k < bytes.length; k++) {
+              const b = bytes[k]
+              hex += (b < 16 ? '0' : '') + b.toString(16)
+            }
+          }
+
+          // 复刻原生判据：只看前 9 字节（= 18 个 hex 字符）
+          const head9 = hex.length > 18 ? hex.substring(0, 18) : hex
+          const pass = head9.indexOf(NEEDLE) >= 0
+          if (pass) { matched += 1 }
+
+          console.log(
+            `[RwBle][ADV ${found}] name="${nm}" localName="${ln}" deviceId="${di}" `
+            + `rssi=${d.RSSI ?? 0} 广播字节数=${hex.length / 2} 前9字节=${head9} `
+            + `含d6060200=${pass ? '是(SDK可收)' : '否(会被SDK丢弃)'} 全部=${hex}`
+          )
+        }
+      })
+
+      uni.startBluetoothDevicesDiscovery({
+        allowDuplicatesKey: false,
+        success: () => {
+          console.log(`[RwBle][ADV] 系统扫描已启动，等待 ${durationMs / 1000} 秒`)
+          setTimeout(() => {
+            uni.stopBluetoothDevicesDiscovery({})
+            console.log(
+              `[RwBle][ADV 汇总] 系统共发现 ${found} 台设备，其中 ${matched} 台`
+              + `满足 rwfit SDK 的广播特征(d6 06 02 00)。`
+            )
+            if (found > 0 && matched == 0) {
+              console.warn('[RwBle][ADV] 关键结论：系统能扫到设备，但没有一台带 '
+                + 'd6 06 02 00。说明 rwfit SDK 的原生过滤器会丢弃它们——不是权限'
+                + '问题，而是广播格式不匹配。请把上面你戒指那一行的「全部=」完整发回。')
+            } else if (found == 0) {
+              console.warn('[RwBle][ADV] 系统层也是 0 台设备。问题在更底层：'
+                + '蓝牙未开 / 缺定位权限 / 戒指未广播（可能仍被厂家 APP 占用连接）。')
+            }
+          }, durationMs)
+        },
+        fail: (e: any) => {
+          console.error(`[RwBle][ADV] 启动系统扫描失败：${JSON.stringify(e)}`)
+        }
+      })
+    },
+    fail: (e: any) => {
+      console.error(`[RwBle][ADV] 打开蓝牙适配器失败：${JSON.stringify(e)}`
+        + '（通常是蓝牙未开启，或未授予「附近的设备」权限）')
+    }
+  })
+}
