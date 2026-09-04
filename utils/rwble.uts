@@ -38,6 +38,36 @@
 //   2. HBuilderX >= 5.15.0（插件 engines 要求）
 //   3. 已提交云端打包「自定义调试基座」并安装到手机
 //   4. manifest.json 里蓝牙权限齐备（本项目已具备，已核对）
+// ===========================================================================
+//  SDK_NATIVE_FILTER —— 原生层准入规则（反编译 blesdk-rwfit-2.260724.aar 所得）
+// ---------------------------------------------------------------------------
+//  这些规则在 .aar 内部执行，UTS 层看不到、也改不了，但排障时必须知道：
+//
+//  1) ScanBleService.onScanResult 的广播签名过滤（字节码 pc 偏移）：
+//       pc 24 : scanRecord.getBytes() == null   -> 丢弃
+//       pc 37 : 广播字节数 < 9                   -> 丢弃
+//       pc 50 : Arrays.copyOf(bytes, 9)         取前 9 字节
+//       pc 60 : ByteConvertUtil.bytesToHexString(...)   注意：输出以空格分隔
+//       pc 68 : hex.contains("d6 06 02 00")
+//       pc 71 : 不含 -> 直接 return，不进 onScanDevice
+//     => 广播前 9 字节不含该签名的设备，UTS 层永远收不到任何回调。
+//        这意味着「附近没有设备」和「设备被原生丢弃」在上层表现完全相同。
+//
+//  2) BlueToothUtils.isLegalDevice(deviceName) 只有 CharSequence.length + ifne，
+//     即仅判 null/空串，**没有任何型号或前缀匹配**（常量池中无型号字符串）。
+//     => 设备名叫 SR116 还是 RWFit 都不影响准入。该 SDK 靠广播签名认自家设备，
+//        这也是同厂家的戒指与手环能共用一套 SDK 的原因。
+//
+//  3) deviceId 并非 MAC：onScanResult 里由 setRawDataFlag(广播hex) 起，
+//     经 getBleMac 定位、split[1]、substring(6,22)、每 2 位 parseInt(16)
+//     拼成 ASCII 字符串后 setBleDeviceId，再 setPidType(4)。
+//     => 厂家 APP 上显示的「MAC」有可能是这类自定义标识而非系统 MAC，
+//        排障时一律以 [SCAN n] 日志里 SDK 上报的 mac 为准。
+//
+//  4) ScanBleService.startScan(boolean includeBonded, String) 的第一个参数
+//     控制是否枚举系统已绑定设备；本插件 app-android/index.uts:446 固定传
+//     startScan(false, null)，即只走纯 BLE 广播扫描这条分支。
+// ===========================================================================
 export const USE_MOCK = false
 
 // ---------------------------------------------------------------------------
@@ -525,11 +555,18 @@ export function stopScan(): void {
   console.log(`[RwBle] 停止扫描，本轮共上报 ${scanSeen} 条`)
   if (scanSeen == 0) {
     // 明确区分故障方向，避免把「SDK 没扫到」误判成「页面 bug」。
-    console.warn('[RwBle] 本轮扫描 0 条。可能原因：'
-      + '1) 戒指未退出厂家 APP 的连接（BLE 同时只能连一个主机）；'
-      + '2) 戒指不在广播态（需摇晃/充电激活）；'
-      + '3) 定位权限未授予（Android 12 以下扫描必须定位权限）；'
-      + '4) 该型号不被此 SDK 的原生扫描过滤器接受。')
+    // 下面 4 条的排序与措辞来自对 blesdk-rwfit-2.260724.aar 的反编译，
+    // 不是猜测。依据见本文件顶部 SDK_NATIVE_FILTER 注释块。
+    console.warn('[RwBle] 本轮扫描 0 条。按可能性排序：'
+      + '1) 戒指仍被厂家 APP 占用连接 —— BLE 同一时刻只能连一个主机，'
+      + '请先在厂家 APP 里断开或解绑，这是最常见原因；'
+      + '2) 戒指不在广播态（久置休眠，需摇晃或放上充电器激活）；'
+      + '3) 定位权限未授予（Android 12 以下，BLE 扫描强制要求定位权限）；'
+      + '4) 广播特征字节不匹配 —— SDK 原生层 ScanBleService.onScanResult 只放行'
+      + '「广播前 9 字节的 hex 含 d6 06 02 00」的设备，其余直接丢弃，'
+      + '不会回调到这里。注意设备名不影响：isLegalDevice 仅判非空，无型号匹配，'
+      + '所以 SR116 这类型号本身是可以通过的。'
+      + '若 1~3 都排除后仍为 0 条，即可判定为第 4 种，需向厂家索取该型号的广播格式。')
   }
   sdkStopScan({})
   // 不 offScanResult：监听是全局单例，注销后下次扫描会静默无回调。
