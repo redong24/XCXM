@@ -173,6 +173,10 @@ let listenersBound = false
 // 这三个数直接算出来打到日志里，不让人肉眼数日志。
 // 这三个数决定 fs 的真值。当前代码里 fs=125 是**我们的假设**，
 // SDK 文档写 100Hz。若真值是 100，RR 定标参数全部要重做，所以必须实测。
+// 本轮扫描累计上报条数。用于区分「SDK 一条都没上报」与
+// 「上报了但被上层过滤掉」这两种完全不同的故障。
+let scanSeen = 0
+
 let probeCount = 0
 let probeLastTs = 0.0
 let probeLastSeq = -1
@@ -278,8 +282,23 @@ function registerListeners(): void {
   listenersBound = true
 
   onScanResult((d: SdkBleDevice) => {
-    console.log(`[RwBle] 扫到设备 name=${d.name} mac=${d.mac} rssi=${d.rssi} uuid=${d.uuid ?? '-'}`)
-    // 平台标识必须原样带出去，否则 connect 时无法回传（iOS/微信要用）。
+    scanSeen += 1
+    // 打出原始值，用于实机核对「厂家 APP 显示的 MAC」与「SDK 上报的 MAC」
+    // 是否一致。二者不一致是常见情况：厂家 APP 常显示序列号或反序字节，
+    // 而 BLE 连接只认 SDK 上报的这个值。
+    // Android 侧 uuid/deviceId 恒为空是**正常的**：
+    // deviceFromNative():189 只返回 name/mac/rssi，不产生这两个字段。
+    // 它们只在 iOS/微信有值，此处打印仅为跨端排查方便。
+    console.log(
+      `[RwBle][SCAN ${scanSeen}] name="${d.name}" mac="${d.mac}" rssi=${d.rssi} ` +
+      `uuid=${d.uuid ?? '(Android无,正常)'} macLen=${d.mac.length}`
+    )
+    if (d.mac.length == 0) {
+      // mac 为空无法连接，也无法去重，直接丢弃并明确告警，
+      // 否则会在上层被按「空 mac 相同」误判为重复设备而静默吞掉。
+      console.warn(`[RwBle][SCAN ${scanSeen}] mac 为空，已丢弃该条（无法连接）`)
+      return
+    }
     scanFoundCb?.({
       name: d.name, mac: d.mac, rssi: d.rssi,
       uuid: d.uuid, deviceId: d.deviceId
@@ -487,7 +506,8 @@ export function startScan(
   // 真实用法：onScanResult 订阅结果（已在 registerListeners 里统一注册），
   // sdkStartScan 只负责开始扫描 —— 它的 success 只表示「扫描已启动」，不带设备。
   scanFoundCb = onFound
-  console.log('[RwBle] 开始扫描')
+  scanSeen = 0
+  console.log('[RwBle] 开始扫描（若下方无 [SCAN n] 日志，说明 SDK 未上报任何设备）')
   sdkStartScan({
     fail: (e: RwfitFail) => {
       const msg = failText(e.errCode, e.errMsg)
@@ -502,7 +522,15 @@ export function stopScan(): void {
     console.log('[RwBle] mock 停止扫描')
     return
   }
-  console.log('[RwBle] 停止扫描')
+  console.log(`[RwBle] 停止扫描，本轮共上报 ${scanSeen} 条`)
+  if (scanSeen == 0) {
+    // 明确区分故障方向，避免把「SDK 没扫到」误判成「页面 bug」。
+    console.warn('[RwBle] 本轮扫描 0 条。可能原因：'
+      + '1) 戒指未退出厂家 APP 的连接（BLE 同时只能连一个主机）；'
+      + '2) 戒指不在广播态（需摇晃/充电激活）；'
+      + '3) 定位权限未授予（Android 12 以下扫描必须定位权限）；'
+      + '4) 该型号不被此 SDK 的原生扫描过滤器接受。')
+  }
   sdkStopScan({})
   // 不 offScanResult：监听是全局单例，注销后下次扫描会静默无回调。
   // 只清回调槽即可停止向上层转发。

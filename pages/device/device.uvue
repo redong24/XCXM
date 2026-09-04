@@ -82,6 +82,11 @@ function onScan() {
 
   startScan(
     (device: BleDevice) => {
+      // 空 mac 的条目在适配层已丢弃，这里再兜一层：
+      // 若 mac 为空，some() 会把多个空 mac 判为同一设备而静默合并。
+      if (device.mac === '') {
+        return
+      }
       const list = deviceState.nearbyDevices.slice()
       if (!list.some((d) => d.mac === device.mac)) {
         list.push(device)
@@ -94,10 +99,14 @@ function onScan() {
     }
   )
 
+  // 扫描窗口 5s -> 15s。
+  // 原因：BLE 广播间隔由固件决定，部分戒指为省电用较长间隔（可达数秒），
+  // 5 秒窗口有可能整窗错过，表现为「设备明明在旁边却扫不到」。
+  // 15 秒是权衡：足以覆盖常见广播间隔，又不至于让用户等太久。
   setTimeout(() => {
     setScanning(false)
     stopScan()
-  }, 5000)
+  }, 15000)
 }
 
 // 向后端解析设备的真实 id（按 MAC 在「我的设备」中匹配）
