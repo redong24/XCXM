@@ -175,6 +175,7 @@ export const FS_UNCALIBRATED = 125
 import { initialize, startScan as sdkStartScan, stopScan as sdkStopScan,
          connect as sdkConnect, disconnect as sdkDisconnect,
          startRealtimeMeasure, stopRealtimeMeasure,
+         onRealtimeMeasureComplete, offRealtimeMeasureComplete,
          controlSensorRaw, getSensorRawHistory,
          onScanResult, offScanResult, onConnectState, offConnectState,
          onFunctionMenu, offFunctionMenu,
@@ -193,7 +194,8 @@ import { initialize, startScan as sdkStartScan, stopScan as sdkStopScan,
 //   SDK 的多 3 个可选字段(uuid/deviceId/systemConnected)，
 //   本文件的是精简后的对外契约。这里 import 的是 SDK 版，
 //   用于给回调参数标注类型；对外仍返回本文件自己的 BleDevice。
-import type { SyncResult, TimedConfig } from '@/uni_modules/rwfit-ble'
+import type { SyncResult, TimedConfig,
+              RealtimeMetric } from '@/uni_modules/rwfit-ble'
 import type { BleDevice as SdkBleDevice, ConnectStateEvent, FunctionMenu,
               RealtimeData, SensorRawPacket, SensorRawStoppedEvent,
               RwfitFail } from '@/uni_modules/rwfit-ble'
@@ -315,6 +317,51 @@ let probeLastSeq = -1
 let probeSumPoints = 0
 const PROBE_MAX = 12
 
+// ---------------------------------------------------------------------------
+// 实时测量串行化
+// ---------------------------------------------------------------------------
+//
+// 【官方硬约束】docs/RWFIT_SDK_DATA_INVENTORY.md 第 7 条坑，源自
+//   blesdkandroid_zh.md 的 CAUTION：
+//     「同一时间只能开启一种健康检测类型」
+//   必须等上一种的完成回调、或显式关闭后，才能开启下一种；
+//   同时开多种会导致【检测异常】。
+//
+//   本文件此前一次性连发 hr / bloodOxy / hrv 三条 startRealtimeMeasure，
+//   正是这个禁忌。22:07 那轮真机同步结果 hr 0 天 / bo 0 天 / hrv 1 天
+//   —— 只有最后下发的那个留下了数据 —— 与该约束高度吻合。
+//
+// 【完成信号从哪来，不是猜的】
+//   app-android/index.uts:800 的 HealthDataControlCallback.onResult(data)
+//   在 data >= 10 时触发 realtimeCompleteListener，对外即
+//   onRealtimeMeasureComplete()。已核对 app-android / app-ios /
+//   app-harmony / mp-weixin 四份 index.uts 均有导出，跨端不会缺符号。
+//
+// 类型必须是 RealtimeMetric 而不是 string：interface.uts:110 是字符串
+// 字面量联合，用 string 去填 metric 字段在 UTS 严格类型下过不了编译。
+const REALTIME_METRICS: RealtimeMetric[] = ['hr', 'bloodOxy', 'hrv']
+
+// 当前正在测的指标下标；-1 表示链条未在运行。
+let metricIdx = -1
+
+// 兜底超时/轮间停顿共用的句柄。0 表示未启动。
+//
+// 【为什么必须有兜底】设备若既不出数也不发完成回调，链条会永远卡在
+//   第一个指标上 —— 那比「三个同开」更糟：一个都测不到。
+let metricTimer = 0
+
+// 只对第一个指标上报错误：三个指标各弹一次同样的提示毫无意义。
+let metricErrCb: ((errMsg: string) => void) | null = null
+
+// 单个指标等待完成回调的上限。官方未给出测量时长，此值为工程取值：
+// 宁可多等，也不要在设备还在测的时候插进去下一条启动命令。
+const METRIC_TIMEOUT_MS = 90000
+
+// 一轮三项测完后的停顿。测完即无数据推送，所以只要还有订阅者就要
+// 循环下一轮，否则首页的实时数据会在一轮之后彻底静默 —— 那是把
+// 「三个同开」的 bug 换成了「只测一轮」的新 bug。
+const ROUND_GAP_MS = 10000
+
 // mock 模式下的定时器句柄。0 表示未启动。
 // 用 number 而非 any：UTS 严格空安全下 any|null 会在清理时逼出强转。
 let mockRealtimeTimer = 0
@@ -404,6 +451,67 @@ function removeResultSub(cb: ResultValueCallback): number {
   return resultSubs.length
 }
 
+// 推进实时测量链条：停掉上一个（如有），启动下标 idx 的指标。
+//
+// 【声明位置】被 stopHealthData、beginRealtime 和 registerListeners
+//   三处引用，而 UTS/Kotlin 没有函数提升（utscheck U05），所以必须
+//   声明在三者之前。它自己递归调用自己是允许的。
+function startNextMetric(idx: number): void {
+  if (metricTimer != 0) {
+    clearTimeout(metricTimer)
+    metricTimer = 0
+  }
+  if (idx > 0) {
+    // 上一个指标即使已自行完成，也补发一次停止：完成回调只说明
+    // 「测完了」，不保证设备已退出该检测状态，而下一条启动命令
+    // 必须在无检测进行时下发。
+    stopRealtimeMeasure({ metric: REALTIME_METRICS[idx - 1] })
+  }
+  if (idx >= REALTIME_METRICS.length) {
+    metricIdx = -1
+    if (resultSubs.length > 0) {
+      console.log(`[RwBle] 实时测量一轮完成，${ROUND_GAP_MS / 1000}s 后开始下一轮`
+        + `（仍有 ${resultSubs.length} 个订阅者）`)
+      metricTimer = setTimeout(() => {
+        metricTimer = 0
+        // 停顿期间可能所有页面都退订了，再确认一次。
+        if (resultSubs.length > 0) {
+          startNextMetric(0)
+        }
+      }, ROUND_GAP_MS)
+    } else {
+      console.log('[RwBle] 实时测量一轮完成，已无订阅者，链条停止')
+    }
+    return
+  }
+  metricIdx = idx
+  const m = REALTIME_METRICS[idx]
+  console.log(`[RwBle] 启动实时测量 ${m}（第 ${idx + 1}/${REALTIME_METRICS.length} 项，`
+    + '官方要求同时只能开一种)')
+  const isFirst = idx == 0
+  startRealtimeMeasure({
+    metric: m,
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 启动实时测量 ${m} 失败 ${msg}`)
+      if (isFirst) {
+        metricErrCb?.(msg)
+      }
+      // 一个指标失败不该拖死后面的：继续推进链条。
+      startNextMetric(idx + 1)
+    }
+  })
+  metricTimer = setTimeout(() => {
+    metricTimer = 0
+    // 只有链条还停在本指标上时才推进；否则完成回调已经推过了。
+    if (metricIdx == idx) {
+      console.warn(`[RwBle] 实时测量 ${m} 等待完成回调超时`
+        + `（${METRIC_TIMEOUT_MS / 1000}s），跳到下一项`)
+      startNextMetric(idx + 1)
+    }
+  }, METRIC_TIMEOUT_MS)
+}
+
 // 停止实时测量。
 //
 // 【参数 callback 的意义】
@@ -433,14 +541,33 @@ export function stopHealthData(callback: ResultValueCallback | null = null): voi
     resultSubs = []
     pendingRealtime = null
     pendingRealtimeError = null
+    // 链条状态也要一并清，否则下次初始化后 metricIdx 还指着
+    // 上一轮的指标，停止时会去停一个根本没开的检测。
+    if (metricTimer != 0) {
+      clearTimeout(metricTimer)
+      metricTimer = 0
+    }
+    metricIdx = -1
+    metricErrCb = null
     return
   }
-  // 三个 metric 是分别启停的（index.uts 的 controlHealth 按 metric 换
-  // healthKey 下发指令），所以停的时候也要逐个停，不能只停 hr。
-  console.log('[RwBle] 无订阅者，停止实时测量 hr/bloodOxy/hrv')
-  stopRealtimeMeasure({ metric: 'hr' })
-  stopRealtimeMeasure({ metric: 'bloodOxy' })
-  stopRealtimeMeasure({ metric: 'hrv' })
+  // 官方要求同时只能开一种检测，本文件已把三个指标串行化
+  // （见 REALTIME_METRICS 声明处），所以停的时候只需要停当前那一个：
+  // 已完成的指标设备侧自己就结束了，未轮到的从未下发过启动命令。
+  // 之前无条件连发三条停止命令，是「三个同开」写法的遗留。
+  if (metricTimer != 0) {
+    clearTimeout(metricTimer)
+    metricTimer = 0
+  }
+  if (metricIdx >= 0) {
+    const cur = REALTIME_METRICS[metricIdx]
+    console.log(`[RwBle] 无订阅者，停止实时测量 ${cur}`)
+    stopRealtimeMeasure({ metric: cur })
+  } else {
+    console.log('[RwBle] 无订阅者，实时测量链条本就未在运行')
+  }
+  metricIdx = -1
+  metricErrCb = null
   resultSubs = []
   // 用户/页面明确要求停止，排队中的请求当然也要撤销，
   // 否则设备一就绪又自己启动起来了。
@@ -472,18 +599,12 @@ function beginRealtime(
     console.log(`[RwBle] 实时测量已在运行，新增订阅者（当前 ${cnt} 个）`)
     return
   }
-  console.log('[RwBle] 启动实时测量 hr/bloodOxy/hrv')
-  // 只对第一个 metric 上报错误，避免三条失败弹三次同样的提示。
-  startRealtimeMeasure({
-    metric: 'hr',
-    fail: (e: RwfitFail) => {
-      const msg = failText(e.errCode, e.errMsg)
-      console.error(`[RwBle] 启动实时测量失败 ${msg}`)
-      onError(msg)
-    }
-  })
-  startRealtimeMeasure({ metric: 'bloodOxy' })
-  startRealtimeMeasure({ metric: 'hrv' })
+  // 【不能三个一起开】官方 CAUTION：同一时间只能开启一种健康检测
+  //   类型。改为链式串行：hr 测完 -> bloodOxy -> hrv -> 停顿 -> 下一轮。
+  //   推进由 onRealtimeMeasureComplete（registerListeners 里统一订阅）
+  //   驱动，另有 METRIC_TIMEOUT_MS 兜底。
+  metricErrCb = onError
+  startNextMetric(0)
 }
 
 // 注册全部全局事件监听。
@@ -766,6 +887,19 @@ function registerListeners(): void {
     }
   })
 
+  // 单个指标测量完成 -> 推进链条到下一个指标。
+  // 这个事件是串行化的关键：没有它就只能靠超时硬等。
+  onRealtimeMeasureComplete(() => {
+    if (metricIdx < 0) {
+      // 链条没在跑时也可能收到完成信号（例如设备自主的定时测量
+      // 完成）。此时不能推进，否则会凭空启动一轮测量。
+      console.log('[RwBle] 收到测量完成信号，但链条未在运行，忽略')
+      return
+    }
+    console.log(`[RwBle] 实时测量 ${REALTIME_METRICS[metricIdx]} 完成，切换下一项`)
+    startNextMetric(metricIdx + 1)
+  })
+
   // ---- 历史数值同步事件 ----
   onSyncProgress((progress: number) => {
     console.log(`[RwBle][SYNC] 进度 ${progress}%`)
@@ -1029,6 +1163,7 @@ export function destroySDK(): void {
   offConnectState()
   offFunctionMenu()
   offRealtimeData()
+  offRealtimeMeasureComplete()
   offSensorRawData()
   offSensorRawStopped()
   offSyncProgress()
@@ -1036,6 +1171,14 @@ export function destroySDK(): void {
   offSyncFinish()
   offSyncError()
   listenersBound = false
+  // 链条定时器必须显式清掉：destroySDK 之后 setTimeout 里的
+  // startNextMetric 仍会触发，那时 SDK 已销毁，等于对着空原生层下发命令。
+  if (metricTimer != 0) {
+    clearTimeout(metricTimer)
+    metricTimer = 0
+  }
+  metricIdx = -1
+  metricErrCb = null
   connCb = null
   scanFoundCb = null
   resultSubs = []
