@@ -588,10 +588,17 @@ onUnmounted(() => {
     clearTimeout(vitalsTimer)
     vitalsTimer = 0
   }
+  // 同步是一次性任务，页面走了就该停 —— 否则原生回调还持有已销毁
+  // 页面的闭包，回调触发时会对着死页面写 ref、弹 toast。
+  //
+  // 【为什么不能放进下面的 measuring 守卫】
+  //   onSync() 从不设置 measuring.value，而且「同步设备数据」按钮
+  //   本身带 v-if="!measuring" —— 能点到它的时候 measuring 必为
+  //   false。放进守卫里就是永远执行不到的死代码。
+  //   stopHealthSync 内部对「未初始化」「未在同步」都有保护，
+  //   无条件调用是安全的。
+  stopHealthSync()
   if (measuring.value) {
-    // 同步是一次性任务，页面走了就该停 —— 否则原生回调还持有
-    // 已销毁页面的闭包。
-    stopHealthSync()
     if (vitalsMode.value) {
       stopHealthData(onVitalValue)
     } else {
