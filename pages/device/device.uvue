@@ -14,7 +14,7 @@
             <text class="device-mac">{{ deviceState.currentDevice?.mac }}</text>
           </view>
           <view class="status-badge" :class="deviceState.connected ? 'online' : 'offline'">
-            <text>{{ deviceState.connected ? '已连接' : '未连接' }}</text>
+            <text class="status-badge-text">{{ deviceState.connected ? '已连接' : '未连接' }}</text>
           </view>
         </view>
         <button class="unbind-btn" @click="onUnbind">解绑设备</button>
@@ -43,7 +43,16 @@
             <text class="device-name">{{ d.name }}</text>
             <text class="device-mac">{{ d.mac }}（信号 {{ d.rssi }}）</text>
           </view>
-          <button class="connect-btn" @click="onConnect(d)">连接</button>
+          <!-- 连接要 2~3 秒（真机实测 2.9s）。按钮必须给出反馈并禁用：
+               否则用户以为没点上会再点一次，而对已连设备重复 connect
+               可能触发断开重连，把刚建好的连接打断。
+               连接中禁用**所有**项，避免连 A 的过程中又去点 B。 -->
+          <button
+            class="connect-btn"
+            :loading="connectingMac === d.mac"
+            :disabled="connectingMac !== ''"
+            @click="onConnect(d)"
+          >{{ connectingMac === d.mac ? '连接中…' : '连接' }}</button>
         </view>
       </view>
       <view v-else class="empty">
@@ -63,7 +72,7 @@ import { deviceApi, type DeviceInfo } from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 import {
   initSDK,
-  destroySDK,
+  releasePageCallbacks,
   startScan,
   stopScan,
   connect,
@@ -180,6 +189,11 @@ function onConnect(device: BleDevice) {
     // （onFunctionMenu）才算就绪，适配层把它抽象成额外的 'ready' 状态。
     // 绑定动作放在 ready，避免在设备还没准备好时就去调业务接口。
     if (status === 'ready') {
+      // 成功路径也必须清空，否则按钮永久停在「连接中…」。
+      // 原代码只在 failed/disconnected 分支清，成功时漏了 ——
+      // 这个疏漏一直被「模板没有使用 connectingMac」掩盖着，
+      // 上一步把它接到模板上就会立刻暴露，所以必须同时修。
+      connectingMac.value = ''
       // 注意：connect 的回调要求返回 Unit，不能传 async 函数（error17），
       // 故用非 async 回调包裹，内部调用前置的 async 处理函数
       onConnected(device.mac)
@@ -225,7 +239,11 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  destroySDK()
+  // 只断开本页的回调，**不销毁 SDK、不清连接状态**。
+  // 曾经这里调的是 destroySDK()，真机实测导致离开本页后
+  // deviceReady 永久为 false，measure 页采集必报 9201005
+  // （设备其实还连着）。蓝牙连接是应用级资源，不随页面卸载。
+  releasePageCallbacks()
 })
 </script>
 
@@ -267,19 +285,33 @@ onUnmounted(() => {
   margin-top: 4rpx;
 }
 
+/* 容器只留盒模型相关属性。
+   font-size/color 已移到 .status-badge-text —— uni-app x 的 view
+   不继承文字样式，写在这里无效并触发告警（真机日志 19:23:06.941）。 */
 .status-badge {
   padding: 8rpx 20rpx;
   border-radius: 20rpx;
+}
+
+.status-badge-text {
   font-size: 24rpx;
 }
 
 .status-badge.online {
   background: #d1fae5;
+}
+
+/* 用后代选择器保住状态区分：只删 color 会让两种状态的文字同色，
+   仅靠背景色区分，语义色就丢了。 */
+.status-badge.online .status-badge-text {
   color: #065f46;
 }
 
 .status-badge.offline {
   background: #fef3c7;
+}
+
+.status-badge.offline .status-badge-text {
   color: #92400e;
 }
 

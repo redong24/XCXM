@@ -524,6 +524,52 @@ export function initSDK(onDone: (ok: boolean, errMsg: string) => void): void {
   }
 }
 
+// 页面卸载时释放「页面回调槽」，不动连接状态、不注销监听。
+//
+// 【为什么只清回调，不清状态】
+//   页面卸载后它注册的闭包必须断开，否则事件会打到已销毁页面的
+//   ref 上（内存泄漏 + 潜在崩溃）。但 sdkInitialized/deviceConnected/
+//   deviceReady 描述的是**设备**而非**页面**，页面走了设备还连着，
+//   清掉就等于对着现实说谎，下一个页面会拿到错误的前提。
+//
+// 【为什么不注销监听】
+//   监听是全局单例（SDK 的 onXxx 是单监听，registerListeners 集中注册
+//   一次）。在这里 offXxx 会把其它页面也一起弄瞎 —— 比如 home 页卸载
+//   顺手注销，正在采集的 measure 页就再也收不到数据了。
+export function releasePageCallbacks(): void {
+  connCb = null
+  scanFoundCb = null
+  resultCb = null
+  rawCb = null
+}
+
+// 只读探针：设备是否已就绪（可以调业务 API）。
+//
+// 【为什么要暴露它】
+//   页面需要在「调用采集」之前就知道能不能调，从而给出可执行的提示
+//   （「请先到设备页连接手环」），而不是调下去等一个 9201005 错误码 ——
+//   错误码对用户没有任何意义，也不告诉他下一步做什么。
+export function isDeviceReady(): boolean {
+  return deviceReady
+}
+
+// 只读探针：蓝牙链路是否连上（但可能还没就绪）。
+export function isDeviceConnected(): boolean {
+  return deviceConnected
+}
+
+// 彻底销毁 SDK：注销全部监听 + 清空所有状态。
+//
+// 【页面卸载不要调这个 —— 请用 releasePageCallbacks()】
+//   本函数会把 sdkInitialized/deviceConnected/deviceReady 一起清零，
+//   但它**不会断开蓝牙物理连接**。曾经把它挂在 device/home 页的
+//   onUnmounted 上，真机实测后果（19:23 那轮日志）：
+//     - 离开 device 页后 deviceReady=false，而设备仍连着，
+//       SDK 不会再重复上报一次 onFunctionMenu，于是这个状态永远回不来，
+//       measure 页采集必然报 9201005 设备未就绪；
+//     - sdkInitialized 也被清零，本次进程内扫描/连接全被守卫挡掉。
+//   蓝牙连接是应用级资源，不随页面来去。只有「退出登录 / 真的要停用蓝牙」
+//   才该调用本函数。
 export function destroySDK(): void {
   stopHealthData()
   if (USE_MOCK) {

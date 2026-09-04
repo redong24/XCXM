@@ -60,6 +60,8 @@ import { deviceState } from '../../store/device.uts'
 import { dataApi, type RawPPGPayload } from '../../api/index.uts'
 import { takeApiErrorText, clearApiError } from '../../common/request.uts'
 import {
+  initSDK,
+  isDeviceReady,
   startRawPpgCapture,
   stopRawPpgCapture,
   SENSOR_PPG_GREEN,
@@ -114,6 +116,22 @@ async function handleRawPpgResult(raw: RawPpgResult) {
 }
 
 function onStart() {
+  // 采集前先确认设备真的就绪。
+  //
+  // 【为什么不直接调下去让它失败】
+  //   直接调的结果是 9201005「设备未就绪」，这个错误码对用户毫无意义，
+  //   也不告诉他下一步该做什么。真机日志里用户连点了三次（19:23:55、
+  //   19:24:02、19:24:14），每次都是同一个错误码 —— 说明失败提示没能
+  //   让他明白问题在哪。这里改成明确指路。
+  if (!isDeviceReady()) {
+    uni.showModal({
+      title: '设备未就绪',
+      content: '尚未连接手环，或连接后尚未收到设备功能菜单。\n\n'
+        + '请先到「设备」页连接手环，看到「设备已连接」提示后再回来采集。',
+      showCancel: false
+    })
+    return
+  }
   measuring.value = true
   statusText.value = '采集中...'
   hasResult.value = false
@@ -140,6 +158,24 @@ function onStop() {
   measuring.value = false
   statusText.value = '已停止'
 }
+
+// SDK 初始化是幂等的（已初始化则直接回调成功），这里补一次是为了
+// 兜住「直接从其它入口跳进本页、从未经过设备页」的情况。
+//
+// 注意它只能恢复 sdkInitialized，**恢复不了 deviceReady** ——
+// deviceReady 只由设备主动上报的 onFunctionMenu 置位，设备已连着时
+// SDK 不会再补报一次。所以真正的修复是 destroySDK 不再挂在页面卸载上，
+// 这里只是补齐初始化，不是那个问题的解药。
+onMounted(() => {
+  initSDK((ok: boolean, errMsg: string) => {
+    if (!ok) {
+      uni.showToast({
+        title: errMsg != '' ? errMsg : '蓝牙初始化失败',
+        icon: 'none'
+      })
+    }
+  })
+})
 
 onUnmounted(() => {
   if (measuring.value) {

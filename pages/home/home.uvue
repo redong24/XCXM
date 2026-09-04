@@ -151,7 +151,7 @@ import {
 import type { ChildDisplay, SentinelView } from '../../types/display.uts'
 import {
   initSDK,
-  destroySDK,
+  releasePageCallbacks,
   startHealthData,
   stopHealthData,
   type HardwareResultValue
@@ -562,7 +562,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopHealthData()
-  destroySDK()
+  // 只断开本页回调，不销毁 SDK（见 device.uvue 同处注释）。
+  // 首页尤其不能销毁：用户从首页进入测量页是主路径，
+  // 在这里销毁等于每次走主路径都把刚连好的设备状态清掉。
+  releasePageCallbacks()
 })
 </script>
 
