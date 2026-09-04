@@ -161,7 +161,12 @@ import { initialize, startScan as sdkStartScan, stopScan as sdkStopScan,
          onFunctionMenu, offFunctionMenu,
          onRealtimeData, offRealtimeData,
          onSensorRawData, offSensorRawData,
-         onSensorRawStopped, offSensorRawStopped } from '@/uni_modules/rwfit-ble'
+         onSensorRawStopped, offSensorRawStopped,
+         syncAllHealthData, removeHealthDataCallback,
+         onSyncProgress, offSyncProgress, onSyncResult, offSyncResult,
+         onSyncFinish, offSyncFinish, onSyncError, offSyncError,
+         setTimedHeartRate, setTimedBloodOxygen,
+         setTimedHRV } from '@/uni_modules/rwfit-ble'
 // 类型单独引入。这些名字全部来自 utssdk/interface.uts，行号已核对：
 //   BleDevice:59  FunctionMenu:78  RealtimeData:113  ConnectStateEvent:70
 //   SensorRawPacket:190  SensorRawStoppedEvent:201  RwfitFail:18
@@ -169,6 +174,7 @@ import { initialize, startScan as sdkStartScan, stopScan as sdkStopScan,
 //   SDK 的多 3 个可选字段(uuid/deviceId/systemConnected)，
 //   本文件的是精简后的对外契约。这里 import 的是 SDK 版，
 //   用于给回调参数标注类型；对外仍返回本文件自己的 BleDevice。
+import type { SyncResult, TimedConfig } from '@/uni_modules/rwfit-ble'
 import type { BleDevice as SdkBleDevice, ConnectStateEvent, FunctionMenu,
               RealtimeData, SensorRawPacket, SensorRawStoppedEvent,
               RwfitFail } from '@/uni_modules/rwfit-ble'
@@ -468,6 +474,139 @@ function beginRealtime(
 //   xxxListener 变量赋值），后注册的会覆盖前一个。若 startScan 和
 //   connect 各自注册 onConnectState，后者会把前者顶掉。
 //   集中注册 + 转发到可空回调槽，是唯一不会互相踩的写法。
+// ---- 历史数值同步 ----
+//
+// 【这条路解决什么】
+//   固件关掉了原始波形，但设备自己**后台一直在采**心率/血氧/HRV 等
+//   结果值并存在机内。syncAllHealthData 把这批带时间戳的数值整批取回，
+//   完全不依赖原始波形能力位。这是「不用用户守着手机点按钮、
+//   日常监测也能有数据」的唯一现成通路。
+//
+// 【为什么用单槽而不是像实时测量那样用数组】
+//   实时测量是常驻流，首页与采集页都要收，必须多订阅者。
+//   同步是一次性任务（发起→拉一批→结束），同一时刻只该有一个发起方；
+//   后发起者顶掉前一个，语义上就是「以最后一次发起为准」。
+let syncResultCb: ((type: string, items: Array<UTSJSONObject>) => void) | null = null
+let syncDoneCb: ((ok: boolean, errMsg: string) => void) | null = null
+let syncing = false
+
+export function isSyncing(): boolean {
+  return syncing
+}
+
+// 拉取设备后台自动采集的历史数值。
+//
+// onBatch 会按类型被调用多次（hr/bo/hrv/step/sleep/...），
+// onDone 只调一次。注意：**不保证每种类型都来** —— 设备没采过的
+// 类型不会回调，所以上层不能等齐了才处理，要来一批存一批。
+export function startHealthSync(
+  onBatch: (type: string, items: Array<UTSJSONObject>) => void,
+  onDone: (ok: boolean, errMsg: string) => void
+): void {
+  if (USE_MOCK) {
+    onDone(false, '模拟模式不支持历史同步')
+    return
+  }
+  if (!sdkInitialized) {
+    onDone(false, '蓝牙未初始化')
+    return
+  }
+  if (!deviceReady) {
+    // 同步不做意图暂存：它是用户显式触发的一次性动作，
+    // 隔一会儿自己偷偷跑起来反而莫名其妙（和实时测量不同 ——
+    // 那个是常驻流，补发才是对的）。
+    onDone(false, '设备尚未就绪，请稍后再试')
+    return
+  }
+  if (syncing) {
+    onDone(false, '正在同步中，请稍候')
+    return
+  }
+  syncResultCb = onBatch
+  syncDoneCb = onDone
+  syncing = true
+  console.log('[RwBle] 开始同步历史健康数据')
+  syncAllHealthData({
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 发起历史同步失败 ${msg}`)
+      // 发起就失败：这里必须自己收口，因为 onSyncError 不会来。
+      syncing = false
+      const cb = syncDoneCb
+      syncResultCb = null
+      syncDoneCb = null
+      cb?.(false, msg)
+    }
+  })
+}
+
+// 停止同步并释放原生回调。页面卸载时调用。
+export function stopHealthSync(): void {
+  if (!sdkInitialized) {
+    syncing = false
+    syncResultCb = null
+    syncDoneCb = null
+    return
+  }
+  if (syncing) {
+    removeHealthDataCallback({})
+  }
+  syncing = false
+  syncResultCb = null
+  syncDoneCb = null
+}
+
+// ---- 设备自动定时测量 ----
+//
+// 【为什么必须开这个】
+//   syncAllHealthData 只能取到「设备已经采过」的数据。若定时测量没开，
+//   设备后台根本不采，同步回来就是空的 —— 那条通路等于白接。
+//   开了之后设备按 duration 分钟自动测一次，用户不用管。
+//
+// 【时间窗为什么是全天】
+//   哮喘发作有明显的夜间倾向（凌晨 2–4 点是高发时段），
+//   只在白天采会正好漏掉最该看的时段。
+export function enableAutoMeasure(
+  intervalMinutes: number,
+  onDone: (ok: boolean, errMsg: string) => void
+): void {
+  if (USE_MOCK) {
+    onDone(true, '')
+    return
+  }
+  if (!sdkInitialized) {
+    onDone(false, '蓝牙未初始化')
+    return
+  }
+  if (!deviceReady) {
+    onDone(false, '设备尚未就绪')
+    return
+  }
+  const cfg = {
+    isOpen: true,
+    duration: intervalMinutes,
+    startHour: 0, startMin: 0,
+    endHour: 23, endMin: 59
+  } as TimedConfig
+  console.log(`[RwBle] 开启设备自动定时测量，间隔 ${intervalMinutes} 分钟（全天）`)
+  // 三项分别下发。只对第一项上报错误：三条失败弹三次同样的提示
+  // 对用户没有任何价值（和 beginRealtime 同一取舍）。
+  setTimedHeartRate({
+    config: cfg,
+    success: () => {
+      console.log('[RwBle] 定时心率已开启')
+      onDone(true, '')
+    },
+    fail: (e: RwfitFail) => {
+      const msg = failText(e.errCode, e.errMsg)
+      console.error(`[RwBle] 开启定时心率失败 ${msg}`)
+      onDone(false, msg)
+    }
+  })
+  setTimedBloodOxygen({ config: cfg })
+  setTimedHRV({ config: cfg })
+}
+
 function registerListeners(): void {
   if (listenersBound) {
     return
@@ -549,6 +688,30 @@ function registerListeners(): void {
       + `HRV=${raw.getBoolean('isHrv')} `
       + `PPG监测=${raw.getBoolean('isSupportPPGMonitoring')}`)
 
+    // 剩下这几组能力位以前一个都没读过。既然连一次真机日志都要
+    // 等用户重新打包、装机、复现，就不该只问一个问题 ——
+    // 一次把设备开放的全部能力问清楚，省掉后面每轮只验一个位的来回。
+    console.log(`[RwBle][CAP] 历史数据可同步类型 `
+      + `步数=${raw.getBoolean('isStep')} `
+      + `睡眠=${raw.getBoolean('isSleep')} `
+      + `血压=${raw.getBoolean('isBloodPress')} `
+      + `血糖=${raw.getBoolean('isBloodSugar')} `
+      + `压力=${raw.getBoolean('isPressure')} `
+      + `体温=${raw.getBoolean('isBodyTemp')} `
+      + `活动数据间隔=${raw.getNumber('activityDataInterval')}秒`)
+    // 咳嗽音监测的关键：手环本身能不能录音。
+    // 若为 false，音频只能走手机麦克风采集（方案要另设计）。
+    console.log(`[RwBle][CAP] 音频与监测 `
+      + `录音=${raw.getBoolean('isSupportRecording')} `
+      + `体温监测=${raw.getBoolean('isSupportTemperatureMonitoring')} `
+      + `跌倒检测=${raw.getBoolean('isSupportFallDetect')} `
+      + `运动=${raw.getBoolean('isSupportWorkout')}`)
+    console.log(`[RwBle][CAP] 硬件报警能力（对应 Q1 的硬件侧那一层） `
+      + `心率报警=${raw.getBoolean('isSupportHrReminder')} `
+      + `血氧报警=${raw.getBoolean('isSupportBoReminder')} `
+      + `震动强度=${raw.getBoolean('isSupportMotoVibrationLevel')} `
+      + `震动间隔=${raw.getBoolean('isSupportVibrationInterval')}`)
+
     connCb?.('ready', { name: menu.name, mac: menu.mac, rssi: 0 } as BleDevice)
 
     // 重放此前因「设备未就绪」而被搁置的实时测量请求。
@@ -582,6 +745,34 @@ function registerListeners(): void {
     for (let i = 0; i < subs.length; i++) {
       subs[i](v)
     }
+  })
+
+  // ---- 历史数值同步事件 ----
+  onSyncProgress((progress: number) => {
+    console.log(`[RwBle][SYNC] 进度 ${progress}%`)
+  })
+  onSyncResult((r: SyncResult) => {
+    // 打条数：同步回来是空的（设备没采过）还是真有数据，
+    // 这是两种完全不同的处置，日志必须能分清。
+    console.log(`[RwBle][SYNC] 收到 ${r.type} 共 ${r.data.length} 天`)
+    syncResultCb?.(r.type, r.data)
+  })
+  onSyncFinish(() => {
+    console.log('[RwBle][SYNC] 同步完成')
+    syncing = false
+    const cb = syncDoneCb
+    syncResultCb = null
+    syncDoneCb = null
+    cb?.(true, '')
+  })
+  onSyncError((err: UTSJSONObject) => {
+    const code = err.getNumber('code') ?? 0
+    console.error(`[RwBle][SYNC] 同步出错 code=${code}`)
+    syncing = false
+    const cb = syncDoneCb
+    syncResultCb = null
+    syncDoneCb = null
+    cb?.(false, `同步失败（code=${code}）`)
   })
 
   // ---- 原始波形实时流 ----
@@ -821,6 +1012,10 @@ export function destroySDK(): void {
   offRealtimeData()
   offSensorRawData()
   offSensorRawStopped()
+  offSyncProgress()
+  offSyncResult()
+  offSyncFinish()
+  offSyncError()
   listenersBound = false
   connCb = null
   scanFoundCb = null

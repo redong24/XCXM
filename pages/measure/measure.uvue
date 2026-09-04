@@ -50,6 +50,22 @@
       </button>
       <!-- 诊断入口：仅在空闲且设备已连接时出现。
            放在主按钮下方并用弱化样式，避免被误当成正常采集入口。 -->
+      <!-- 历史数据同步与自动测量：这两条路都不依赖原始波形能力位，
+           是固件关掉原始波形之后仍然能拿到数据的通路。
+           必须先开自动测量，设备才会后台采集、之后才有东西可同步。 -->
+      <button
+        v-if="!measuring && deviceState.connected"
+        class="sync-btn"
+        :disabled="syncing"
+        @click="onSync"
+      >{{ syncing ? '同步中...' : '同步设备数据' }}</button>
+      <button
+        v-if="!measuring && deviceState.connected"
+        class="auto-btn"
+        @click="onEnableAuto"
+      >开启自动测量（每 5 分钟）</button>
+      <text v-if="syncText != ''" class="sync-text">{{ syncText }}</text>
+
       <button
         v-if="!measuring && deviceState.connected"
         class="probe-btn"
@@ -84,7 +100,11 @@ import {
   SENSOR_PPG_GREEN,
   SENSOR_ACC,
   type RawPpgResult,
-  type HardwareResultValue
+  type HardwareResultValue,
+  startHealthSync,
+  stopHealthSync,
+  enableAutoMeasure,
+  isSyncing
 } from '../../utils/rwble.uts'
 
 const measuring = ref(false)
@@ -112,7 +132,17 @@ const vitalsCount = ref(0)
 // 结果值测量窗口定时器（60 秒，与 Q22 锁定的窗口一致）。
 // 0 表示未启动 —— UTS 里 setTimeout 返回 number，不能用 null 判空。
 let vitalsTimer = 0
-const VITALS_WINDOW_MS = 60000
+const VITALS_WINDOW_MS = 60000    // 与 Q22 锁定的 60 秒窗口一致
+
+// ---- 历史数值同步 ----
+const syncing = ref(false)
+const syncText = ref('')
+// 自动测量间隔。5 分钟是权衡：再密会明显影响手环续航，
+// 再稀就抓不住哮喘发作前那段变化（发作前兆通常在数十分钟内演进）。
+const AUTO_MEASURE_MINUTES = 5
+// 只上传模型真正要用的三类。步数/睡眠/血压等后端还没有对应表，
+// 先跳过而不是硬塞 —— 塞进去只会变成脏数据。
+const SYNC_UPLOAD_TYPES = ['hr', 'bo', 'hrv']
 
 // 主按钮文案：直说这一下会做什么，别让用户猜。
 // 原始波形不可用时写「测量心率/血氧」而不是含糊的「开始采集」——
@@ -284,6 +314,127 @@ function startVitals() {
 //     ACC 出数   -> 原始采集链路是通的，仅 PPG 通道被厂家锁了
 //     ACC 也静默 -> 该型号固件整体不支持原始波形下发
 //   两个结论的下一步完全不同，所以必须能分别试。
+// 把一批同步回来的历史数值上传。
+//
+// 【为什么顺序 await 而不是并发】
+//   一天可能有几百条。并发 POST 会把后端打满，也容易被网关限流
+//   导致整批丢失。慢一点但可靠，而且这是后台补数据，用户不等在这里。
+async function uploadSyncBatch(type: string, items: Array<UTSJSONObject>): Promise<number> {
+  const dev = deviceState.currentDevice
+  if (dev == null) { return 0 }
+  let ok = 0
+  for (let i = 0; i < items.length; i++) {
+    const day = items[i]
+    // 每一天是一个对象，真正的测量点在 items 数组里。
+    const points = day['items'] as Array<UTSJSONObject> | null
+    if (points == null) { continue }
+    for (let j = 0; j < points.length; j++) {
+      const p = points[j]
+      // 字段名随类型而变（hr / bloodOxy / hrv），见 index.uts 的
+      // hrSync / boSync / hrvSync 三个转换函数。
+      let v: number | null = null
+      if (type == 'hr') {
+        v = p.getNumber('hr')
+      } else if (type == 'bo') {
+        v = p.getNumber('bloodOxy')
+      } else if (type == 'hrv') {
+        v = p.getNumber('hrv')
+      }
+      const ts = p.getNumber('time')
+      // 0 值是「该时段没测到」的占位，不是真实测量结果，塞进去会污染基线。
+      if (v == null || v! <= 0 || ts == null) { continue }
+      try {
+        await dataApi.uploadHardwareResult({
+          device_id: dev.id,
+          type: type,
+          value: v!,
+          timestamp: new Date(ts!).toISOString()
+        } as HardwareResultPayload)
+        ok = ok + 1
+      } catch (e) {
+        // 单条失败不能中断整批：历史数据是补录，丢几条远好过一条都不进。
+        console.error(`[measure] 历史数据上传失败 type=${type}`)
+      }
+    }
+  }
+  return ok
+}
+
+// 同步设备后台自动采集的历史数值。
+function onSync() {
+  if (!deviceState.connected) {
+    uni.showToast({ title: '请先连接设备', icon: 'none' })
+    return
+  }
+  if (isSyncing()) {
+    uni.showToast({ title: '正在同步中', icon: 'none' })
+    return
+  }
+  syncing.value = true
+  syncText.value = '正在读取设备存储的数据...'
+  let total = 0
+  startHealthSync(
+    (type: string, items: Array<UTSJSONObject>) => {
+      // 回调不能是 async（会得到 UTSPromise 触发 error17），
+      // 故非 async 包一层，内部调 async 且不 await。
+      if (SYNC_UPLOAD_TYPES.indexOf(type) < 0) {
+        console.log(`[measure] 跳过类型 ${type}（后端暂无对应表）`)
+        return
+      }
+      syncText.value = `正在上传 ${type}...`
+      uploadSyncBatch(type, items).then((n: number) => {
+        total = total + n
+        syncText.value = `已上传 ${total} 条`
+      })
+    },
+    (ok: boolean, errMsg: string) => {
+      syncing.value = false
+      if (!ok) {
+        syncText.value = errMsg != '' ? errMsg : '同步失败'
+        uni.showToast({ title: syncText.value, icon: 'none' })
+        return
+      }
+      // 说明「一条都没有」而不是含糊地说完成：设备没开自动测量时
+      // 同步回来必然是空的，用户需要知道下一步该点哪个按钮。
+      if (total == 0) {
+        syncText.value = '设备里没有可同步的数据'
+        uni.showModal({
+          title: '没有历史数据',
+          content: '手环里没有存储的心率/血氧/HRV 记录。\n\n'
+            + '通常是因为设备的「自动定时测量」没有开启 —— '
+            + '不开的话手环后台不会主动测量，也就没有数据可同步。\n\n'
+            + '请点下方「开启自动测量」，之后戴着手环等一段时间再来同步。',
+          showCancel: false
+        })
+      } else {
+        syncText.value = `同步完成，共上传 ${total} 条`
+        uni.showToast({ title: syncText.value, icon: 'success' })
+      }
+    }
+  )
+}
+
+// 开启设备自动定时测量。
+function onEnableAuto() {
+  if (!deviceState.connected) {
+    uni.showToast({ title: '请先连接设备', icon: 'none' })
+    return
+  }
+  enableAutoMeasure(AUTO_MEASURE_MINUTES, (ok: boolean, errMsg: string) => {
+    if (ok) {
+      uni.showModal({
+        title: '已开启自动测量',
+        content: `手环将每 ${AUTO_MEASURE_MINUTES} 分钟自动测量一次心率/血氧/HRV，`
+          + '全天生效（夜间是哮喘高发时段，不能只测白天）。\n\n'
+          + '数据先存在手环里，之后点「同步设备数据」取回。',
+        showCancel: false
+      })
+    } else {
+      uni.showToast({ title: errMsg != '' ? errMsg : '开启失败', icon: 'none' })
+    }
+  })
+}
+
 function startCapture(channel: number) {
   // 采集前先确认设备真的就绪。
   //
@@ -438,6 +589,9 @@ onUnmounted(() => {
     vitalsTimer = 0
   }
   if (measuring.value) {
+    // 同步是一次性任务，页面走了就该停 —— 否则原生回调还持有
+    // 已销毁页面的闭包。
+    stopHealthSync()
     if (vitalsMode.value) {
       stopHealthData(onVitalValue)
     } else {
@@ -515,6 +669,36 @@ onUnmounted(() => {
   border-radius: 20rpx;
   font-size: 32rpx;
   font-weight: bold;
+}
+
+.sync-btn {
+  width: 100%;
+  height: 88rpx;
+  margin-top: 20rpx;
+  background: #10b981;
+  color: #ffffff;
+  border-radius: 20rpx;
+  font-size: 30rpx;
+}
+
+.auto-btn {
+  width: 100%;
+  height: 80rpx;
+  margin-top: 16rpx;
+  background: #ffffff;
+  color: #10b981;
+  border-radius: 20rpx;
+  font-size: 28rpx;
+  border-width: 2rpx;
+  border-style: solid;
+  border-color: #10b981;
+}
+
+.sync-text {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #6b7280;
+  text-align: center;
 }
 
 .start-btn-disabled {
